@@ -1,0 +1,6 @@
+@BepTroLy.API_HostAddress = http://localhost:5186
+
+GET {{BepTroLy.API_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

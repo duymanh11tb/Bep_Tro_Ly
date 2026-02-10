@@ -1,0 +1,169 @@
+using BepTroLy.API.Data;
+using BepTroLy.API.DTOs;
+using BepTroLy.API.Models;
+using BepTroLy.API.Services;
+using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+
+namespace BepTroLy.API.Controllers;
+
+[ApiController]
+[Route("api/auth")]
+public class AuthController : ControllerBase
+{
+    private readonly AppDbContext _db;
+    private readonly JwtService _jwt;
+    private readonly ILogger<AuthController> _logger;
+
+    public AuthController(AppDbContext db, JwtService jwt, ILogger<AuthController> logger)
+    {
+        _db = db;
+        _jwt = jwt;
+        _logger = logger;
+    }
+
+    /// <summary>Đăng ký tài khoản mới.</summary>
+    [HttpPost("register")]
+    public async Task<IActionResult> Register([FromBody] RegisterRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new ErrorResponse { Error = "Email và mật khẩu là bắt buộc" });
+
+        if (request.Password.Length < 6)
+            return BadRequest(new ErrorResponse { Error = "Mật khẩu phải có ít nhất 6 ký tự" });
+
+        var email = request.Email.Trim().ToLower();
+
+        if (await _db.Users.AnyAsync(u => u.Email == email))
+            return Conflict(new ErrorResponse { Error = "Email đã được sử dụng" });
+
+        try
+        {
+            var user = new User
+            {
+                Email = email,
+                DisplayName = string.IsNullOrWhiteSpace(request.DisplayName)
+                    ? email.Split('@')[0]
+                    : request.DisplayName,
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                LastActive = DateTime.UtcNow
+            };
+
+            _db.Users.Add(user);
+            await _db.SaveChangesAsync();
+
+            return StatusCode(201, new AuthResponse
+            {
+                Message = "Đăng ký thành công!",
+                User = MapUser(user),
+                Token = _jwt.GenerateToken(user.UserId)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Register error");
+            return StatusCode(500, new ErrorResponse { Error = "Lỗi đăng ký" });
+        }
+    }
+
+    /// <summary>Đăng nhập.</summary>
+    [HttpPost("login")]
+    public async Task<IActionResult> Login([FromBody] LoginRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Email) || string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new ErrorResponse { Error = "Email và mật khẩu là bắt buộc" });
+
+        var email = request.Email.Trim().ToLower();
+        var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+
+        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+            return Unauthorized(new ErrorResponse { Error = "Email hoặc mật khẩu không đúng" });
+
+        user.LastActive = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return Ok(new AuthResponse
+        {
+            Message = "Đăng nhập thành công!",
+            User = MapUser(user),
+            Token = _jwt.GenerateToken(user.UserId)
+        });
+    }
+
+    /// <summary>Lấy thông tin user hiện tại (cần token).</summary>
+    [HttpGet("me")]
+    [Authorize]
+    public async Task<IActionResult> GetMe()
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null)
+            return Unauthorized(new ErrorResponse { Error = "Token không hợp lệ" });
+
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null)
+            return Unauthorized(new ErrorResponse { Error = "User không tồn tại" });
+
+        return Ok(new { user = MapUser(user, full: true) });
+    }
+
+    /// <summary>Cập nhật profile.</summary>
+    [HttpPut("profile")]
+    [Authorize]
+    public async Task<IActionResult> UpdateProfile([FromBody] UpdateProfileRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return NotFound();
+
+        if (request.DisplayName != null) user.DisplayName = request.DisplayName;
+        if (request.PhoneNumber != null) user.PhoneNumber = request.PhoneNumber;
+        if (request.PhotoUrl != null) user.PhotoUrl = request.PhotoUrl;
+        if (request.SkillLevel != null) user.SkillLevel = request.SkillLevel;
+        if (request.DietaryRestrictions != null) user.DietaryRestrictions = request.DietaryRestrictions;
+        if (request.CuisinePreferences != null) user.CuisinePreferences = request.CuisinePreferences;
+        if (request.Allergies != null) user.Allergies = request.Allergies;
+        if (request.NotificationEnabled.HasValue) user.NotificationEnabled = request.NotificationEnabled.Value;
+
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Cập nhật thành công!", user = MapUser(user, full: true) });
+    }
+
+    // ==================== Helpers ====================
+
+    private int? GetCurrentUserId()
+    {
+        var claim = User.FindFirst("user_id")?.Value;
+        return claim != null ? int.Parse(claim) : null;
+    }
+
+    private static UserDto MapUser(User user, bool full = false)
+    {
+        var dto = new UserDto
+        {
+            UserId = user.UserId,
+            Email = user.Email,
+            DisplayName = user.DisplayName,
+            PhotoUrl = user.PhotoUrl,
+            SkillLevel = user.SkillLevel
+        };
+
+        if (full)
+        {
+            dto.PhoneNumber = user.PhoneNumber;
+            dto.DietaryRestrictions = user.DietaryRestrictions;
+            dto.CuisinePreferences = user.CuisinePreferences;
+            dto.Allergies = user.Allergies;
+            dto.NotificationEnabled = user.NotificationEnabled;
+            dto.CreatedAt = user.CreatedAt.ToString("o");
+        }
+
+        return dto;
+    }
+}

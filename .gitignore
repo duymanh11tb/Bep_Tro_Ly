@@ -1,24 +1,38 @@
-# Python
-__pycache__/
-*.py[cod]
-*.egg-info/
-.venv/
-venv/
-env/
-
-# Environment
-.env
+# .NET
+bin/
+obj/
+publish/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
 
 # IDE
+.vs/
 .vscode/
-.idea/
+*.swp
+*~
 
 # OS
-.DS_Store
 Thumbs.db
+.DS_Store
 
-# Generated
-db_structure.txt
+# Secrets
+appsettings.Development.json
+appsettings.Production.json
 
-# Flutter (frontend is separate)
+# Build artifacts
+dotnet_backend/BepTroLy.API/publish/
+dotnet_backend/BepTroLy.API/Migrations/
+
+# Temporary
+*.log
+*.txt
+!README.txt
+
+# Flutter
+fridge_assistant/.dart_tool/
+fridge_assistant/.packages
 fridge_assistant/build/
