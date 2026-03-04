@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  db:
+    image: mysql:8.0
+    container_name: beptroly-db
+    restart: always
+    environment:
+      MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
+      MYSQL_DATABASE: Bep_Tro_Ly
+    ports:
+      - "3306:3306"
+    volumes:
+      - db_data:/var/lib/mysql
+
+  api:
+    build:
+      context: ./dotnet_backend
+      dockerfile: Dockerfile
+    container_name: beptroly-api
+    restart: always
+    ports:
+      - "5000:5000"
+    environment:
+      - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database=Bep_Tro_Ly;Uid=root;Pwd=${DB_PASSWORD};
+      - Jwt__SecretKey=${JWT_SECRET}
+      - Gemini__ApiKey=${GEMINI_API_KEY}
+      - ASPNETCORE_ENVIRONMENT=Production
+    depends_on:
+      - db
+
+volumes:
+  db_data:
