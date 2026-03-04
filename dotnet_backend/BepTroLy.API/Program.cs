@@ -9,8 +9,13 @@ var builder = WebApplication.CreateBuilder(args);
 
 // ==================== Services ====================
 
-// Controllers
-builder.Services.AddControllers();
+// Controllers with snake_case JSON (matches Flask API format)
+builder.Services.AddControllers()
+    .AddJsonOptions(options =>
+    {
+        options.JsonSerializerOptions.PropertyNamingPolicy = 
+            System.Text.Json.JsonNamingPolicy.SnakeCaseLower;
+    });
 
 // Swagger
 builder.Services.AddEndpointsApiExplorer();
@@ -22,7 +27,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
 
 // JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:SecretKey"] ?? "bep-tro-ly-secret-key-2024";
+var jwtSecret = builder.Configuration["Jwt:SecretKey"] ?? "bep-tro-ly-secret-key-2024-super-secure-jwt-token-key";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -53,14 +58,27 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
+// Apply Database Migrations on Startup automatically
+using (var scope = app.Services.CreateScope())
+{
+    var services = scope.ServiceProvider;
+    try
+    {
+        var context = services.GetRequiredService<AppDbContext>();
+        context.Database.Migrate();
+    }
+    catch (Exception ex)
+    {
+        var logger = services.GetRequiredService<ILogger<Program>>();
+        logger.LogError(ex, "An error occurred while migrating the database.");
+    }
+}
+
 // ==================== Middleware ====================
 
-// Swagger (dev only)
-if (app.Environment.IsDevelopment())
-{
-    app.UseSwagger();
-    app.UseSwaggerUI();
-}
+// Swagger (all environments for now)
+app.UseSwagger();
+app.UseSwaggerUI();
 
 app.UseCors();
 app.UseAuthentication();
@@ -87,6 +105,19 @@ app.MapGet("/health", async (AppDbContext db) =>
     catch (Exception ex)
     {
         return Results.Json(new { status = "unhealthy", db = ex.Message }, statusCode: 503);
+    }
+});
+
+app.MapGet("/debug/jwt", (JwtService jwt) =>
+{
+    try
+    {
+        var token = jwt.GenerateToken(99999);
+        return Results.Ok(new { success = true, token = token.Substring(0, 20) + "..." });
+    }
+    catch (Exception ex)
+    {
+        return Results.Json(new { success = false, error = ex.Message, type = ex.GetType().Name, inner = ex.InnerException?.Message, stack = ex.StackTrace?.Substring(0, Math.Min(500, ex.StackTrace?.Length ?? 0)) }, statusCode: 500);
     }
 });
 

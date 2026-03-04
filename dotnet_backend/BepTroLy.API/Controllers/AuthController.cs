@@ -65,7 +65,8 @@ public class AuthController : ControllerBase
         catch (Exception ex)
         {
             _logger.LogError(ex, "Register error");
-            return StatusCode(500, new ErrorResponse { Error = "Lỗi đăng ký" });
+            var innerMsg = ex.InnerException?.Message ?? "";
+            return StatusCode(500, new ErrorResponse { Error = $"Lỗi đăng ký: {ex.Message} | Inner: {innerMsg}" });
         }
     }
 
@@ -79,8 +80,28 @@ public class AuthController : ControllerBase
         var email = request.Email.Trim().ToLower();
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
 
-        if (user == null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+        if (user == null)
             return Unauthorized(new ErrorResponse { Error = "Email hoặc mật khẩu không đúng" });
+
+        // Check if hash is BCrypt format ($2a$ or $2b$ or $2y$)
+        if (user.PasswordHash.StartsWith("$2"))
+        {
+            try
+            {
+                if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+                    return Unauthorized(new ErrorResponse { Error = "Email hoặc mật khẩu không đúng" });
+            }
+            catch
+            {
+                return Unauthorized(new ErrorResponse { Error = "Email hoặc mật khẩu không đúng" });
+            }
+        }
+        else
+        {
+            // Old werkzeug/scrypt hash from Python backend — rehash with BCrypt
+            // For now, just reject and ask user to re-register
+            return Unauthorized(new ErrorResponse { Error = "Tài khoản cũ, vui lòng đăng ký lại" });
+        }
 
         user.LastActive = DateTime.UtcNow;
         await _db.SaveChangesAsync();
