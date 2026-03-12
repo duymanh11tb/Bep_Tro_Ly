@@ -62,11 +62,11 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var services = scope.ServiceProvider;
+    var logger = services.GetRequiredService<ILogger<Program>>();
     try
     {
         var context = services.GetRequiredService<AppDbContext>();
         context.Database.Migrate();
-        _ = logger; // Keep logger in scope
         
         // Add a simple connection test
         if (context.Database.CanConnect())
@@ -84,7 +84,6 @@ using (var scope = app.Services.CreateScope())
     }
     catch (Exception ex)
     {
-        var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "An error occurred while migrating the database.");
         Console.WriteLine($"❌ DATABASE ERROR: {ex.Message}");
     }
