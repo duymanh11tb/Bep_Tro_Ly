@@ -168,7 +168,7 @@ public class AIRecipeService
         var responseText = await response.Content.ReadAsStringAsync();
 
         if (!response.IsSuccessStatusCode)
-            throw new Exception($"Gemini API error: {response.StatusCode}");
+            throw new Exception($"Gemini API error: {response.StatusCode} - {responseText}");
 
         // Parse response
         using var doc = JsonDocument.Parse(responseText);
