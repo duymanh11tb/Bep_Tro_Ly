@@ -20,7 +20,7 @@ services:
     container_name: beptroly-api
     restart: always
     ports:
-      - "5000:5000"
+      - "5001:5000"
     environment:
       - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database=Bep_Tro_Ly;Uid=root;Pwd=${DB_PASSWORD};
       - Jwt__SecretKey=${JWT_SECRET}

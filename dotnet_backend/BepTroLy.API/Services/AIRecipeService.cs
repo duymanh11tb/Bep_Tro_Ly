@@ -152,7 +152,8 @@ public class AIRecipeService
             """;
 
         // Call Gemini REST API
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={_apiKey}";
+        // Use Gemini 2.5 Flash (free tier in current project)
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}";
 
         var requestBody = new
         {
