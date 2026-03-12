@@ -6,7 +6,8 @@ import 'dart:io';
 class ApiService {
   // API Backend deployed on VPS
   static String get baseUrl {
-    return 'http://103.77.173.6:5000';
+    return 'http://103.77.173.6:5001';
+    // return 'http://103.77.173.6:5001'; kết nối vps
   }
 
   static Future<Map<String, String>> getHeaders({bool withAuth = false}) async {

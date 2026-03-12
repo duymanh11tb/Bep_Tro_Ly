@@ -28,6 +28,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
   void initState() {
     super.initState();
     _pageController = PageController(viewportFraction: 0.85);
+    // Vừa auto-scroll nhẹ nhàng, vừa cho phép người dùng vuốt tay
     _startAutoScroll();
   }
 
@@ -92,9 +93,12 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
           child: PageView.builder(
             controller: _pageController,
             onPageChanged: (index) {
+              // Khi người dùng vuốt, cập nhật trang hiện tại và reset timer auto-scroll
+              _autoScrollTimer?.cancel();
               setState(() {
                 _currentPage = index;
               });
+              _startAutoScroll();
             },
             itemCount: widget.suggestions.length,
             itemBuilder: (context, index) {

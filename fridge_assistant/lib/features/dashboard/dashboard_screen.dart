@@ -59,7 +59,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final results = await Future.wait([
         PantryService.getExpiringItems(days: 7),
         PantryService.getStats(),
-        PantryService.getAiSuggestions(limit: 5),
+        // Lấy nhiều gợi ý hơn để người dùng vuốt xem
+        PantryService.getAiSuggestions(limit: 8),
       ]);
 
       if (mounted) {
@@ -307,62 +308,183 @@ class _DashboardScreenState extends State<DashboardScreen> {
     else if (item.daysUntilExpiry <= 1) expiryColor = AppColors.error;
     else if (item.daysUntilExpiry <= 3) expiryColor = AppColors.warning;
 
+    return GestureDetector(
+      onTap: () => _openRecipesForIngredient(item),
+      child: Container(
+        width: 110,
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(16),
+          boxShadow: [
+            BoxShadow(
+              color: const Color.fromRGBO(0, 0, 0, 0.06),
+              blurRadius: 10,
+              offset: const Offset(0, 3),
+            ),
+          ],
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            ClipRRect(
+              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              child: Container(
+                height: 85,
+                width: double.infinity,
+                color: AppColors.backgroundSecondary,
+                child: item.imageUrl != null
+                    ? Image.network(item.imageUrl!, fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => _categoryIcon(item.category))
+                    : _categoryIcon(item.category),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.name,
+                    style: const TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    item.expiryText,
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: expiryColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _openRecipesForIngredient(PantryItem item) {
+    final keyword = item.name.toLowerCase();
+    final related = _suggestions.where((recipe) {
+      return recipe.ingredientsUsed
+          .any((ing) => ing.toLowerCase().contains(keyword));
+    }).toList();
+
+    if (related.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Chưa có gợi ý nào dùng "${item.name}". Thử làm mới nhé!'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+      return;
+    }
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (context) {
+        return DraggableScrollableSheet(
+          expand: false,
+          initialChildSize: 0.7,
+          minChildSize: 0.4,
+          maxChildSize: 0.9,
+          builder: (context, scrollController) {
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  child: Text(
+                    'Món dùng ${item.name}',
+                    style: const TextStyle(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: ListView.separated(
+                    controller: scrollController,
+                    padding: const EdgeInsets.fromLTRB(20, 0, 20, 20),
+                    itemCount: related.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
+                    itemBuilder: (context, index) {
+                      final recipe = related[index];
+                      return _buildRelatedRecipeTile(recipe);
+                    },
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildRelatedRecipeTile(RecipeSuggestion recipe) {
     return Container(
-      width: 110,
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(16),
         boxShadow: [
           BoxShadow(
-            color: const Color.fromRGBO(0, 0, 0, 0.06),
-            blurRadius: 10,
+            color: const Color.fromRGBO(0, 0, 0, 0.05),
+            blurRadius: 8,
             offset: const Offset(0, 3),
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          ClipRRect(
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
-            child: Container(
-              height: 85,
-              width: double.infinity,
-              color: AppColors.backgroundSecondary,
-              child: item.imageUrl != null
-                  ? Image.network(item.imageUrl!, fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _categoryIcon(item.category))
-                  : _categoryIcon(item.category),
-            ),
+      child: ListTile(
+        contentPadding: const EdgeInsets.all(12),
+        leading: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: SizedBox(
+            width: 56,
+            height: 56,
+            child: recipe.imageUrl != null
+                ? Image.network(
+                    recipe.imageUrl!,
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => const Icon(Icons.restaurant),
+                  )
+                : const Icon(Icons.restaurant),
           ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(8, 7, 8, 7),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  item.name,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                    color: AppColors.textPrimary,
-                  ),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-                const SizedBox(height: 3),
-                Text(
-                  item.expiryText,
-                  style: TextStyle(
-                    fontSize: 10,
-                    color: expiryColor,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
+        ),
+        title: Text(
+          recipe.name,
+          style: const TextStyle(
+            fontSize: 14,
+            fontWeight: FontWeight.w600,
           ),
-        ],
+        ),
+        subtitle: Text(
+          recipe.description,
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: const TextStyle(fontSize: 12),
+        ),
+        trailing: const Icon(Icons.chevron_right),
+        onTap: () {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Xem công thức: ${recipe.name}'),
+              backgroundColor: AppColors.primary,
+            ),
+          );
+        },
       ),
     );
   }

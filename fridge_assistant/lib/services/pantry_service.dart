@@ -107,7 +107,10 @@ class PantryService {
   /// Lấy tất cả sản phẩm active
   static Future<List<PantryItem>> getItems() async {
     try {
-      final resp = await ApiService.get('/api/pantry?status=active', withAuth: true);
+      final resp = await ApiService.get(
+        '/api/pantry?status=active',
+        withAuth: true,
+      );
       if (resp.statusCode == 200) {
         final List list = jsonDecode(utf8.decode(resp.bodyBytes));
         return list.map((e) => PantryItem.fromJson(e)).toList();
@@ -121,7 +124,10 @@ class PantryService {
   /// Lấy sản phẩm sắp hết hạn
   static Future<List<PantryItem>> getExpiringItems({int days = 7}) async {
     try {
-      final resp = await ApiService.get('/api/pantry/expiring?days=$days', withAuth: true);
+      final resp = await ApiService.get(
+        '/api/pantry/expiring?days=$days',
+        withAuth: true,
+      );
       if (resp.statusCode == 200) {
         final List list = jsonDecode(utf8.decode(resp.bodyBytes));
         return list.map((e) => PantryItem.fromJson(e)).toList();
@@ -163,7 +169,8 @@ class PantryService {
         'unit': unit,
         if (categoryId != null) 'category_id': categoryId,
         'location': location,
-        if (expiryDate != null) 'expiry_date': expiryDate.toIso8601String().split('T').first,
+        if (expiryDate != null)
+          'expiry_date': expiryDate.toIso8601String().split('T').first,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         'add_method': 'manual',
       };
@@ -187,10 +194,13 @@ class PantryService {
   }
 
   /// Lấy gợi ý món ăn từ AI
-  static Future<List<RecipeSuggestion>> getAiSuggestions({int limit = 5}) async {
+  static Future<List<RecipeSuggestion>> getAiSuggestions({
+    int limit = 15,
+  }) async {
     try {
-      final resp = await ApiService.post('/api/recipes/suggest-from-pantry', 
-        {'limit': limit}, withAuth: true);
+      final resp = await ApiService.post('/api/recipes/suggest-from-pantry', {
+        'limit': limit,
+      }, withAuth: true);
       if (resp.statusCode == 200) {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
         if (data['success'] == true && data['recipes'] != null) {
