@@ -64,9 +64,9 @@ public class AuthController : ControllerBase
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Register error");
-            var innerMsg = ex.InnerException?.Message ?? "";
-            return StatusCode(500, new ErrorResponse { Error = $"Lỗi đăng ký: {ex.Message} | Inner: {innerMsg}" });
+            _logger.LogError(ex, "Register error for {Email}", request.Email);
+            var innerMsg = ex.InnerException?.Message ?? "None";
+            return StatusCode(500, new ErrorResponse { Error = $"Lỗi đăng ký hệ thống: {ex.Message}. Chi tiết: {innerMsg}" });
         }
     }
 

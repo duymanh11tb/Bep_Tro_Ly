@@ -66,11 +66,27 @@ using (var scope = app.Services.CreateScope())
     {
         var context = services.GetRequiredService<AppDbContext>();
         context.Database.Migrate();
+        _ = logger; // Keep logger in scope
+        
+        // Add a simple connection test
+        if (context.Database.CanConnect())
+        {
+            Console.WriteLine("==================================================");
+            Console.WriteLine("✅ DATABASE CONNECTED SUCCESSFULLY");
+            Console.WriteLine("==================================================");
+        }
+        else
+        {
+            Console.WriteLine("==================================================");
+            Console.WriteLine("❌ DATABASE CONNECTION FAILED!");
+            Console.WriteLine("==================================================");
+        }
     }
     catch (Exception ex)
     {
         var logger = services.GetRequiredService<ILogger<Program>>();
         logger.LogError(ex, "An error occurred while migrating the database.");
+        Console.WriteLine($"❌ DATABASE ERROR: {ex.Message}");
     }
 }
 
