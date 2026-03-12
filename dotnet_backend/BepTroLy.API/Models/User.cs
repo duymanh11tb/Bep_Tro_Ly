@@ -51,7 +51,7 @@ public class User
     public bool NotificationEnabled { get; set; } = true;
 
     [Column("notification_time")]
-    public TimeSpan NotificationTime { get; set; } = new TimeSpan(18, 0, 0);
+    public TimeSpan? NotificationTime { get; set; }
 
     [Column("expiry_alert_days")]
     public int ExpiryAlertDays { get; set; } = 2;

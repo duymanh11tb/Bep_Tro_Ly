@@ -20,12 +20,13 @@ Thumbs.db
 .DS_Store
 
 # Secrets
+appsettings.json
 appsettings.Development.json
 appsettings.Production.json
+.env
 
 # Build artifacts
 dotnet_backend/BepTroLy.API/publish/
-dotnet_backend/BepTroLy.API/Migrations/
 
 # Temporary
 *.log

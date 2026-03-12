@@ -5,6 +5,7 @@ import 'features/dashboard/dashboard_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'services/auth_service.dart';
 import 'features/auth/auth_screen.dart';
+import 'features/product/add_product_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -27,6 +28,7 @@ class BepTroLyApp extends StatelessWidget {
         '/onboarding': (context) => const OnboardingScreen(),
         '/auth': (context) => const AuthScreen(),
         '/home': (context) => const DashboardScreen(),
+        '/add-product': (context) => const AddProductScreen(),
       },
     );
   }

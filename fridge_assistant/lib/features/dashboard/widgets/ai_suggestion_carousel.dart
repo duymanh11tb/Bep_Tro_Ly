@@ -27,7 +27,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
   @override
   void initState() {
     super.initState();
-    _pageController = PageController(viewportFraction: 0.9);
+    _pageController = PageController(viewportFraction: 0.85);
     _startAutoScroll();
   }
 
@@ -88,7 +88,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
         
         // Carousel
         SizedBox(
-          height: 200,
+          height: 230,
           child: PageView.builder(
             controller: _pageController,
             onPageChanged: (index) {
@@ -176,25 +176,53 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // Badge
-                  if (suggestion.ingredientsExpiringCount > 0)
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: AppColors.warning,
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Text(
-                        suggestion.expiringBadgeText,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.white,
+                  // Badge
+                  Row(
+                    children: [
+                      if (suggestion.ingredientsExpiringCount > 0)
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          decoration: BoxDecoration(
+                            color: AppColors.warning,
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            suggestion.expiringBadgeText,
+                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                          ),
                         ),
-                      ),
-                    ),
+                      if (suggestion.matchPercentage > 0)
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: AppColors.primary,
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              '${suggestion.matchPercentage}% Hợp',
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ),
+                        )
+                      else
+                        Padding(
+                          padding: const EdgeInsets.only(left: 8),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            decoration: BoxDecoration(
+                              color: const Color(0xFF3B82F6), // Blue for discovery
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Text(
+                              'Khám phá',
+                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
                   
                   const Spacer(),
                   

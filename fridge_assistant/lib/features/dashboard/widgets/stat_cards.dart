@@ -21,11 +21,16 @@ class StatCards extends StatelessWidget {
           Expanded(
             child: _buildStatCard(
               icon: Icons.restaurant_menu,
-              iconColor: AppColors.primary,
               title: 'Có thể nấu',
               value: recipesAvailable.toString(),
               subtitle: 'Món ăn từ nguyên liệu\ncó sẵn!',
+              accentColor: AppColors.primary,
               backgroundColor: Colors.white,
+              trailing: const Icon(
+                Icons.arrow_forward,
+                color: AppColors.primary,
+                size: 16,
+              ),
             ),
           ),
           const SizedBox(width: 12),
@@ -33,12 +38,12 @@ class StatCards extends StatelessWidget {
           Expanded(
             child: _buildStatCard(
               icon: Icons.savings_outlined,
-              iconColor: AppColors.primary,
               title: 'Đã tiết kiệm',
-              value: '${moneySaved}k',
-              valueSuffix: ' đ',
-              subtitle: 'Tháng này bạn làm rất\ntốt !',
+              value: '${moneySaved}k đ',
+              subtitle: 'Tháng này bạn làm\nrất tốt !',
+              accentColor: AppColors.primary,
               backgroundColor: AppColors.primaryLight,
+              bottomLine: true,
             ),
           ),
         ],
@@ -48,12 +53,13 @@ class StatCards extends StatelessWidget {
 
   Widget _buildStatCard({
     required IconData icon,
-    required Color iconColor,
     required String title,
     required String value,
-    String? valueSuffix,
     required String subtitle,
+    required Color accentColor,
     required Color backgroundColor,
+    Widget? trailing,
+    bool bottomLine = false,
   }) {
     return Container(
       padding: const EdgeInsets.all(16),
@@ -71,11 +77,12 @@ class StatCards extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // Title row
           Row(
             children: [
-              Icon(icon, color: iconColor, size: 20),
+              Icon(icon, color: accentColor, size: 18),
               const SizedBox(width: 6),
-              Flexible(
+              Expanded(
                 child: Text(
                   title,
                   style: const TextStyle(
@@ -85,41 +92,42 @@ class StatCards extends StatelessWidget {
                   ),
                 ),
               ),
+              if (trailing != null) trailing,
             ],
           ),
           const SizedBox(height: 10),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                value,
-                style: const TextStyle(
-                  fontSize: 36,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                  height: 1,
-                ),
-              ),
-              if (valueSuffix != null)
-                Text(
-                  valueSuffix,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                    color: AppColors.textSecondary,
-                  ),
-                ),
-            ],
+          // Value
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 32,
+              fontWeight: FontWeight.bold,
+              color: accentColor,
+              height: 1,
+            ),
           ),
           const SizedBox(height: 8),
+          // Subtitle
           Text(
             subtitle,
             style: const TextStyle(
               fontSize: 11,
               color: AppColors.textSecondary,
-              height: 1.3,
+              height: 1.4,
             ),
           ),
+          // Bottom accent line for savings card
+          if (bottomLine) ...[
+            const SizedBox(height: 10),
+            Container(
+              height: 3,
+              width: 40,
+              decoration: BoxDecoration(
+                color: accentColor,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ],
         ],
       ),
     );

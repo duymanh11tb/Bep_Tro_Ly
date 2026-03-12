@@ -21,17 +21,8 @@ public class RecipeController : ControllerBase
     [Authorize]
     public async Task<IActionResult> SuggestRecipes([FromBody] SuggestRecipesRequest request)
     {
-        if (request.Ingredients == null || request.Ingredients.Count == 0)
-        {
-            return BadRequest(new
-            {
-                error = "Vui lòng cung cấp danh sách nguyên liệu",
-                example = new { ingredients = new[] { "thịt bò", "hành tây", "cà chua" } }
-            });
-        }
-
         var result = await _aiService.SuggestRecipesAsync(
-            request.Ingredients,
+            request.Ingredients ?? new List<string>(),
             request.Preferences,
             request.Limit
         );

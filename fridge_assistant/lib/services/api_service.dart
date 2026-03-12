@@ -4,13 +4,9 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
 
 class ApiService {
-  // Android Emulator uses 10.0.2.2 to access localhost of the host machine
-  // Windows/iOS use localhost directly
+  // API Backend deployed on VPS
   static String get baseUrl {
-    if (Platform.isAndroid) {
-      return 'http://10.0.2.2:5000';
-    }
-    return 'http://localhost:5000';
+    return 'http://103.77.173.6:5000';
   }
 
   static Future<Map<String, String>> getHeaders({bool withAuth = false}) async {
@@ -63,14 +59,43 @@ class ApiService {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
 
-    print('GET $url');
-
     try {
       final response = await http.get(url, headers: headers);
-      print('Response Status: ${response.statusCode}');
       return response;
     } catch (e) {
-      print('API Error: $e');
+      throw Exception('Connection error: $e');
+    }
+  }
+
+  static Future<http.Response> put(
+    String endpoint,
+    Map<String, dynamic> body, {
+    bool withAuth = true,
+  }) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final headers = await getHeaders(withAuth: withAuth);
+    try {
+      final response = await http.put(
+        url,
+        headers: headers,
+        body: jsonEncode(body),
+      );
+      return response;
+    } catch (e) {
+      throw Exception('Connection error: $e');
+    }
+  }
+
+  static Future<http.Response> delete(
+    String endpoint, {
+    bool withAuth = true,
+  }) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final headers = await getHeaders(withAuth: withAuth);
+    try {
+      final response = await http.delete(url, headers: headers);
+      return response;
+    } catch (e) {
       throw Exception('Connection error: $e');
     }
   }

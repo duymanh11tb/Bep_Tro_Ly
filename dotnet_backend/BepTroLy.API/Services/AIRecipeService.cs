@@ -35,15 +35,8 @@ public class AIRecipeService
         Dictionary<string, object>? preferences = null,
         int limit = 5)
     {
-        if (ingredients == null || ingredients.Count == 0)
-        {
-            return new Dictionary<string, object>
-            {
-                ["success"] = false,
-                ["error"] = "Vui lòng cung cấp ít nhất một nguyên liệu",
-                ["recipes"] = new List<object>()
-            };
-        }
+        // If no ingredients, we enter "Discovery" mode
+        ingredients ??= new List<string>();
 
         // Check cache
         var cacheKey = GenerateCacheKey(ingredients, preferences);
@@ -95,16 +88,6 @@ public class AIRecipeService
             .Where(p => p.UserId == userId && p.Status == "active")
             .ToListAsync();
 
-        if (pantryItems.Count == 0)
-        {
-            return new Dictionary<string, object>
-            {
-                ["success"] = false,
-                ["error"] = "Tủ lạnh của bạn đang trống. Hãy thêm nguyên liệu trước!",
-                ["recipes"] = new List<object>()
-            };
-        }
-
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
         return await SuggestRecipesAsync(ingredients, preferences, limit);
     }
@@ -126,36 +109,46 @@ public class AIRecipeService
         var dietaryText = !string.IsNullOrEmpty(dietary) ? $"Chế độ ăn đặc biệt: {dietary}" : "";
         var difficultyText = difficulty != "any" ? $"Độ khó: {difficulty}" : "";
 
-        var prompt = $$"""
-            Bạn là chuyên gia ẩm thực Việt Nam với kinh nghiệm 20 năm.
+        var statusText = ingredients.Any() 
+            ? $"CHẾ ĐỘ GỢI Ý: Dựa trên {ingredients.Count} nguyên liệu có sẵn: {string.Join(", ", ingredients)}."
+            : "CHẾ ĐỘ KHÁM PHÁ: Tủ lạnh đang trống. Hãy gợi ý những món ăn Việt Nam 'quốc dân' cực kỳ hấp dẫn, dễ làm và phổ biến.";
 
-            Nguyên liệu có sẵn: {{string.Join(", ", ingredients)}}
-            Phong cách ẩm thực: {{cuisine}}
+        var prompt = $$"""
+            Bạn là một đầu bếp Việt Nam tài ba với kiến thức sâu rộng về ẩm thực 3 miền.
+            
+            {{statusText}}
+            Phong cách ẩm thực yêu thích: {{cuisine}}
             {{dietaryText}}
             {{difficultyText}}
 
-            Hãy đề xuất {{limit}} món ăn có thể nấu với các nguyên liệu trên.
+            NHIỆM VỤ: Đề xuất {{limit}} món ăn. 
+            - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất.
+            - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy chọn những món ngon nhất, dễ tìm mua nguyên liệu nhất.
 
-            QUAN TRỌNG: Trả về JSON format CHÍNH XÁC như sau, KHÔNG thêm markdown code block:
+            QUY ĐỊNH TRẢ VỀ (CHỈ TRẢ VỀ JSON, KHÔNG CÓ MARKDOWN):
             {
                 "recipes": [
                     {
-                        "name": "Tên món ăn",
-                        "description": "Mô tả ngắn gọn về món ăn (1-2 câu)",
+                        "name": "Tên món ăn hấp dẫn",
+                        "description": "Mô tả ngắn gọn khiến người dùng muốn ăn ngay (1-2 câu)",
                         "difficulty": "easy hoặc medium hoặc hard",
-                        "prep_time": số phút chuẩn bị,
-                        "cook_time": số phút nấu,
-                        "servings": số người ăn,
-                        "ingredients_used": ["nguyên liệu 1", "nguyên liệu 2"],
-                        "ingredients_missing": ["nguyên liệu cần mua thêm nếu có"],
-                        "match_score": số từ 0.0 đến 1.0,
-                        "instructions": ["Bước 1: ...", "Bước 2: ..."],
-                        "tips": "Mẹo nấu ăn"
+                        "prep_time": thời gian chuẩn bị (phút),
+                        "cook_time": thời gian nấu (phút),
+                        "servings": cho mấy người ăn (nguyên số),
+                        "ingredients_used": ["những thứ đã có trong tủ"],
+                        "ingredients_missing": ["những thứ cần mua thêm"],
+                        "match_score": độ phù hợp từ 0.0 đến 1.0 (float),
+                        "instructions": [
+                           "Bước 1: Sơ chế...",
+                           "Bước 2: Chế biến...",
+                           "Bước 3: Hoàn thiện..."
+                        ],
+                        "tips": "Bí quyết nấu món này ngon nhất"
                     }
                 ]
             }
 
-            Sắp xếp theo match_score từ cao đến thấp.
+            Sắp xếp theo thứ tự ưu tiên nhất lên đầu.
             """;
 
         // Call Gemini REST API

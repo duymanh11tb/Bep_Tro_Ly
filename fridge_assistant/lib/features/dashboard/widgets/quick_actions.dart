@@ -18,22 +18,22 @@ class QuickActions extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.start,
+        mainAxisAlignment: MainAxisAlignment.spaceEvenly,
         children: [
           _buildActionButton(
             icon: Icons.qr_code_scanner,
             label: 'Quét HD',
             onTap: onScanTap,
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
           _buildActionButton(
-            icon: Icons.add,
+            icon: Icons.add_circle_outline,
             label: 'Thêm món',
             onTap: onAddTap,
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 20),
           _buildActionButton(
-            icon: Icons.search,
+            icon: Icons.search_rounded,
             label: 'Tìm kiếm',
             onTap: onSearchTap,
           ),
@@ -52,16 +52,24 @@ class QuickActions extends StatelessWidget {
       child: Column(
         children: [
           Container(
-            width: 56,
-            height: 56,
+            width: 60,
+            height: 60,
             decoration: BoxDecoration(
-              color: AppColors.backgroundSecondary,
-              borderRadius: BorderRadius.circular(16),
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(18),
+              border: Border.all(color: AppColors.inputBorder, width: 1.5),
+              boxShadow: [
+                BoxShadow(
+                  color: const Color.fromRGBO(0, 0, 0, 0.04),
+                  blurRadius: 8,
+                  offset: const Offset(0, 2),
+                ),
+              ],
             ),
             child: Icon(
               icon,
-              color: AppColors.textSecondary,
-              size: 24,
+              color: AppColors.primary,
+              size: 26,
             ),
           ),
           const SizedBox(height: 8),
@@ -69,7 +77,8 @@ class QuickActions extends StatelessWidget {
             label,
             style: const TextStyle(
               fontSize: 12,
-              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
+              color: AppColors.textPrimary,
             ),
           ),
         ],
