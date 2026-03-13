@@ -107,7 +107,7 @@ class PantryStats {
         .toList();
     return PantryStats(
       totalItems: json['total_items'] ?? 0,
-      expiring_soon: json['expiring_soon'] ?? 0,
+      expiringSoon: json['expiring_soon'] ?? 0,
       byCategory: cats,
     );
   }
