@@ -33,14 +33,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
-    _loadData();
+    _initSequence();
   }
 
-  Future<void> _loadData() async {
+  Future<void> _initSequence() async {
+    // 1. Tải thông tin user & dữ liệu cache ngay lập tức
     await Future.wait([
       _loadUserInfo(),
-      _loadPantryData(),
+      _loadCachedData(),
     ]);
+    
+    // 2. Refresh dữ liệu từ server trong nền
+    _loadPantryData(isBackground: true);
   }
 
   Future<void> _loadUserInfo() async {
@@ -54,12 +58,40 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _loadPantryData() async {
+  Future<void> _loadCachedData() async {
+    try {
+      final results = await Future.wait([
+        PantryService.getCachedExpiringItems(),
+        PantryService.getCachedStats(),
+        PantryService.getCachedAiSuggestions(),
+      ]);
+
+      if (mounted) {
+        setState(() {
+          _expiringItems = results[0] as List<PantryItem>;
+          _stats = results[1] as PantryStats?;
+          _suggestions = results[2] as List<RecipeSuggestion>;
+          
+          // Nếu có cache, tắt loading ngay để người dùng xem luôn
+          if (_expiringItems.isNotEmpty || _stats != null || _suggestions.isNotEmpty) {
+            _isLoading = false;
+          }
+        });
+      }
+    } catch (e) {
+      print('Error loading cached data: $e');
+    }
+  }
+
+  Future<void> _loadPantryData({bool isBackground = false}) async {
+    if (!isBackground) {
+      setState(() => _isLoading = true);
+    }
+    
     try {
       final results = await Future.wait([
         PantryService.getExpiringItems(days: 7),
         PantryService.getStats(),
-        // Lấy nhiều món hơn để người dùng khám phá
         PantryService.getAiSuggestions(limit: 10),
       ]);
 
@@ -79,8 +111,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _refresh() async {
-    setState(() => _isLoading = true);
-    await _loadPantryData();
+    await _loadPantryData(isBackground: false);
   }
 
   @override
@@ -787,6 +818,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _handleLogout() async {
     final authService = AuthService();
     await authService.logout();
+    await PantryService.clearCache();
     if (mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil('/onboarding', (route) => false);
     }
