@@ -6,7 +6,8 @@ import 'dart:io';
 class ApiService {
   // API Backend deployed on VPS
   static String get baseUrl {
-    return 'http://103.77.173.6:5000';
+    // Port 5001 is mapped to API container port 5000 on VPS
+    return 'http://103.77.173.6:5001';
   }
 
   static Future<Map<String, String>> getHeaders({bool withAuth = false}) async {

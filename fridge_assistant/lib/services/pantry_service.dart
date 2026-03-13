@@ -187,7 +187,7 @@ class PantryService {
   }
 
   /// Lấy gợi ý món ăn từ AI
-  static Future<List<RecipeSuggestion>> getAiSuggestions({int limit = 5}) async {
+  static Future<List<RecipeSuggestion>> getAiSuggestions({int limit = 10}) async {
     try {
       final resp = await ApiService.post('/api/recipes/suggest-from-pantry', 
         {'limit': limit}, withAuth: true);

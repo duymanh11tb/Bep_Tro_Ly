@@ -38,6 +38,11 @@ public class AIRecipeService
         // If no ingredients, we enter "Discovery" mode
         ingredients ??= new List<string>();
 
+        // Ensure preferences is not null and include limit so cache key
+        // differentiates between different requested recipe counts
+        preferences ??= new Dictionary<string, object>();
+        preferences["limit"] = limit;
+
         // Check cache
         var cacheKey = GenerateCacheKey(ingredients, preferences);
         var cached = await GetFromCacheAsync(cacheKey);

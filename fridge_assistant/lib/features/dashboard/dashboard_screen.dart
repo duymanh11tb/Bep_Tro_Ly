@@ -59,7 +59,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final results = await Future.wait([
         PantryService.getExpiringItems(days: 7),
         PantryService.getStats(),
-        PantryService.getAiSuggestions(limit: 5),
+        // Lấy nhiều món hơn để người dùng khám phá
+        PantryService.getAiSuggestions(limit: 10),
       ]);
 
       if (mounted) {
