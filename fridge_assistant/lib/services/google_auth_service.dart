@@ -39,9 +39,6 @@ class GoogleAuthService {
         final token = data['token'];
         final user = data['user'];
         
-        // Lưu thông tin đăng nhập vào shared_preferences (sử dụng method private của AuthService nếu công khai hoặc copy logic)
-        // Vì AuthService._saveAuthData là private, tôi sẽ gọi thông qua phương thức login nếu có thể hoặc cập nhật AuthService.
-        // Ở đây tạm thời copy logic lưu nếu AuthService chưa có method public
         await _authService.loginWithToken(token, user);
         return {'success': true, 'data': data};
       } else {
