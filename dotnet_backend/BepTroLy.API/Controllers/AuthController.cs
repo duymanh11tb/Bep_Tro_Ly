@@ -82,9 +82,10 @@ public class AuthController : ControllerBase
             var config = new ConfigurationBuilder()
                 .SetBasePath(Directory.GetCurrentDirectory())
                 .AddJsonFile("appsettings.json")
+                .AddEnvironmentVariables()
                 .Build();
             
-            var googleClientId = config["GoogleAuth:ClientId"];
+            var googleClientId = config["GOOGLE_CLIENT_ID"] ?? config["GoogleAuth:ClientId"];
             
             var payload = await Google.Apis.Auth.GoogleJsonWebSignature.ValidateAsync(request.IdToken, new Google.Apis.Auth.GoogleJsonWebSignature.ValidationSettings
             {
