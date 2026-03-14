@@ -56,9 +56,9 @@ Dự án sử dụng **Docker Compose** để chạy cả Database (MySQL) và B
 
 ### Các bước triển khai (Trên VPS)
 
-1. **Kết nối vào VPS:** Sử dụng SSH.
-   ```bash
-   ssh root@103.77.173.6
+1. **Kết nối vào VPS:**
+   ```bash -> Chạy powershell
+   ssh root@ ip trong box
    pass : trong box zalo
    ```
 2. **Di chuyển vào thư mục dự án trên VPS.**
