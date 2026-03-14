@@ -38,8 +38,12 @@ public class AIRecipeService
         // If no ingredients, we enter "Discovery" mode
         ingredients ??= new List<string>();
 
+<<<<<<< HEAD
+        // Đưa limit vào preferences để cache key phân biệt theo số lượng món
+=======
         // Ensure preferences is not null and include limit so cache key
         // differentiates between different requested recipe counts
+>>>>>>> dev
         preferences ??= new Dictionary<string, object>();
         preferences["limit"] = limit;
 
@@ -130,12 +134,13 @@ public class AIRecipeService
             - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất.
             - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy chọn những món ngon nhất, dễ tìm mua nguyên liệu nhất.
 
-            QUY ĐỊNH TRẢ VỀ (CHỈ TRẢ VỀ JSON, KHÔNG CÓ MARKDOWN):
+            QUY ĐỊNH TRẢ VỀ (CHỈ TRẢ VỀ JSON THUẦN, KHÔNG CÓ MARKDOWN, KHÔNG DÙNG ```):
             {
                 "recipes": [
                     {
                         "name": "Tên món ăn hấp dẫn",
-                        "description": "Mô tả ngắn gọn khiến người dùng muốn ăn ngay (1-2 câu)",
+                        "description": "Mô tả ngắn gọn khiến người dùng muốn ăn ngay (1-2 câu, thân thiện, gần gũi người Việt)",
+                        "image_url": "URL ảnh minh họa món ăn (ưu tiên ảnh giống món Việt thực tế, nếu không chắc hãy để null)",
                         "difficulty": "easy hoặc medium hoặc hard",
                         "prep_time": thời gian chuẩn bị (phút),
                         "cook_time": thời gian nấu (phút),
