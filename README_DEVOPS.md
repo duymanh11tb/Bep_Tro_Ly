@@ -58,7 +58,7 @@ Dự án sử dụng **Docker Compose** để chạy cả Database (MySQL) và B
 
 1. **Kết nối vào VPS:**
    ```bash -> Chạy powershell
-   ssh root@ ip trong box
+   ssh root@103.77.173.6
    pass : trong box zalo
    ```
 2. **Di chuyển vào thư mục dự án trên VPS.**
@@ -76,7 +76,25 @@ Dự án sử dụng **Docker Compose** để chạy cả Database (MySQL) và B
    docker compose up -d --build
    ```
 
-### Một số lệnh kiểm tra nhanh trên VPS:
+---
+
+## 4. Bảo mật & Truy cập Database
+
+Để bảo mật, cổng Database (3306) đã được **đóng** (không expose ra ngoài) trong file `docker-compose.yml` để tránh hacker tấn công trực tiếp vào DB từ internet.
+
+### Cách truy cập Database an toàn (SSH Tunneling)
+
+Nếu bạn cần dùng MySQL Workbench hoặc DBeaver để xem dữ liệu:
+
+1. Cấu hình kết nối qua **SSH**.
+2. **SSH Host**: IP của VPS (`trong box`).
+3. **SSH User/Pass**: Giống như cách bạn login vào VPS.
+4. **MySQL Host**: `db` (Vì API và DB nằm trong cùng mạng Docker).
+5. **MySQL User/Pass**: Thông tin trong file `.env`.
+
+---
+
+## 5. Một số lệnh kiểm tra nhanh trên VPS:
 
 - **Xem các dịch vụ đang chạy:** `docker compose ps`
 - **Xem log để debug lỗi:** `docker compose logs -f api`
@@ -84,7 +102,7 @@ Dự án sử dụng **Docker Compose** để chạy cả Database (MySQL) và B
 
 ---
 
-## 4. Lưu ý chung
+## 6. Lưu ý chung
 
 - Không bao giờ dùng `git push -f` (force push) lên các nhánh chung (`main`, `develop`).
 - Nếu gặp **Conflict** (xung đột code), hãy bình tĩnh, liên hệ người cùng sửa file đó để cùng giải quyết, tránh xóa nhầm code của đồng nghiệp.

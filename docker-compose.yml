@@ -8,8 +8,6 @@ services:
     environment:
       MYSQL_ROOT_PASSWORD: ${DB_PASSWORD}
       MYSQL_DATABASE: Bep_Tro_Ly
-    # ports:
-    #   - "3306:3306" # Đã đóng để bảo mật, chỉ API nội bộ mới truy cập được
     volumes:
       - db_data:/var/lib/mysql
 
