@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/google_auth_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -31,7 +32,7 @@ class _LoginFormState extends State<LoginForm> {
     _passwordController.dispose();
     super.dispose();
   }
-// ... [Cắt bớt để tập trung vào method mới]
+
   Future<void> _handleGoogleLogin() async {
     setState(() => _isLoading = true);
 
@@ -66,7 +67,42 @@ class _LoginFormState extends State<LoginForm> {
   }
 
   Future<void> _handleLogin() async {
-// ...
+    if (_formKey.currentState?.validate() ?? false) {
+      setState(() => _isLoading = true);
+
+      try {
+        final result = await _authService.login(
+          _emailController.text.trim(),
+          _passwordController.text,
+        );
+
+        if (mounted) {
+          setState(() => _isLoading = false);
+
+          if (result['success']) {
+            widget.onLoginSuccess?.call();
+          } else {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(result['message'] ?? 'Đăng nhập thất bại'),
+                backgroundColor: AppColors.error,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Đã có lỗi xảy ra. Vui lòng thử lại.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -118,7 +154,7 @@ class _LoginFormState extends State<LoginForm> {
               const Expanded(child: Divider()),
               Padding(
                 padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text('Hoặc', style: AppTextStyles.bodyText2),
+                child: Text('Hoặc', style: AppTextStyles.bodyMedium),
               ),
               const Expanded(child: Divider()),
             ],
@@ -127,11 +163,7 @@ class _LoginFormState extends State<LoginForm> {
           // Google Login Button
           OutlinedButton.icon(
             onPressed: _isLoading ? null : _handleGoogleLogin,
-            icon: Image.network(
-              'https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_\"G\"_logo.svg',
-              height: 24,
-              errorBuilder: (_, __, ___) => const Icon(Icons.login),
-            ),
+            icon: Icon(Icons.login_outlined, color: Colors.blue),
             label: const Text('Tiếp tục với Google'),
             style: OutlinedButton.styleFrom(
               padding: const EdgeInsets.symmetric(vertical: 12),
@@ -165,43 +197,5 @@ class _LoginFormState extends State<LoginForm> {
       return 'Mật khẩu phải có ít nhất 6 ký tự';
     }
     return null;
-  }
-
-  Future<void> _handleLogin() async {
-    if (_formKey.currentState?.validate() ?? false) {
-      setState(() => _isLoading = true);
-
-      try {
-        final result = await _authService.login(
-          _emailController.text.trim(),
-          _passwordController.text,
-        );
-
-        if (mounted) {
-          setState(() => _isLoading = false);
-
-          if (result['success']) {
-            widget.onLoginSuccess?.call();
-          } else {
-            ScaffoldMessenger.of(context).showSnackBar(
-              SnackBar(
-                content: Text(result['message'] ?? 'Đăng nhập thất bại'),
-                backgroundColor: AppColors.error,
-              ),
-            );
-          }
-        }
-      } catch (e) {
-        if (mounted) {
-          setState(() => _isLoading = false);
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Đã có lỗi xảy ra. Vui lòng thử lại.'),
-              backgroundColor: AppColors.error,
-            ),
-          );
-        }
-      }
-    }
   }
 }
