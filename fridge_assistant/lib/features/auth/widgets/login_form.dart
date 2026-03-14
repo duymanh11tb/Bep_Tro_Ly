@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/google_auth_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -111,6 +110,31 @@ class _LoginFormState extends State<LoginForm> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
+          // Google Login Button - đặt đầu tiên để luôn thấy trên mobile
+          OutlinedButton.icon(
+            onPressed: _isLoading ? null : _handleGoogleLogin,
+            icon: Icon(Icons.login, color: Colors.blue, size: 22),
+            label: const Text('Đăng nhập với Google'),
+            style: OutlinedButton.styleFrom(
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              side: BorderSide(color: Colors.grey.shade300),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
+            ),
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              const Expanded(child: Divider()),
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                child: Text('Hoặc', style: AppTextStyles.bodyMedium),
+              ),
+              const Expanded(child: Divider()),
+            ],
+          ),
+          const SizedBox(height: 16),
           // Email Field
           CustomTextField(
             label: 'Email',
@@ -132,45 +156,19 @@ class _LoginFormState extends State<LoginForm> {
             validator: _validatePassword,
             onSubmitted: (_) => _handleLogin(),
           ),
-          const SizedBox(height: 32),
+          const SizedBox(height: 20),
           // Login Button
           PrimaryButton(
             text: 'Đăng nhập',
             isLoading: _isLoading,
             onPressed: _handleLogin,
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 16),
           // Forgot Password Link
           Center(
             child: GestureDetector(
               onTap: widget.onForgotPassword,
               child: Text('Quên mật khẩu?', style: AppTextStyles.link),
-            ),
-          ),
-          const SizedBox(height: 32),
-          // Divider
-          Row(
-            children: [
-              const Expanded(child: Divider()),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                child: Text('Hoặc', style: AppTextStyles.bodyMedium),
-              ),
-              const Expanded(child: Divider()),
-            ],
-          ),
-          const SizedBox(height: 24),
-          // Google Login Button
-          OutlinedButton.icon(
-            onPressed: _isLoading ? null : _handleGoogleLogin,
-            icon: Icon(Icons.login_outlined, color: Colors.blue),
-            label: const Text('Tiếp tục với Google'),
-            style: OutlinedButton.styleFrom(
-              padding: const EdgeInsets.symmetric(vertical: 12),
-              side: BorderSide(color: Colors.grey.shade300),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
             ),
           ),
         ],

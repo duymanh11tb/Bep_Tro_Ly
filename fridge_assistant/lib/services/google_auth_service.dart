@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'dart:convert';
 import 'auth_service.dart';
@@ -6,8 +7,9 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class GoogleAuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
+    // Dùng Web Client ID cho cả Web và Android (cùng project)
     clientId: dotenv.env['GOOGLE_CLIENT_ID'],
-    serverClientId: dotenv.env['GOOGLE_CLIENT_ID'],
+    serverClientId: kIsWeb ? null : dotenv.env['GOOGLE_CLIENT_ID'],
     scopes: ['email', 'profile'],
   );
 
@@ -22,7 +24,8 @@ class GoogleAuthService {
       }
 
       // 2. Lấy IdToken
-      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+      final GoogleSignInAuthentication googleAuth =
+          await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
 
       if (idToken == null) {
@@ -39,13 +42,13 @@ class GoogleAuthService {
       if (response.statusCode == 200) {
         final token = data['token'];
         final user = data['user'];
-        
+
         await _authService.loginWithToken(token, user);
         return {'success': true, 'data': data};
       } else {
         return {
-          'success': false, 
-          'message': data['error'] ?? 'Lỗi xác thực Backend'
+          'success': false,
+          'message': data['error'] ?? 'Lỗi xác thực Backend',
         };
       }
     } catch (e) {
