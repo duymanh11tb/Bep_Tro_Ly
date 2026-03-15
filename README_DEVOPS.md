@@ -68,7 +68,7 @@ Dự án sử dụng **Docker Compose** để chạy cả Database (MySQL) và B
 3. **Cập nhật code mới nhất:**
    ```bash
    git checkout develop
-   git pull origin develop
+   git pull origin dev
    ```
 4. **Khởi chạy bằng Docker:**
    ```bash

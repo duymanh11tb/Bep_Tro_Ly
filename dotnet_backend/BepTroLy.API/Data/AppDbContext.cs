@@ -22,6 +22,9 @@ public class AppDbContext : DbContext
     public DbSet<ActivityLog> ActivityLogs { get; set; }
     public DbSet<UserFavorite> UserFavorites { get; set; }
     public DbSet<UserRating> UserRatings { get; set; }
+    public DbSet<VirtualFridge> VirtualFridges { get; set; }
+    public DbSet<FridgeMember> FridgeMembers { get; set; }
+    public DbSet<Feedback> Feedbacks { get; set; }
     public DbSet<AICache> AICache { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
@@ -36,6 +39,29 @@ public class AppDbContext : DbContext
         // Ensure proper charset/collation for TiDB/MySQL if needed
         // modelBuilder.HasCharSet("utf8mb4");
 
-        // Relationships are already defined via attributes
+        // Relationships and constraints
+        modelBuilder.Entity<VirtualFridge>()
+            .HasOne(f => f.Owner)
+            .WithMany()
+            .HasForeignKey(f => f.OwnerId)
+            .OnDelete(DeleteBehavior.Restrict);
+
+        modelBuilder.Entity<FridgeMember>()
+            .HasOne(m => m.Fridge)
+            .WithMany(f => f.Members)
+            .HasForeignKey(m => m.FridgeId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<FridgeMember>()
+            .HasOne(m => m.User)
+            .WithMany()
+            .HasForeignKey(m => m.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PantryItem>()
+            .HasOne(p => p.VirtualFridge)
+            .WithMany(f => f.PantryItems)
+            .HasForeignKey(p => p.FridgeId)
+            .OnDelete(DeleteBehavior.SetNull);
     }
 }

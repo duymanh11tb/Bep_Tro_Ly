@@ -19,10 +19,10 @@ public class AIRecipeService
     private readonly AppDbContext _db;
     private readonly ILogger<AIRecipeService> _logger;
 
-    public AIRecipeService(IConfiguration configuration, AppDbContext db, ILogger<AIRecipeService> logger)
+    public AIRecipeService(IConfiguration configuration, AppDbContext db, ILogger<AIRecipeService> logger, HttpClient httpClient)
     {
         _apiKey = configuration["Gemini:ApiKey"];
-        _httpClient = new HttpClient();
+        _httpClient = httpClient;
         _db = db;
         _logger = logger;
     }
@@ -38,12 +38,8 @@ public class AIRecipeService
         // If no ingredients, we enter "Discovery" mode
         ingredients ??= new List<string>();
 
-<<<<<<< HEAD
-        // Đưa limit vào preferences để cache key phân biệt theo số lượng món
-=======
         // Ensure preferences is not null and include limit so cache key
         // differentiates between different requested recipe counts
->>>>>>> dev
         preferences ??= new Dictionary<string, object>();
         preferences["limit"] = limit;
 

@@ -47,6 +47,9 @@ public class User
     [Column("skill_level")]
     public string SkillLevel { get; set; } = "beginner";
 
+    [Column("role")]
+    public string Role { get; set; } = "user";
+
     [Column("notification_enabled")]
     public bool NotificationEnabled { get; set; } = true;
 
@@ -55,6 +58,15 @@ public class User
 
     [Column("expiry_alert_days")]
     public int ExpiryAlertDays { get; set; } = 2;
+
+    [Column("preferred_language")]
+    public string PreferredLanguage { get; set; } = "vi";
+
+    [Column("ui_theme")]
+    public string UiTheme { get; set; } = "light";
+
+    [Column("measurement_unit")]
+    public string MeasurementUnit { get; set; } = "metric";
 
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

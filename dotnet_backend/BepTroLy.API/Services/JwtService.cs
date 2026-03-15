@@ -17,7 +17,7 @@ public class JwtService
         Console.WriteLine($"[JWT DEBUG] SecretKey length: {_secretKey.Length}, value: {_secretKey.Substring(0, Math.Min(5, _secretKey.Length))}..., bytes: {Encoding.UTF8.GetBytes(_secretKey).Length}");
     }
 
-    public string GenerateToken(int userId)
+    public string GenerateToken(int userId, string role)
     {
         var key = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_secretKey));
         var creds = new SigningCredentials(key, SecurityAlgorithms.HmacSha256Signature);
@@ -25,6 +25,7 @@ public class JwtService
         var claims = new[]
         {
             new Claim("user_id", userId.ToString()),
+            new Claim(ClaimTypes.Role, role),
             new Claim(JwtRegisteredClaimNames.Iat, 
                 new DateTimeOffset(DateTime.UtcNow).ToUnixTimeSeconds().ToString(),
                 ClaimValueTypes.Integer64)

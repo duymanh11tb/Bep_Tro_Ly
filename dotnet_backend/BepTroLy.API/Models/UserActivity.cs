@@ -25,6 +25,9 @@ public class ActivityLog
     [Column("related_item_id")]
     public int? RelatedItemId { get; set; }
 
+    [Column("fridge_id")]
+    public int? FridgeId { get; set; }
+
     [Column("extra_data", TypeName = "json")]
     public string? ExtraData { get; set; }
 

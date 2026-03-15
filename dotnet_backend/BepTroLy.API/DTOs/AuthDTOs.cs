@@ -30,6 +30,9 @@ public class UpdateProfileRequest
     public string? CuisinePreferences { get; set; }
     public string? Allergies { get; set; }
     public bool? NotificationEnabled { get; set; }
+    public string? PreferredLanguage { get; set; }
+    public string? UiTheme { get; set; }
+    public string? MeasurementUnit { get; set; }
 }
 
 // ==================== RESPONSE DTOs ====================
@@ -48,6 +51,7 @@ public class UserDto
     public string? DisplayName { get; set; }
     public string? PhotoUrl { get; set; }
     public string? SkillLevel { get; set; }
+    public string Role { get; set; } = "user";
 
     // Full profile fields (only included when requested)
     public string? PhoneNumber { get; set; }
@@ -55,6 +59,9 @@ public class UserDto
     public string? CuisinePreferences { get; set; }
     public string? Allergies { get; set; }
     public bool? NotificationEnabled { get; set; }
+    public string? PreferredLanguage { get; set; }
+    public string? UiTheme { get; set; }
+    public string? MeasurementUnit { get; set; }
     public string? CreatedAt { get; set; }
 }
 

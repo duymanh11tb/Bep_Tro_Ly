@@ -18,18 +18,33 @@ class GoogleAuthService {
   Future<Map<String, dynamic>> signInWithGoogle() async {
     try {
       // 1. Khởi động quy trình đăng nhập Google
-      final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
+      GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         return {'success': false, 'message': 'Đã hủy đăng nhập'};
       }
 
-      // 2. Lấy IdToken
-      final GoogleSignInAuthentication googleAuth =
+      // 2. Lấy IdToken (xử lý riêng cho Web do google_sign_in_web thay đổi)
+      GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
-      final String? idToken = googleAuth.idToken;
+      String? idToken = googleAuth.idToken;
+
+      // Trên Web: signIn() đôi khi chỉ trả access_token, không có idToken.
+      // Thử lại bằng signInSilently(reAuthenticate: true) theo khuyến nghị plugin.
+      if (kIsWeb && idToken == null) {
+        googleUser =
+            await _googleSignIn.signInSilently(reAuthenticate: true);
+        if (googleUser != null) {
+          googleAuth = await googleUser.authentication;
+          idToken = googleAuth.idToken;
+        }
+      }
 
       if (idToken == null) {
-        return {'success': false, 'message': 'Không lấy được Token từ Google'};
+        return {
+          'success': false,
+          'message':
+              'Không lấy được Token từ Google. Vui lòng thử lại hoặc dùng cách đăng nhập khác.',
+        };
       }
 
       // 3. Gửi Token về Backend sử dụng ApiService

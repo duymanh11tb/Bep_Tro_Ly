@@ -16,6 +16,28 @@ public class AuthController : ControllerBase
     private readonly JwtService _jwt;
     private readonly ILogger<AuthController> _logger;
 
+    // Seeding admin account
+    private async Task EnsureAdminCreated()
+    {
+        var adminEmail = "admin@gmail.com";
+        if (!await _db.Users.AnyAsync(u => u.Email == adminEmail))
+        {
+            var admin = new User
+            {
+                Email = adminEmail,
+                DisplayName = "Admin",
+                PasswordHash = BCrypt.Net.BCrypt.HashPassword("123123"),
+                Role = "admin",
+                CreatedAt = DateTime.UtcNow,
+                UpdatedAt = DateTime.UtcNow,
+                LastActive = DateTime.UtcNow
+            };
+            _db.Users.Add(admin);
+            await _db.SaveChangesAsync();
+            _logger.LogInformation("Admin account created: {Email}", adminEmail);
+        }
+    }
+
     public AuthController(AppDbContext db, JwtService jwt, ILogger<AuthController> logger)
     {
         _db = db;
@@ -59,7 +81,7 @@ public class AuthController : ControllerBase
             {
                 Message = "Đăng ký thành công!",
                 User = MapUser(user),
-                Token = _jwt.GenerateToken(user.UserId)
+                Token = _jwt.GenerateToken(user.UserId, user.Role)
             });
         }
         catch (Exception ex)
@@ -123,9 +145,9 @@ public class AuthController : ControllerBase
 
             return Ok(new AuthResponse
             {
-                Message = "Đăng nhập Google thành công!",
+                Message = "Đăng nhâp Google thành công!",
                 User = MapUser(user),
-                Token = _jwt.GenerateToken(user.UserId)
+                Token = _jwt.GenerateToken(user.UserId, user.Role)
             });
         }
         catch (Google.Apis.Auth.InvalidJwtException ex)
@@ -148,6 +170,13 @@ public class AuthController : ControllerBase
             return BadRequest(new ErrorResponse { Error = "Email và mật khẩu là bắt buộc" });
 
         var email = request.Email.Trim().ToLower();
+        
+        // Ensure admin account exists for testing as requested
+        if (email == "admin@gmail.com") 
+        {
+            await EnsureAdminCreated();
+        }
+
         var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
 
         if (user == null)
@@ -180,7 +209,7 @@ public class AuthController : ControllerBase
         {
             Message = "Đăng nhập thành công!",
             User = MapUser(user),
-            Token = _jwt.GenerateToken(user.UserId)
+            Token = _jwt.GenerateToken(user.UserId, user.Role)
         });
     }
 
@@ -219,6 +248,9 @@ public class AuthController : ControllerBase
         if (request.CuisinePreferences != null) user.CuisinePreferences = request.CuisinePreferences;
         if (request.Allergies != null) user.Allergies = request.Allergies;
         if (request.NotificationEnabled.HasValue) user.NotificationEnabled = request.NotificationEnabled.Value;
+        if (request.PreferredLanguage != null) user.PreferredLanguage = request.PreferredLanguage;
+        if (request.UiTheme != null) user.UiTheme = request.UiTheme;
+        if (request.MeasurementUnit != null) user.MeasurementUnit = request.MeasurementUnit;
 
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync();
@@ -242,7 +274,8 @@ public class AuthController : ControllerBase
             Email = user.Email,
             DisplayName = user.DisplayName,
             PhotoUrl = user.PhotoUrl,
-            SkillLevel = user.SkillLevel
+            SkillLevel = user.SkillLevel,
+            Role = user.Role
         };
 
         if (full)
@@ -252,6 +285,9 @@ public class AuthController : ControllerBase
             dto.CuisinePreferences = user.CuisinePreferences;
             dto.Allergies = user.Allergies;
             dto.NotificationEnabled = user.NotificationEnabled;
+            dto.PreferredLanguage = user.PreferredLanguage;
+            dto.UiTheme = user.UiTheme;
+            dto.MeasurementUnit = user.MeasurementUnit;
             dto.CreatedAt = user.CreatedAt.ToString("o");
         }
 

@@ -85,4 +85,9 @@ class AuthService {
     }
     return null;
   }
+
+  Future<String?> getRole() async {
+    final user = await getUser();
+    return user?['role'];
+  }
 }

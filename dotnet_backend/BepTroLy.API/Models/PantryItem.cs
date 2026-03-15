@@ -17,6 +17,9 @@ public class PantryItem
     [Column("category_id")]
     public int? CategoryId { get; set; }
 
+    [Column("fridge_id")]
+    public int? FridgeId { get; set; }
+
     [Required]
     [MaxLength(200)]
     [Column("name_vi")]
@@ -75,4 +78,7 @@ public class PantryItem
 
     [ForeignKey("CategoryId")]
     public Category? Category { get; set; }
+
+    [ForeignKey("FridgeId")]
+    public VirtualFridge? VirtualFridge { get; set; }
 }
