@@ -1,0 +1,39 @@
+# .NET
+bin/
+obj/
+publish/
+*.user
+*.suo
+*.cache
+*.dll
+*.exe
+*.pdb
+
+# IDE
+.vs/
+.vscode/
+*.swp
+*~
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Secrets
+appsettings.json
+appsettings.Development.json
+appsettings.Production.json
+.env
+
+# Build artifacts
+dotnet_backend/BepTroLy.API/publish/
+
+# Temporary
+*.log
+*.txt
+!README.txt
+
+# Flutter
+fridge_assistant/.dart_tool/
+fridge_assistant/.packages
+fridge_assistant/build/
