@@ -48,11 +48,12 @@ public class AIRecipeService
         var cached = await GetFromCacheAsync(cacheKey);
         if (cached != null)
         {
+            var cachedWithImages = EnsureRecipeImages(cached);
             return new Dictionary<string, object>
             {
                 ["success"] = true,
                 ["source"] = "cache",
-                ["recipes"] = cached
+                ["recipes"] = cachedWithImages
             };
         }
 
@@ -60,13 +61,14 @@ public class AIRecipeService
         try
         {
             var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit);
-            await SaveToCacheAsync(cacheKey, aiRecipes);
+            var recipesWithImages = EnsureRecipeImages(aiRecipes);
+            await SaveToCacheAsync(cacheKey, recipesWithImages);
 
             return new Dictionary<string, object>
             {
                 ["success"] = true,
                 ["source"] = "ai",
-                ["recipes"] = aiRecipes
+                ["recipes"] = recipesWithImages
             };
         }
         catch (Exception ex)
@@ -222,6 +224,69 @@ public class AIRecipeService
         var keyString = JsonSerializer.Serialize(keyData, new JsonSerializerOptions { WriteIndented = false });
         var hashBytes = MD5.HashData(Encoding.UTF8.GetBytes(keyString));
         return Convert.ToHexString(hashBytes).ToLower();
+    }
+
+    private List<object> EnsureRecipeImages(List<object> recipes)
+    {
+        var result = new List<object>();
+
+        foreach (var recipe in recipes)
+        {
+            var map = ToDictionary(recipe);
+            if (map == null)
+            {
+                result.Add(recipe);
+                continue;
+            }
+
+            var name = map.TryGetValue("name", out var nameObj)
+                ? nameObj?.ToString() ?? "Mon an Viet Nam"
+                : "Mon an Viet Nam";
+
+            var imageUrl = map.TryGetValue("image_url", out var imageObj)
+                ? imageObj?.ToString()
+                : null;
+
+            if (string.IsNullOrWhiteSpace(imageUrl) || !Uri.IsWellFormedUriString(imageUrl, UriKind.Absolute))
+            {
+                map["image_url"] = BuildFallbackImageUrl(name);
+            }
+
+            result.Add(map);
+        }
+
+        return result;
+    }
+
+    private Dictionary<string, object>? ToDictionary(object? value)
+    {
+        if (value == null) return null;
+
+        if (value is Dictionary<string, object> dict)
+        {
+            return new Dictionary<string, object>(dict);
+        }
+
+        try
+        {
+            if (value is JsonElement element)
+            {
+                return JsonSerializer.Deserialize<Dictionary<string, object>>(element.GetRawText());
+            }
+
+            var json = JsonSerializer.Serialize(value);
+            return JsonSerializer.Deserialize<Dictionary<string, object>>(json);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private string BuildFallbackImageUrl(string recipeName)
+    {
+        var query = Uri.EscapeDataString($"vietnamese food {recipeName}");
+        return $"https://source.unsplash.com/1200x800/?{query}";
     }
 
     private async Task<List<object>?> GetFromCacheAsync(string cacheKey)
