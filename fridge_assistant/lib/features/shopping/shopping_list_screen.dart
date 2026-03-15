@@ -1066,6 +1066,137 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
     );
   }
 
+  Future<void> _showAddItemDialog() async {
+    final nameController = TextEditingController();
+    final quantityController = TextEditingController();
+    final unitController = TextEditingController();
+    final notesController = TextEditingController();
+
+    final created = await showDialog<bool>(
+      context: context,
+      builder: (context) {
+        bool submitting = false;
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Thêm mục mua sắm'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Tên sản phẩm *',
+                        hintText: 'Ví dụ: Hành tím',
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: TextField(
+                            controller: quantityController,
+                            keyboardType: const TextInputType.numberWithOptions(
+                              decimal: true,
+                            ),
+                            decoration: const InputDecoration(
+                              labelText: 'Số lượng',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: TextField(
+                            controller: unitController,
+                            decoration: const InputDecoration(
+                              labelText: 'Đơn vị',
+                              hintText: 'g, kg, chai...',
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    TextField(
+                      controller: notesController,
+                      decoration: const InputDecoration(labelText: 'Ghi chú'),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: submitting
+                      ? null
+                      : () => Navigator.pop(context, false),
+                  child: const Text('Hủy'),
+                ),
+                ElevatedButton(
+                  onPressed: submitting
+                      ? null
+                      : () async {
+                          final name = nameController.text.trim();
+                          if (name.isEmpty) {
+                            ScaffoldMessenger.of(this.context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Vui lòng nhập tên sản phẩm'),
+                                backgroundColor: AppColors.error,
+                              ),
+                            );
+                            return;
+                          }
+
+                          setDialogState(() => submitting = true);
+                          final quantity = double.tryParse(
+                            quantityController.text.trim(),
+                          );
+                          final success = await ShoppingService.addItem(
+                            name: name,
+                            quantity: quantity,
+                            unit: unitController.text,
+                            notes: notesController.text,
+                          );
+
+                          if (!context.mounted) return;
+                          Navigator.pop(context, success);
+                        },
+                  child: const Text('Thêm'),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+
+    nameController.dispose();
+    quantityController.dispose();
+    unitController.dispose();
+    notesController.dispose();
+
+    if (!mounted || created == null) return;
+
+    if (created) {
+      await _loadData();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã thêm mục mua sắm'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Không thể thêm mục mua sắm'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     return Column(
@@ -1074,78 +1205,98 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
         // ──── Header: Tiêu đề ────
         Padding(
           padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
-          child: Text(
-            'Danh sách mua sắm',
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-        ),
-
-        // ──── Tab bar: Tất cả | Món ăn | Tủ lạnh ────
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Container(
-            decoration: BoxDecoration(
-              color: AppColors.backgroundSecondary,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            padding: const EdgeInsets.all(4),
-            child: Row(
-              children: [
-                _buildTab(0, 'Tất cả'),
-                _buildTab(1, 'Đi chợ'),
-                _buildTab(2, 'Nấu món ăn'),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 14),
-
-        // ──── Thanh tìm món ăn theo sở thích (chỉ hiện ở tab Đi chợ/Nấu ăn) ────
-        if (_selectedTabIndex == 1 || _selectedTabIndex == 2)
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: _buildSearchBar(),
-          ),
-        if (_selectedTabIndex == 1 || _selectedTabIndex == 2)
-          const SizedBox(height: 12),
-
-        // ──── Thống kê nhanh ────
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
           child: Row(
             children: [
-              _buildStatChip('$_totalCount mục', AppColors.textSecondary),
-              const SizedBox(width: 10),
-              _buildStatChip('$_checkedCount đã mua', AppColors.primary),
-              const SizedBox(width: 10),
-              _buildStatChip('$_remainingCount còn lại', AppColors.warning),
+              const Expanded(
+                child: Text(
+                  'Danh sách mua sắm',
+                  style: TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: 'Thêm mục',
+                onPressed: _showAddItemDialog,
+                icon: const Icon(Icons.add_circle_outline),
+                color: AppColors.primary,
+              ),
             ],
           ),
         ),
-        const SizedBox(height: 18),
 
-        // ──── Danh sách + Gợi ý ────
-        Expanded(
-          child: SingleChildScrollView(
+        if (_isLoading)
+          const Expanded(
+            child: Center(
+              child: CircularProgressIndicator(color: AppColors.primary),
+            ),
+          ),
+        if (!_isLoading) ...[
+          // ──── Tab bar: Tất cả | Món ăn | Tủ lạnh ────
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            child: Container(
+              decoration: BoxDecoration(
+                color: AppColors.backgroundSecondary,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              padding: const EdgeInsets.all(4),
+              child: Row(
+                children: [
+                  _buildTab(0, 'Tất cả'),
+                  _buildTab(1, 'Đi chợ'),
+                  _buildTab(2, 'Nấu món ăn'),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+
+          // ──── Thanh tìm món ăn theo sở thích (chỉ hiện ở tab Đi chợ/Nấu ăn) ────
+          if (_selectedTabIndex == 1 || _selectedTabIndex == 2)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: _buildSearchBar(),
+            ),
+          if (_selectedTabIndex == 1 || _selectedTabIndex == 2)
+            const SizedBox(height: 12),
+
+          // ──── Thống kê nhanh ────
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
               children: [
-                _buildSectionsList(),
-                const SizedBox(height: 20),
-                _buildSuggestionCard(),
-                const SizedBox(height: 100),
+                _buildStatChip('$_totalCount mục', AppColors.textSecondary),
+                const SizedBox(width: 10),
+                _buildStatChip('$_checkedCount đã mua', AppColors.primary),
+                const SizedBox(width: 10),
+                _buildStatChip('$_remainingCount còn lại', AppColors.warning),
               ],
             ),
           ),
-        ),
+          const SizedBox(height: 18),
 
-        // ──── Thanh hành động: Đã mua xong | Vào tủ lạnh ────
-        _buildBottomActionBar(),
+          // ──── Danh sách + Gợi ý ────
+          Expanded(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  _buildSectionsList(),
+                  const SizedBox(height: 20),
+                  _buildSuggestionCard(),
+                  const SizedBox(height: 100),
+                ],
+              ),
+            ),
+          ),
+
+          // ──── Thanh hành động: Đã mua xong | Vào tủ lạnh ────
+          _buildBottomActionBar(),
+        ],
       ],
     );
   }

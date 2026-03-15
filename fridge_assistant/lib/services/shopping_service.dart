@@ -95,6 +95,31 @@ class ShoppingService {
     }
   }
 
+  static Future<bool> addItem({
+    required String name,
+    double? quantity,
+    String? unit,
+    String? notes,
+  }) async {
+    final payload = <String, dynamic>{'name_vi': name};
+
+    if (quantity != null && quantity > 0) payload['quantity'] = quantity;
+    if (unit != null && unit.trim().isNotEmpty) payload['unit'] = unit.trim();
+    if (notes != null && notes.trim().isNotEmpty)
+      payload['notes'] = notes.trim();
+
+    try {
+      final resp = await ApiService.post(
+        '/api/shopping/items',
+        payload,
+        withAuth: true,
+      );
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
   static String _buildDetail(double? quantity, String? unit, String? notes) {
     final q = quantity != null ? _formatQuantity(quantity) : null;
     final u = (unit != null && unit.isNotEmpty) ? unit : null;

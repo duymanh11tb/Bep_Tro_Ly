@@ -27,6 +27,33 @@ public class ShoppingController : ControllerBase
         return int.TryParse(claim?.Value, out var id) ? id : 0;
     }
 
+    private async Task<ShoppingList> GetOrCreateActiveListAsync(int userId)
+    {
+        var list = await _db.ShoppingLists
+            .Include(l => l.Items)
+            .Where(l => l.UserId == userId && l.Status == "active")
+            .OrderByDescending(l => l.UpdatedAt)
+            .FirstOrDefaultAsync();
+
+        if (list != null) return list;
+
+        list = new ShoppingList
+        {
+            UserId = userId,
+            Title = "Danh sach mua sam",
+            Status = "active",
+            CreatedAt = DateTime.UtcNow,
+            UpdatedAt = DateTime.UtcNow,
+        };
+
+        _db.ShoppingLists.Add(list);
+        await _db.SaveChangesAsync();
+
+        return await _db.ShoppingLists
+            .Include(l => l.Items)
+            .FirstAsync(l => l.ListId == list.ListId);
+    }
+
     // GET /api/shopping/current
     [HttpGet("current")]
     public async Task<IActionResult> GetCurrentShoppingList()
@@ -34,29 +61,7 @@ public class ShoppingController : ControllerBase
         var userId = GetUserId();
         if (userId == 0) return Unauthorized();
 
-        var list = await _db.ShoppingLists
-            .Include(l => l.Items)
-            .Where(l => l.UserId == userId && l.Status == "active")
-            .OrderByDescending(l => l.UpdatedAt)
-            .FirstOrDefaultAsync();
-
-        if (list == null)
-        {
-            list = new ShoppingList
-            {
-                UserId = userId,
-                Title = "Danh sach mua sam",
-                Status = "active",
-                CreatedAt = DateTime.UtcNow,
-                UpdatedAt = DateTime.UtcNow,
-            };
-            _db.ShoppingLists.Add(list);
-            await _db.SaveChangesAsync();
-
-            list = await _db.ShoppingLists
-                .Include(l => l.Items)
-                .FirstAsync(l => l.ListId == list.ListId);
-        }
+        var list = await GetOrCreateActiveListAsync(userId);
 
         var purchasedItems = list.Items.Count(i => i.IsPurchased);
         var totalItems = list.Items.Count;
@@ -101,6 +106,54 @@ public class ShoppingController : ControllerBase
         });
     }
 
+    // POST /api/shopping/items
+    [HttpPost("items")]
+    public async Task<IActionResult> AddItem([FromBody] AddShoppingItemRequest request)
+    {
+        var userId = GetUserId();
+        if (userId == 0) return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(request.NameVi))
+            return BadRequest(new { error = "Ten san pham la bat buoc" });
+
+        var list = await GetOrCreateActiveListAsync(userId);
+
+        var item = new ShoppingListItem
+        {
+            ListId = list.ListId,
+            NameVi = request.NameVi.Trim(),
+            NameEn = string.IsNullOrWhiteSpace(request.NameEn) ? null : request.NameEn.Trim(),
+            Quantity = request.Quantity,
+            Unit = string.IsNullOrWhiteSpace(request.Unit) ? null : request.Unit.Trim(),
+            CategoryCode = string.IsNullOrWhiteSpace(request.CategoryCode) ? null : request.CategoryCode.Trim(),
+            IsPurchased = request.IsPurchased ?? false,
+            PurchasedAt = (request.IsPurchased ?? false) ? DateTime.UtcNow : null,
+            FromRecipeId = request.FromRecipeId,
+            FromRecipeTitle = string.IsNullOrWhiteSpace(request.FromRecipeTitle) ? null : request.FromRecipeTitle.Trim(),
+            EstimatedPrice = request.EstimatedPrice,
+            ActualPrice = request.ActualPrice,
+            Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim(),
+            CreatedAt = DateTime.UtcNow,
+        };
+
+        _db.ShoppingListItems.Add(item);
+        await _db.SaveChangesAsync();
+
+        list.TotalItems = await _db.ShoppingListItems.CountAsync(i => i.ListId == list.ListId);
+        list.PurchasedItems = await _db.ShoppingListItems.CountAsync(i => i.ListId == list.ListId && i.IsPurchased);
+        list.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            message = "Them item thanh cong",
+            item_id = item.ItemId,
+            list_id = list.ListId,
+            total_items = list.TotalItems,
+            purchased_items = list.PurchasedItems,
+        });
+    }
+
     // PUT /api/shopping/items/{itemId}/purchase
     [HttpPut("items/{itemId}/purchase")]
     public async Task<IActionResult> UpdatePurchaseState(int itemId, [FromBody] PurchaseStateRequest request)
@@ -141,4 +194,19 @@ public class ShoppingController : ControllerBase
 public class PurchaseStateRequest
 {
     public bool? IsPurchased { get; set; }
+}
+
+public class AddShoppingItemRequest
+{
+    public string NameVi { get; set; } = string.Empty;
+    public string? NameEn { get; set; }
+    public decimal? Quantity { get; set; }
+    public string? Unit { get; set; }
+    public string? CategoryCode { get; set; }
+    public bool? IsPurchased { get; set; }
+    public int? FromRecipeId { get; set; }
+    public string? FromRecipeTitle { get; set; }
+    public decimal? EstimatedPrice { get; set; }
+    public decimal? ActualPrice { get; set; }
+    public string? Notes { get; set; }
 }
