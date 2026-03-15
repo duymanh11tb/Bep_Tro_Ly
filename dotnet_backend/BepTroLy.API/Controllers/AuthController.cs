@@ -70,6 +70,76 @@ public class AuthController : ControllerBase
         }
     }
 
+    /// <summary>Đăng nhập bằng Google.</summary>
+    [HttpPost("google-login")]
+    public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.IdToken))
+            return BadRequest(new ErrorResponse { Error = "IdToken không được để trống" });
+
+        try
+        {
+            var config = new ConfigurationBuilder()
+                .SetBasePath(Directory.GetCurrentDirectory())
+                .AddJsonFile("appsettings.json")
+                .AddEnvironmentVariables()
+                .Build();
+            
+            var googleClientId = config["GOOGLE_CLIENT_ID"] ?? config["GoogleAuth:ClientId"];
+            
+            var payload = await Google.Apis.Auth.GoogleJsonWebSignature.ValidateAsync(request.IdToken, new Google.Apis.Auth.GoogleJsonWebSignature.ValidationSettings
+            {
+                Audience = new[] { googleClientId }
+            });
+
+            var email = payload.Email.Trim().ToLower();
+            var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
+
+            if (user == null)
+            {
+                // Tạo user mới nếu chưa tồn tại
+                user = new User
+                {
+                    Email = email,
+                    DisplayName = payload.Name ?? email.Split('@')[0],
+                    PhotoUrl = payload.Picture,
+                    PasswordHash = "GOOGLE_AUTH_" + Guid.NewGuid().ToString("N"), // Không dùng pass này để login thường
+                    CreatedAt = DateTime.UtcNow,
+                    UpdatedAt = DateTime.UtcNow,
+                    LastActive = DateTime.UtcNow
+                };
+                _db.Users.Add(user);
+                await _db.SaveChangesAsync();
+            }
+            else
+            {
+                user.LastActive = DateTime.UtcNow;
+                if (string.IsNullOrEmpty(user.PhotoUrl) && !string.IsNullOrEmpty(payload.Picture))
+                {
+                    user.PhotoUrl = payload.Picture;
+                }
+                await _db.SaveChangesAsync();
+            }
+
+            return Ok(new AuthResponse
+            {
+                Message = "Đăng nhập Google thành công!",
+                User = MapUser(user),
+                Token = _jwt.GenerateToken(user.UserId)
+            });
+        }
+        catch (Google.Apis.Auth.InvalidJwtException ex)
+        {
+            _logger.LogWarning(ex, "Invalid Google IdToken");
+            return Unauthorized(new ErrorResponse { Error = "Token Google không hợp lệ hoặc đã hết hạn" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Google Login error");
+            return StatusCode(500, new ErrorResponse { Error = "Lỗi hệ thống khi đăng nhập Google" });
+        }
+    }
+
     /// <summary>Đăng nhập.</summary>
     [HttpPost("login")]
     public async Task<IActionResult> Login([FromBody] LoginRequest request)

@@ -15,6 +15,11 @@ public class LoginRequest
     public string Password { get; set; } = string.Empty;
 }
 
+public class GoogleLoginRequest
+{
+    public string IdToken { get; set; } = string.Empty;
+}
+
 public class UpdateProfileRequest
 {
     public string? DisplayName { get; set; }

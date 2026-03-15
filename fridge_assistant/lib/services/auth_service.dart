@@ -51,6 +51,10 @@ class AuthService {
     }
   }
 
+  Future<void> loginWithToken(String token, Map<String, dynamic> user) async {
+    await _saveAuthData(token, user);
+  }
+
   Future<void> logout() async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.remove(_tokenKey);

@@ -2,17 +2,13 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:io';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
   // API Backend deployed on VPS
   static String get baseUrl {
-<<<<<<< HEAD
-    return 'http://103.77.173.6:5001';
-    // return 'http://103.77.173.6:5001'; kết nối vps
-=======
     // Port 5001 is mapped to API container port 5000 on VPS
     return 'http://103.77.173.6:5001';
->>>>>>> dev
   }
 
   static Future<Map<String, String>> getHeaders({bool withAuth = false}) async {

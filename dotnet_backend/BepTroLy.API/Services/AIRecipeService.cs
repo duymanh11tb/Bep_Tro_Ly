@@ -38,12 +38,8 @@ public class AIRecipeService
         // If no ingredients, we enter "Discovery" mode
         ingredients ??= new List<string>();
 
-<<<<<<< HEAD
-        // Đưa limit vào preferences để cache key phân biệt theo số lượng món
-=======
         // Ensure preferences is not null and include limit so cache key
-        // differentiates between different requested recipe counts
->>>>>>> dev
+        // differentiates between different requested recipe counts.
         preferences ??= new Dictionary<string, object>();
         preferences["limit"] = limit;
 
