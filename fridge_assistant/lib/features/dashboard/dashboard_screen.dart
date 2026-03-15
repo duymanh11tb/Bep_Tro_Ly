@@ -10,6 +10,7 @@ import 'widgets/quick_actions.dart';
 import 'widgets/expiring_items.dart';
 import 'widgets/ai_suggestion_carousel.dart';
 import 'widgets/fridge_stats.dart';
+import '../shopping/shopping_list_screen.dart';
 import '../../models/recipe_suggestion.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -135,7 +136,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 2:
         return _buildPlaceholder('Công thức');
       case 3:
-        return _buildPlaceholder('Đi chợ');
+        return const ShoppingListScreen();
       case 4:
         return _buildSettingsPage();
       default:
