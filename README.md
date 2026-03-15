@@ -77,6 +77,22 @@ docker compose logs -f api
 docker compose logs -f db
 ```
 
+## Deploy 1 Lenh Tren VPS Linux
+
+Sau khi SSH vao VPS, chay:
+
+```bash
+cd /root/bep-tro-ly
+chmod +x deploy.sh
+./deploy.sh
+```
+
+Tuy chon bien moi truong:
+
+```bash
+APP_DIR=/root/bep-tro-ly BRANCH=dev HEALTH_URL=http://127.0.0.1:5001/health ./deploy.sh
+```
+
 ## Quy Trinh Git Ngan
 
 ```bash
