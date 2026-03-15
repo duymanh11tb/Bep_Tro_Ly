@@ -38,11 +38,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _initSequence() async {
     // 1. Tải thông tin user & dữ liệu cache ngay lập tức
-    await Future.wait([
-      _loadUserInfo(),
-      _loadCachedData(),
-    ]);
-    
+    await Future.wait([_loadUserInfo(), _loadCachedData()]);
+
     // 2. Refresh dữ liệu từ server trong nền
     _loadPantryData(isBackground: true);
   }
@@ -71,9 +68,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
           _expiringItems = results[0] as List<PantryItem>;
           _stats = results[1] as PantryStats?;
           _suggestions = results[2] as List<RecipeSuggestion>;
-          
+
           // Nếu có cache, tắt loading ngay để người dùng xem luôn
-          if (_expiringItems.isNotEmpty || _stats != null || _suggestions.isNotEmpty) {
+          if (_expiringItems.isNotEmpty ||
+              _stats != null ||
+              _suggestions.isNotEmpty) {
             _isLoading = false;
           }
         });
@@ -87,17 +86,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     if (!isBackground) {
       setState(() => _isLoading = true);
     }
-    
+
     try {
       final results = await Future.wait([
         PantryService.getExpiringItems(days: 7),
         PantryService.getStats(),
-<<<<<<< HEAD
-        // Lấy nhiều gợi ý hơn để người dùng vuốt xem
-        PantryService.getAiSuggestions(limit: 8),
-=======
+        // Lấy nhiều gợi ý để người dùng vuốt xem đa dạng hơn.
         PantryService.getAiSuggestions(limit: 10),
->>>>>>> dev
       ]);
 
       if (mounted) {
@@ -158,9 +153,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
-            DashboardHeader(
-              onNotificationTap: () {},
-            ),
+            DashboardHeader(onNotificationTap: () {}),
             const SizedBox(height: 8),
 
             // Greeting with avatar
@@ -169,8 +162,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               statusMessage: _isLoading
                   ? 'Đang tải dữ liệu...'
                   : _stats != null && _stats!.expiringSoon > 0
-                      ? '${_stats!.expiringSoon} sản phẩm sắp hết hạn!'
-                      : 'Tủ lạnh của bạn đang ổn định!',
+                  ? '${_stats!.expiringSoon} sản phẩm sắp hết hạn!'
+                  : 'Tủ lạnh của bạn đang ổn định!',
               avatarUrl: _avatarUrl,
             ),
             const SizedBox(height: 20),
@@ -178,7 +171,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
             // Stat Cards - show real data
             StatCards(
               recipesAvailable: _suggestions.length,
-              moneySaved: _stats?.expiringSoon ?? 0, // Using expiring count as a proxy for "saved" items
+              moneySaved:
+                  _stats?.expiringSoon ??
+                  0, // Using expiring count as a proxy for "saved" items
             ),
             const SizedBox(height: 24),
 
@@ -186,7 +181,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
             QuickActions(
               onScanTap: () {},
               onAddTap: () async {
-                final result = await Navigator.pushNamed(context, '/add-product');
+                final result = await Navigator.pushNamed(
+                  context,
+                  '/add-product',
+                );
                 if (result == true) _refresh();
               },
               onSearchTap: () {},
@@ -194,12 +192,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 24),
 
             // AI Suggestions / Discovery
-            _isLoading 
-              ? const Padding(
-                  padding: EdgeInsets.symmetric(vertical: 20),
-                  child: Center(child: CircularProgressIndicator(color: AppColors.primary)),
-                )
-              : _suggestions.isEmpty
+            _isLoading
+                ? const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 20),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
+                    ),
+                  )
+                : _suggestions.isEmpty
                 ? _buildEmptySuggestions()
                 : AiSuggestionCarousel(
                     suggestions: _suggestions,
@@ -340,9 +342,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildExpiringCard(PantryItem item) {
     Color expiryColor = AppColors.textSecondary;
-    if (item.isExpired) expiryColor = AppColors.error;
-    else if (item.daysUntilExpiry <= 1) expiryColor = AppColors.error;
-    else if (item.daysUntilExpiry <= 3) expiryColor = AppColors.warning;
+    if (item.isExpired)
+      expiryColor = AppColors.error;
+    else if (item.daysUntilExpiry <= 1)
+      expiryColor = AppColors.error;
+    else if (item.daysUntilExpiry <= 3)
+      expiryColor = AppColors.warning;
 
     return GestureDetector(
       onTap: () => _openRecipesForIngredient(item),
@@ -363,14 +368,20 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             ClipRRect(
-              borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+              borderRadius: const BorderRadius.vertical(
+                top: Radius.circular(16),
+              ),
               child: Container(
                 height: 85,
                 width: double.infinity,
                 color: AppColors.backgroundSecondary,
                 child: item.imageUrl != null
-                    ? Image.network(item.imageUrl!, fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => _categoryIcon(item.category))
+                    ? Image.network(
+                        item.imageUrl!,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) =>
+                            _categoryIcon(item.category),
+                      )
                     : _categoryIcon(item.category),
               ),
             ),
@@ -410,14 +421,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void _openRecipesForIngredient(PantryItem item) {
     final keyword = item.name.toLowerCase();
     final related = _suggestions.where((recipe) {
-      return recipe.ingredientsUsed
-          .any((ing) => ing.toLowerCase().contains(keyword));
+      return recipe.ingredientsUsed.any(
+        (ing) => ing.toLowerCase().contains(keyword),
+      );
     }).toList();
 
     if (related.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Chưa có gợi ý nào dùng "${item.name}". Thử làm mới nhé!'),
+          content: Text(
+            'Chưa có gợi ý nào dùng "${item.name}". Thử làm mới nhé!',
+          ),
           backgroundColor: AppColors.primary,
         ),
       );
@@ -501,10 +515,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         title: Text(
           recipe.name,
-          style: const TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w600,
-          ),
+          style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
         ),
         subtitle: Text(
           recipe.description,
@@ -562,7 +573,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         child: const Row(
           children: [
-            Icon(Icons.check_circle_outline, color: AppColors.primary, size: 28),
+            Icon(
+              Icons.check_circle_outline,
+              color: AppColors.primary,
+              size: 28,
+            ),
             SizedBox(width: 12),
             Expanded(
               child: Text(
@@ -596,7 +611,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     final categories = _stats!.byCategory.map((c) {
       final key = c.category.toLowerCase();
-      final info = catIconMap[key] ?? (Icons.category_outlined, AppColors.primary);
+      final info =
+          catIconMap[key] ?? (Icons.category_outlined, AppColors.primary);
       return FridgeCategory(
         name: c.category,
         icon: info.$1,
@@ -661,7 +677,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             child: const Column(
               children: [
-                Icon(Icons.kitchen_outlined, size: 48, color: AppColors.textHint),
+                Icon(
+                  Icons.kitchen_outlined,
+                  size: 48,
+                  color: AppColors.textHint,
+                ),
                 SizedBox(height: 8),
                 Text(
                   'Tủ lạnh đang trống',
@@ -699,7 +719,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setModal) => Padding(
           padding: EdgeInsets.only(
-            left: 20, right: 20, top: 20,
+            left: 20,
+            right: 20,
+            top: 20,
             bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
           ),
           child: Column(
@@ -709,7 +731,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               // Handle bar
               Center(
                 child: Container(
-                  width: 40, height: 4,
+                  width: 40,
+                  height: 4,
                   decoration: BoxDecoration(
                     color: AppColors.divider,
                     borderRadius: BorderRadius.circular(2),
@@ -732,10 +755,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 decoration: InputDecoration(
                   labelText: 'Tên sản phẩm *',
                   hintText: 'VD: Cà chua, Sữa tươi...',
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
                   focusedBorder: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                    borderSide: const BorderSide(
+                      color: AppColors.primary,
+                      width: 2,
+                    ),
                   ),
                 ),
               ),
@@ -750,10 +778,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       keyboardType: TextInputType.number,
                       decoration: InputDecoration(
                         labelText: 'Số lượng',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                            width: 2,
+                          ),
                         ),
                       ),
                     ),
@@ -766,10 +799,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       decoration: InputDecoration(
                         labelText: 'Đơn vị',
                         hintText: 'cái, kg, lít...',
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                         focusedBorder: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(color: AppColors.primary, width: 2),
+                          borderSide: const BorderSide(
+                            color: AppColors.primary,
+                            width: 2,
+                          ),
                         ),
                       ),
                     ),
@@ -787,7 +825,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
                     builder: (context, child) => Theme(
                       data: Theme.of(context).copyWith(
-                        colorScheme: const ColorScheme.light(primary: AppColors.primary),
+                        colorScheme: const ColorScheme.light(
+                          primary: AppColors.primary,
+                        ),
                       ),
                       child: child!,
                     ),
@@ -797,15 +837,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   }
                 },
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 14,
+                  ),
                   decoration: BoxDecoration(
                     border: Border.all(color: AppColors.inputBorder),
                     borderRadius: BorderRadius.circular(12),
                   ),
                   child: Row(
                     children: [
-                      const Icon(Icons.calendar_today_outlined, 
-                        color: AppColors.primary, size: 20),
+                      const Icon(
+                        Icons.calendar_today_outlined,
+                        color: AppColors.primary,
+                        size: 20,
+                      ),
                       const SizedBox(width: 10),
                       Text(
                         selectedExpiry != null
@@ -813,8 +859,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             : 'Chọn ngày hết hạn (tùy chọn)',
                         style: TextStyle(
                           fontSize: 14,
-                          color: selectedExpiry != null 
-                              ? AppColors.textPrimary 
+                          color: selectedExpiry != null
+                              ? AppColors.textPrimary
                               : AppColors.textHint,
                         ),
                       ),
@@ -831,7 +877,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     final name = nameCtrl.text.trim();
                     if (name.isEmpty) {
                       ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Vui lòng nhập tên sản phẩm')),
+                        const SnackBar(
+                          content: Text('Vui lòng nhập tên sản phẩm'),
+                        ),
                       );
                       return;
                     }
@@ -946,7 +994,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await authService.logout();
     await PantryService.clearCache();
     if (mounted) {
-      Navigator.of(context).pushNamedAndRemoveUntil('/onboarding', (route) => false);
+      Navigator.of(
+        context,
+      ).pushNamedAndRemoveUntil('/onboarding', (route) => false);
     }
   }
 }
