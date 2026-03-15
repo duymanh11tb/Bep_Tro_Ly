@@ -23,8 +23,9 @@ builder.Services.AddSwaggerGen();
 
 // Database (MySQL/TiDB via Pomelo)
 var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+var mysqlServerVersion = builder.Configuration["Database:ServerVersion"] ?? "8.0.36-mysql";
 builder.Services.AddDbContext<AppDbContext>(options =>
-    options.UseMySql(connectionString, ServerVersion.AutoDetect(connectionString)));
+    options.UseMySql(connectionString, ServerVersion.Parse(mysqlServerVersion)));
 
 // JWT Authentication
 var jwtSecret = builder.Configuration["Jwt:SecretKey"] ?? "bep-tro-ly-secret-key-2024-super-secure-jwt-token-key";
@@ -86,6 +87,7 @@ using (var scope = app.Services.CreateScope())
     {
         logger.LogError(ex, "An error occurred while migrating the database.");
         Console.WriteLine($"❌ DATABASE ERROR: {ex.Message}");
+        throw;
     }
 }
 
