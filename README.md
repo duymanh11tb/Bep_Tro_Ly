@@ -93,6 +93,24 @@ Tuy chon bien moi truong:
 APP_DIR=/root/bep-tro-ly BRANCH=dev HEALTH_URL=http://127.0.0.1:5001/health ./deploy.sh
 ```
 
+## Rollback Nhanh Tren VPS Linux
+
+Neu ban deploy xong ma API loi, rollback ve commit truoc do:
+
+```bash
+cd /root/bep-tro-ly
+chmod +x rollback.sh
+./rollback.sh
+```
+
+Tuy chon bien moi truong:
+
+```bash
+APP_DIR=/root/bep-tro-ly BRANCH=dev HEALTH_URL=http://127.0.0.1:5001/health ./rollback.sh
+```
+
+Luu y: `rollback.sh` dung `git reset --hard HEAD~1`, chi dung khi thu muc code tren VPS khong co thay doi thu cong chua commit.
+
 ## Quy Trinh Git Ngan
 
 ```bash
