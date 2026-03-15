@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/shopping_list_item.dart';
+import 'cooking_detail_screen.dart';
 
 /// Màn hình chi tiết món ăn: hiển thị thông tin món + danh sách nguyên liệu cần mua
 class DishDetailScreen extends StatefulWidget {
@@ -62,19 +63,26 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ──── Thông tin món: phần ăn, thời gian, độ khó ────
-            if (hasRecipeInfo) ...[
-              _buildRecipeInfoCard(info!),
-              const SizedBox(height: 24),
+            // ──── Ảnh món ăn ────
+            if (hasRecipeInfo) _buildDishImage(info!),
+            if (hasRecipeInfo) const SizedBox(height: 16),
+
+            // ──── Mô tả ngắn ────
+            if (info?.description != null && info!.description!.isNotEmpty) ...[
+              Text(
+                info.description!,
+                style: const TextStyle(
+                  fontSize: 14,
+                  color: AppColors.textPrimary,
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
             ],
 
-            // ──── Mô tả món ăn ────
-            if (info?.description != null && info!.description!.isNotEmpty) ...[
-              _buildSectionTitle('Giới thiệu món'),
-              const SizedBox(height: 8),
-              _buildDescriptionCard(info.description!),
-              const SizedBox(height: 24),
-            ],
+            // ──── 4 ô thông tin: Chuẩn bị / Nấu / Khẩu phần / Độ khó ────
+            if (hasRecipeInfo) _buildInfoGrid(info!),
+            if (hasRecipeInfo) const SizedBox(height: 24),
 
             // ──── Mẹo chế biến ────
             if (info?.tips != null && info!.tips!.isNotEmpty) ...[
@@ -84,8 +92,8 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
               const SizedBox(height: 24),
             ],
 
-            // ──── Nguyên liệu cần mua ────
-            _buildSectionTitle('Nguyên liệu cần mua (${_items.length} mục)'),
+            // ──── Nguyên liệu ────
+            _buildSectionTitle('Nguyên liệu'),
             const SizedBox(height: 12),
             _buildIngredientsList(),
           ],
@@ -106,84 +114,101 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
     );
   }
 
-  Widget _buildRecipeInfoCard(RecipeInfo info) {
-    return Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: AppColors.inputBorder),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withValues(alpha: 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Row(
-        children: [
-          _buildInfoChip(Icons.person_outline, '${info.servings} phần ăn'),
-          const SizedBox(width: 12),
-          _buildInfoChip(Icons.schedule, '${info.cookTime} phút'),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-              decoration: BoxDecoration(
-                color: info.difficulty == 'easy'
-                    ? AppColors.primaryLight
-                    : info.difficulty == 'hard'
-                        ? AppColors.error.withValues(alpha: 0.12)
-                        : const Color(0xFFFFF3E0),
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                info.difficultyLabel,
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: info.difficulty == 'easy'
-                      ? AppColors.primary
-                      : info.difficulty == 'hard'
-                          ? AppColors.error
-                          : AppColors.warning,
-                ),
-                textAlign: TextAlign.center,
-              ),
-            ),
-          ),
-        ],
+  /// Ảnh món ăn trên cùng (nếu có imageUrl thì load, không thì hiển thị placeholder)
+  Widget _buildDishImage(RecipeInfo info) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: AspectRatio(
+        aspectRatio: 4 / 3,
+        child: info.imageUrl != null && info.imageUrl!.isNotEmpty
+            ? Image.network(
+                info.imageUrl!,
+                fit: BoxFit.cover,
+                errorBuilder: (_, __, ___) => _buildImagePlaceholder(),
+              )
+            : _buildImagePlaceholder(),
       ),
     );
   }
 
-  Widget _buildInfoChip(IconData icon, String label) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 10),
-        decoration: BoxDecoration(
-          color: AppColors.backgroundSecondary,
-          borderRadius: BorderRadius.circular(10),
+  Widget _buildImagePlaceholder() {
+    return Container(
+      color: AppColors.backgroundSecondary,
+      child: const Center(
+        child: Icon(
+          Icons.restaurant_outlined,
+          size: 40,
+          color: AppColors.textHint,
         ),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(icon, size: 18, color: AppColors.textSecondary),
-            const SizedBox(width: 6),
-            Flexible(
-              child: Text(
-                label,
-                style: const TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: AppColors.textSecondary,
-                ),
-                overflow: TextOverflow.ellipsis,
-              ),
+      ),
+    );
+  }
+
+  /// Lưới 4 ô: Chuẩn bị / Nấu / Khẩu phần / Độ khó
+  Widget _buildInfoGrid(RecipeInfo info) {
+    final prepText = info.prepTime > 0 ? '${info.prepTime} Phút' : '--';
+    final cookText = info.cookTime > 0 ? '${info.cookTime} Phút' : '--';
+
+    return Row(
+      children: [
+        Expanded(
+          child: Column(
+            children: [
+              _buildInfoBox('Chuẩn bị', prepText),
+              const SizedBox(height: 10),
+              _buildInfoBox('Khẩu phần', '${info.servings} Người'),
+            ],
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            children: [
+              _buildInfoBox('Nấu', cookText),
+              const SizedBox(height: 10),
+              _buildInfoBox('Độ khó', info.difficultyLabel),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildInfoBox(String label, String value) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: AppColors.inputBorder),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.03),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 12,
+              color: AppColors.textSecondary,
+              fontWeight: FontWeight.w500,
             ),
-          ],
-        ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: const TextStyle(
+              fontSize: 15,
+              fontWeight: FontWeight.bold,
+              color: AppColors.textPrimary,
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -340,56 +365,34 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
       ),
       child: SafeArea(
         top: false,
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              decoration: BoxDecoration(
-                color: AppColors.backgroundSecondary,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(Icons.check_circle, size: 18, color: AppColors.primary),
-                  const SizedBox(width: 8),
-                  Text(
-                    '$_checkedCount/${_items.length} đã mua',
-                    style: const TextStyle(
-                      fontSize: 14,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.textPrimary,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: () {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: const Text('Đã thêm nguyên liệu vào danh sách mua sắm'),
-                      backgroundColor: AppColors.primary,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                },
-                icon: const Icon(Icons.add_shopping_cart, size: 20),
-                label: const Text('Thêm vào danh sách mua sắm'),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.primary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  elevation: 0,
+        child: SizedBox(
+          width: double.infinity,
+          child: ElevatedButton(
+            onPressed: () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (context) => CookingDetailScreen(section: widget.section),
                 ),
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppColors.primary,
+              foregroundColor: Colors.white,
+              padding: const EdgeInsets.symmetric(vertical: 16),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              elevation: 0,
+            ),
+            child: const Text(
+              'Bắt đầu nấu',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.bold,
               ),
             ),
-          ],
+          ),
         ),
       ),
     );

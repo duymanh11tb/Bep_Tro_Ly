@@ -35,18 +35,24 @@ class ShoppingListItem {
 class RecipeInfo {
   final String recipeId;
   final int servings;      // Số phần ăn
-  final int cookTime;      // Phút
+  final int cookTime;      // Thời gian nấu (phút)
+  final int prepTime;      // Thời gian chuẩn bị (phút)
   final String difficulty; // easy, medium, hard -> Dễ, Trung bình, Khó
   final String? description; // Mô tả ngắn món ăn
   final String? tips;       // Mẹo chế biến
+  final String? imageUrl;   // Ảnh minh họa (tùy chọn)
+  final List<String>? steps; // Các bước thực hiện chi tiết
 
   RecipeInfo({
     required this.recipeId,
     this.servings = 4,
     this.cookTime = 0,
+    this.prepTime = 0,
     this.difficulty = 'medium',
     this.description,
     this.tips,
+    this.imageUrl,
+    this.steps,
   });
 
   String get difficultyLabel {

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/shopping_list_item.dart';
 import 'dish_detail_screen.dart';
+import 'cooking_detail_screen.dart';
 
 /// Màn hình Danh sách mua sắm (tab Đi chợ)
 class ShoppingListScreen extends StatefulWidget {
@@ -12,9 +13,11 @@ class ShoppingListScreen extends StatefulWidget {
 }
 
 class _ShoppingListScreenState extends State<ShoppingListScreen> {
-  int _selectedTabIndex = 0; // 0: Tất cả, 1: Món ăn, 2: Tủ lạnh
+  int _selectedTabIndex = 0; // 0: Tất cả, 1: Món ăn, 2: Nấu ăn
   List<ShoppingListSection> _sections = [];
   List<ShoppingListItem> _allItems = [];
+  final TextEditingController _searchController = TextEditingController();
+  String _searchQuery = '';
   String _suggestionText =
       'Dựa trên thực đơn tuần này, bạn có thể cần thêm Hành tím và Nước mắm';
 
@@ -22,6 +25,12 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
   void initState() {
     super.initState();
     _loadMockData();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    super.dispose();
   }
 
   void _loadMockData() {
@@ -35,6 +44,14 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
           difficulty: 'medium',
           description: 'Nồi canh chua cá lóc nóng hổi đặc trưng miền Nam với vị chua thanh của me, ngọt dịu của dứa, cà chua, bắp cải cùng thịt cá lóc săn chắc, đậm đà hương vị miền Tây sông nước.',
           tips: 'Để nước canh trong và cá không bị tanh, nên ướp cá sơ với muối và cho cá vào nồi khi nước sôi mạnh. Bạc hà nên bóp với muối và rửa sạch để giảm độ ngứa.',
+          steps: [
+            'Sơ chế cá lóc (rửa muối/chanh), cắt khoanh. Ướp cá với chút nước mắm, tiêu.',
+            'Chuẩn bị rau: Dứa thái miếng, cà chua bổ múi cau, dọc mùng tước vỏ thái vát bóp muối, đậu bắp cắt xéo.',
+            'Đun sôi nước, cho me vào dầm lấy nước chua. Cho dứa và cà chua vào đun sôi lại.',
+            'Cho cá vào nấu chín (khoảng 5-7 phút). Vớt bọt cho nước trong.',
+            'Cho đậu bắp, dọc mùng, giá đỗ vào đun sôi bùng. Nêm nếm lại gia vị (đường, mắm) cho vị chua ngọt hài hòa.',
+            'Tắt bếp, cho rau ngò om, ngò gai và vài lát ớt vào. Thưởng thức nóng.'
+          ],
         ),
         items: [
           ShoppingListItem(id: '1', name: 'Cá lóc', detail: 'Khúc giữa - 500g', isChecked: false, recipeId: 'r1'),
@@ -55,6 +72,14 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
           difficulty: 'hard',
           description: 'Tô phở bò nóng hổi, thơm lừng với nước dùng trong veo, đậm đà, những lát bò tái mềm, nạm bò giòn sần sật.',
           tips: 'Để nước phở trong và thơm, nên hầm xương với lửa nhỏ và thường xuyên vớt bọt. Các loại gia vị khô nên rang thơm trước khi cho vào hầm.',
+          steps: [
+            'Hầm xương bò với gừng, hành tây nướng và các gia vị phở (quế, hồi, thảo quả) trong 4-6 tiếng.',
+            'Sơ chế thịt bò: Thái mỏng bắp bò. Rửa sạch rau thơm, giá đỗ.',
+            'Lọc lấy nước dùng trong, nêm nếm gia vị vừa miệng.',
+            'Trần bánh phở qua nước sôi rồi cho vào tô.',
+            'Xếp thịt bò lên trên, chan nước dùng đang sôi sùng sục để bò tái chín đều.',
+            'Thêm hành lá, ngò và thưởng thức với tương tương đen, tương ớt.'
+          ],
         ),
         items: [
           ShoppingListItem(id: '7', name: 'Xương bò', detail: '1 kg - hầm nước dùng', isChecked: false, recipeId: 'r2'),
@@ -89,8 +114,17 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
           servings: 4,
           cookTime: 90,
           difficulty: 'easy',
-          description: 'Món thịt kho Tàu đậm đà, mặn ngọt hài hòa với miếng thịt ba chỉ mềm tan, béo ngậy cùng trứng vịt luộc thấm vị.',
-          tips: 'Để thịt kho mềm và thấm vị, nên chọn thịt ba chỉ có cả nạc và mỡ. Kho lửa nhỏ càng lâu thịt càng mềm.',
+          description: 'Món thịt kho Tàu đậm đà, mặn ngọt hài hòa với miếng thịt ba chỉ mềm tan, béo ngậy cùng trứng vịt luộc thấm vị. Đây là món ăn không thể thiếu trong mâm cơm Tết truyền thống của người miền Nam.',
+          tips: 'Nên chọn thịt ba chỉ có tỷ lệ nạc mỡ 7:3. Kho bằng nước dừa tươi sẽ giúp màu thịt đẹp tự nhiên và nước kho ngọt thanh mà không cần dùng nhiều bột ngọt.',
+          steps: [
+            'Sơ chế thịt ba chỉ: Rửa sạch với muối và rượu trắng, cắt miếng vuông khoảng 4-5cm. Chần sơ thịt qua nước sôi với vài lát gừng để khử mùi.',
+            'Ướp thịt: Ướp thịt với nước mắm ngon, đường, tỏi băm, hành tím băm và chút tiêu trắng ít nhất 30 phút.',
+            'Luộc trứng: Trứng vịt luộc chín, bóc vỏ. Có thể chiên sơ trứng qua dầu để vỏ trứng dai giòn thấm vị hơn.',
+            'Kho thịt: Đun nóng chút dầu ăn, thắng nước màu từ đường. Cho thịt vào đảo săn cho thấm màu.',
+            'Đổ nước dừa tươi vào sâm sấp mặt thịt. Đun sôi bùng lên rồi hạ lửa nhỏ liu riu. Vớt sạch bọt.',
+            'Khi thịt bắt đầu mềm, cho trứng vào. Nêm nếm lại gia vị cho vừa miệng.',
+            'Tiếp tục kho đến khi nước hơi sánh lại và thịt mềm rục. Tắt bếp và thưởng thức.'
+          ],
         ),
         items: [
           ShoppingListItem(id: '13', name: 'Thịt ba chỉ', detail: '500g - cắt miếng vuông', isChecked: false, recipeId: 'r4'),
@@ -106,8 +140,17 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
           servings: 4,
           cookTime: 30,
           difficulty: 'easy',
-          description: 'Món khai vị tươi mát với tôm tươi, thịt luộc, bún và rau sống cuộn trong bánh tráng, chấm nước mắm chua ngọt.',
-          tips: 'Xếp phần tôm có màu đỏ nổi bật ở ngoài cuốn sẽ đẹp mắt. Cuộn chặt tay vừa phải để cuốn không bung.',
+          description: 'Món khai vị tươi mát, lành mạnh với tôm tươi, thịt luộc, bún và rất nhiều rau sống cuộn trong lớp bánh tráng mỏng dai. Đây là món ăn được CNN bình chọn là một trong 50 món ăn ngon nhất thế giới.',
+          tips: 'Luộc tôm với chút giấm, muối và gừng để tôm đỏ đẹp và không tanh. Xếp tôm ngửa mặt đỏ ra ngoài bánh tráng để cuốn gỏi nhìn bắt mắt hơn.',
+          steps: [
+            'Sơ chế nguyên liệu: Rau sống rửa sạch, ngâm muối loãng. Tôm rút chỉ lưng. Thịt rửa sạch.',
+            'Luộc tôm và thịt: Luộc tôm chín tới, vớt ra ngâm nước đá, lột vỏ, chẻ đôi. Thịt luộc chín với hành tím, gừng, thái lát mỏng.',
+            'Chuẩn bị bún: Chần sơ bún qua nước sôi cho sợi bún tơi và sạch.',
+            'Cuốn gỏi: Thấm nước sơ qua bánh tráng cho mềm. Xếp xà lách, rau thơm, bún và thịt lên một góc bánh tráng.',
+            'Tiến hành cuộn chặt tay 1 vòng, sau đó xếp tôm theo hàng ngang (mặt đỏ hướng xuống dưới).',
+            'Gấp hai đầu bánh tráng lại và tiếp tục cuộn tròn đến hết. Có thể cài thêm một cọng hẹ cho đẹp.',
+            'Pha nước chấm: Làm tương hột xào tỏi ớt hoặc nước mắm chua ngọt để chấm kèm.'
+          ],
         ),
         items: [
           ShoppingListItem(id: '16', name: 'Tôm tươi', detail: '200g - luộc bóc vỏ', isChecked: false, recipeId: 'r5'),
@@ -116,6 +159,286 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
           ShoppingListItem(id: '18a', name: 'Bún tươi, xà lách, rau thơm', detail: 'Rửa sạch để ráo', isChecked: false, recipeId: 'r5'),
         ],
       ),
+
+      // ─── Các món thêm mới để đa dạng lựa chọn ───
+      ShoppingListSection(
+        title: 'Bánh mì thịt nướng',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r6',
+          servings: 2,
+          cookTime: 25,
+          difficulty: 'easy',
+          description: 'Ổ bánh mì giòn rụm kẹp thịt nướng, đồ chua, dưa leo và rau thơm, ăn sáng nhanh gọn mà vẫn đầy đủ năng lượng.',
+          tips: 'Nướng thịt trên chảo gang hoặc than hoa sẽ thơm hơn, phết thêm chút mật ong để màu đẹp.',
+        ),
+        items: [
+          ShoppingListItem(id: '19', name: 'Bánh mì', detail: '2 ổ - loại vỏ giòn', isChecked: false, recipeId: 'r6'),
+          ShoppingListItem(id: '19a', name: 'Thịt vai heo', detail: '250g - thái mỏng ướp nướng', isChecked: false, recipeId: 'r6'),
+          ShoppingListItem(id: '19b', name: 'Đồ chua', detail: 'Cà rốt & củ cải muối chua', isChecked: false, recipeId: 'r6'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Cơm chiên dương châu',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r7',
+          servings: 3,
+          cookTime: 20,
+          difficulty: 'easy',
+          description: 'Cơm chiên vàng ươm với trứng, tôm, xúc xích và đậu Hà Lan, hạt cơm tơi, thơm mùi dầu mè.',
+          tips: 'Dùng cơm nguội để qua đêm để hạt cơm tơi và không bị dính.',
+        ),
+        items: [
+          ShoppingListItem(id: '20', name: 'Cơm nguội', detail: '2 bát tô - để lạnh', isChecked: false, recipeId: 'r7'),
+          ShoppingListItem(id: '20a', name: 'Tôm tươi nhỏ', detail: '100g - bóc vỏ', isChecked: false, recipeId: 'r7'),
+          ShoppingListItem(id: '20b', name: 'Xúc xích hoặc lạp xưởng', detail: '1–2 cây - thái hạt lựu', isChecked: false, recipeId: 'r7'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Mì xào bò rau cải',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r8',
+          servings: 2,
+          cookTime: 15,
+          difficulty: 'easy',
+          description: 'Mì xào nhanh với thịt bò, cải xanh, cà rốt và hành tây, đậm vị nước tương và dầu hào.',
+          tips: 'Xào bò nhanh trên lửa lớn trước, vớt ra rồi mới cho lại để không bị dai.',
+        ),
+        items: [
+          ShoppingListItem(id: '21', name: 'Mì trứng tươi', detail: '2 vắt', isChecked: false, recipeId: 'r8'),
+          ShoppingListItem(id: '21a', name: 'Thịt bò thăn', detail: '150g - thái lát mỏng', isChecked: false, recipeId: 'r8'),
+          ShoppingListItem(id: '21b', name: 'Cải thìa / cải ngọt', detail: '1 bó nhỏ', isChecked: false, recipeId: 'r8'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Bún bò Huế',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r9',
+          servings: 4,
+          cookTime: 180,
+          difficulty: 'hard',
+          description: 'Tô bún bò Huế cay nồng, nước dùng đỏ cam thơm mùi sả, mắm ruốc và ớt.',
+          tips: 'Mắm ruốc nên hòa tan và lọc kỹ trước khi cho vào nồi để nước trong.',
+        ),
+        items: [
+          ShoppingListItem(id: '22', name: 'Xương bò / xương heo', detail: '1.5 kg - hầm nước dùng', isChecked: false, recipeId: 'r9'),
+          ShoppingListItem(id: '22a', name: 'Giò heo', detail: '1 cái - chặt khoanh', isChecked: false, recipeId: 'r9'),
+          ShoppingListItem(id: '22b', name: 'Bún sợi to', detail: '4 phần', isChecked: false, recipeId: 'r9'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Cánh gà chiên nước mắm',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r10',
+          servings: 3,
+          cookTime: 30,
+          difficulty: 'easy',
+          description: 'Cánh gà chiên giòn ngoài, thấm sốt nước mắm tỏi ớt mặn ngọt, rất đưa cơm.',
+          tips: 'Ướp gà với chút bột bắp để vỏ giòn hơn, chiên 2 lần để giữ độ giòn.',
+        ),
+        items: [
+          ShoppingListItem(id: '23', name: 'Cánh gà', detail: '8–10 cái', isChecked: false, recipeId: 'r10'),
+          ShoppingListItem(id: '23a', name: 'Nước mắm, đường, tỏi, ớt', detail: 'Làm sốt', isChecked: false, recipeId: 'r10'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Lẩu thái hải sản',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r11',
+          servings: 4,
+          cookTime: 40,
+          difficulty: 'medium',
+          description: 'Nồi lẩu chua cay với tôm, mực, nghêu và nhiều loại rau nhúng.',
+          tips: 'Dùng sả, lá chanh và nước cốt chanh tươi để hương vị thanh hơn.',
+        ),
+        items: [
+          ShoppingListItem(id: '24', name: 'Tôm, mực, nghêu', detail: 'Tổng 500–700g', isChecked: false, recipeId: 'r11'),
+          ShoppingListItem(id: '24a', name: 'Gói gia vị lẩu Thái', detail: '1 gói', isChecked: false, recipeId: 'r11'),
+          ShoppingListItem(id: '24b', name: 'Rau nhúng lẩu', detail: 'Cải thảo, rau muống, nấm...', isChecked: false, recipeId: 'r11'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Bò né chảo gang',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r12',
+          servings: 2,
+          cookTime: 20,
+          difficulty: 'medium',
+          description: 'Bò né nóng xèo xèo trên chảo gang với trứng, pate và bánh mì.',
+          tips: 'Làm nóng chảo thật kỹ trước khi cho bò để tạo tiếng “né” hấp dẫn.',
+        ),
+        items: [
+          ShoppingListItem(id: '25', name: 'Thịt bò phi lê', detail: '200g - ướp tiêu tỏi', isChecked: false, recipeId: 'r12'),
+          ShoppingListItem(id: '25a', name: 'Bánh mì & trứng gà', detail: '2 ổ & 2 quả', isChecked: false, recipeId: 'r12'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Miến xào cua biển',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r13',
+          servings: 3,
+          cookTime: 30,
+          difficulty: 'medium',
+          description: 'Miến xào thấm vị nước cua, ăn cùng rau thơm và hành phi.',
+          tips: 'Ngâm miến vừa đủ mềm, không để quá lâu sẽ bị nát khi xào.',
+        ),
+        items: [
+          ShoppingListItem(id: '26', name: 'Miến dong', detail: '200g - ngâm mềm', isChecked: false, recipeId: 'r13'),
+          ShoppingListItem(id: '26a', name: 'Thịt cua / ghẹ', detail: '200g', isChecked: false, recipeId: 'r13'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Salad ức gà sốt mè rang',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r14',
+          servings: 2,
+          cookTime: 20,
+          difficulty: 'easy',
+          description: 'Món salad thanh mát với ức gà luộc xé, rau xanh và sốt mè rang béo bùi.',
+          tips: 'Không luộc ức gà quá lâu để thịt không bị khô, ngâm lại trong nước luộc vài phút sau khi tắt bếp.',
+        ),
+        items: [
+          ShoppingListItem(id: '27', name: 'Ức gà', detail: '1 miếng - luộc xé sợi', isChecked: false, recipeId: 'r14'),
+          ShoppingListItem(id: '27a', name: 'Xà lách, cà chua bi', detail: 'Rửa sạch để ráo', isChecked: false, recipeId: 'r14'),
+          ShoppingListItem(id: '27b', name: 'Sốt mè rang', detail: '1 chai nhỏ', isChecked: false, recipeId: 'r14'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Bánh xèo miền Tây',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r15',
+          servings: 4,
+          cookTime: 50,
+          difficulty: 'medium',
+          description: 'Bánh xèo giòn rụm, nhân tôm thịt và giá đỗ, ăn kèm rau sống và nước mắm chua ngọt.',
+          tips: 'Pha bột hơi lỏng và dùng chảo chống dính tốt để bánh mỏng, giòn.',
+        ),
+        items: [
+          ShoppingListItem(id: '28', name: 'Bột bánh xèo', detail: '1 gói', isChecked: false, recipeId: 'r15'),
+          ShoppingListItem(id: '28a', name: 'Tôm, thịt ba chỉ, giá đỗ', detail: 'Nhân bánh', isChecked: false, recipeId: 'r15'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Bún riêu cua',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r16',
+          servings: 4,
+          cookTime: 60,
+          difficulty: 'medium',
+          description: 'Tô bún riêu với riêu cua, giò heo, đậu hũ chiên và cà chua chua nhẹ.',
+          tips: 'Khuấy riêu nhẹ tay sau khi đổ vào nồi để không bị vỡ nát.',
+        ),
+        items: [
+          ShoppingListItem(id: '29', name: 'Cua đồng xay / riêu cua đóng hộp', detail: '1–2 hũ', isChecked: false, recipeId: 'r16'),
+          ShoppingListItem(id: '29a', name: 'Đậu hũ, bún tươi, cà chua', detail: 'Tùy khẩu phần', isChecked: false, recipeId: 'r16'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Cá kho tộ',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r17',
+          servings: 3,
+          cookTime: 45,
+          difficulty: 'easy',
+          description: 'Cá kho đậm đà, thịt cá chắc, nước kho sánh, ăn với cơm trắng rất hao cơm.',
+          tips: 'Thắng nước màu trước khi cho cá giúp màu đẹp và thơm.',
+        ),
+        items: [
+          ShoppingListItem(id: '30', name: 'Cá basa / cá trắm', detail: '500g - cắt khúc', isChecked: false, recipeId: 'r17'),
+          ShoppingListItem(id: '30a', name: 'Nước mắm, đường, tiêu', detail: 'Ướp và kho', isChecked: false, recipeId: 'r17'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Gà kho gừng',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r18',
+          servings: 4,
+          prepTime: 15,
+          cookTime: 30,
+          difficulty: 'easy',
+          description: 'Món ăn đậm đà hương vị truyền thống Việt Nam với vị cay nồng của gừng sả hòa quyện cùng thịt gà mềm ngọt, rất thích hợp cho bữa cơm gia đình.',
+          tips: 'Phi thơm gừng trước rồi mới cho gà vào đảo cho thấm mùi.',
+        ),
+        items: [
+          ShoppingListItem(id: '31', name: 'Gà ta chặt miếng', detail: '600g', isChecked: false, recipeId: 'r18'),
+          ShoppingListItem(id: '31a', name: 'Gừng tươi, nước mắm', detail: 'Kho đậm vị', isChecked: false, recipeId: 'r18'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Bò hầm rau củ',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r19',
+          servings: 4,
+          cookTime: 120,
+          difficulty: 'medium',
+          description: 'Thịt bò hầm mềm với khoai tây, cà rốt và cần tây, dùng kèm bánh mì hoặc cơm.',
+          tips: 'Dùng phần nạm hoặc bắp bò có gân để hầm sẽ ngon hơn.',
+        ),
+        items: [
+          ShoppingListItem(id: '32', name: 'Thịt bò hầm', detail: '700g - cắt vuông', isChecked: false, recipeId: 'r19'),
+          ShoppingListItem(id: '32a', name: 'Khoai tây, cà rốt, cần tây', detail: 'Cắt khúc', isChecked: false, recipeId: 'r19'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Mì quảng gà',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r20',
+          servings: 3,
+          cookTime: 45,
+          difficulty: 'medium',
+          description: 'Mì quảng với thịt gà, trứng cút, đậu phộng rang và rau sống, nước chan sền sệt.',
+          tips: 'Nước chan chỉ cần xâm xấp mì, không cần quá nhiều như phở.',
+        ),
+        items: [
+          ShoppingListItem(id: '33', name: 'Mì quảng khô', detail: '3 phần', isChecked: false, recipeId: 'r20'),
+          ShoppingListItem(id: '33a', name: 'Gà, trứng cút, đậu phộng rang', detail: 'Nhân mì', isChecked: false, recipeId: 'r20'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Bánh canh chả cá',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r21',
+          servings: 4,
+          cookTime: 50,
+          difficulty: 'medium',
+          description: 'Bánh canh sợi to với nước dùng xương, chả cá dai và hành ngò.',
+          tips: 'Luộc sợi bánh canh riêng rồi xả nước lạnh để không bị dính.',
+        ),
+        items: [
+          ShoppingListItem(id: '34', name: 'Bánh canh', detail: '1 gói', isChecked: false, recipeId: 'r21'),
+          ShoppingListItem(id: '34a', name: 'Chả cá thu / chả cá basa', detail: '300g', isChecked: false, recipeId: 'r21'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Cháo ếch Singapore',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r22',
+          servings: 2,
+          cookTime: 40,
+          difficulty: 'medium',
+          description: 'Cháo trắng mịn ăn kèm ếch xào sốt sánh, thơm hành gừng và nước tương.',
+          tips: 'Xào ếch trên lửa lớn cho săn, sau đó mới cho nước sốt để thấm vị.',
+        ),
+        items: [
+          ShoppingListItem(id: '35', name: 'Đùi ếch', detail: '300–400g', isChecked: false, recipeId: 'r22'),
+          ShoppingListItem(id: '35a', name: 'Gạo tẻ, gạo nếp', detail: 'Pha 1:1 nấu cháo', isChecked: false, recipeId: 'r22'),
+        ],
+      ),
+      ShoppingListSection(
+        title: 'Súp bí đỏ kem tươi',
+        recipeInfo: RecipeInfo(
+          recipeId: 'r23',
+          servings: 2,
+          cookTime: 30,
+          difficulty: 'easy',
+          description: 'Súp bí đỏ xay mịn, béo nhẹ với kem tươi, ăn khai vị rất hợp.',
+          tips: 'Xào bí với bơ trước khi ninh giúp dậy mùi thơm.',
+        ),
+        items: [
+          ShoppingListItem(id: '36', name: 'Bí đỏ', detail: '400g - gọt vỏ, cắt miếng', isChecked: false, recipeId: 'r23'),
+          ShoppingListItem(id: '36a', name: 'Kem tươi, sữa tươi', detail: 'Pha vừa béo', isChecked: false, recipeId: 'r23'),
+        ],
+      ),
+
       ShoppingListSection(
         title: 'Cần mua thêm',
         recipeInfo: null,
@@ -156,20 +479,38 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
     }
   }
 
+  void _openCookingDetail(ShoppingListSection section) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => CookingDetailScreen(section: section),
+      ),
+    );
+  }
+
   int get _checkedCount => _allItems.where((i) => i.isChecked).length;
   int get _totalCount => _allItems.length;
   int get _remainingCount => _totalCount - _checkedCount;
 
-  /// Lọc section theo tab: 0 Tất cả, 1 Món ăn (có recipeInfo), 2 Tủ lạnh (Cần mua thêm)
+  /// Lọc section theo tab + ô tìm kiếm: 0 Tất cả, 1 Đi chợ, 2 Nấu món ăn
   List<ShoppingListSection> get _filteredSections {
-    switch (_selectedTabIndex) {
-      case 1:
-        return _sections.where((s) => s.isRecipeSection).toList();
-      case 2:
-        return _sections.where((s) => !s.isRecipeSection).toList();
-      default:
-        return _sections;
+    final query = _searchQuery.trim().toLowerCase();
+    
+    List<ShoppingListSection> baseSections;
+    if (_selectedTabIndex == 1 || _selectedTabIndex == 2) {
+      baseSections = _sections.where((s) => s.isRecipeSection).toList();
+    } else {
+      baseSections = _sections;
     }
+
+    if (query.isEmpty) return baseSections;
+    
+    return baseSections.where((s) {
+      final inTitle = s.title.toLowerCase().contains(query);
+      final desc = s.recipeInfo?.description?.toLowerCase() ?? '';
+      final inDesc = desc.contains(query);
+      return inTitle || inDesc;
+    }).toList();
   }
 
   void _toggleItem(ShoppingListItem item) {
@@ -242,13 +583,21 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
             child: Row(
               children: [
                 _buildTab(0, 'Tất cả'),
-                _buildTab(1, 'Món ăn'),
-                _buildTab(2, 'Tủ lạnh'),
+                _buildTab(1, 'Đi chợ'),
+                _buildTab(2, 'Nấu món ăn'),
               ],
             ),
           ),
         ),
         const SizedBox(height: 14),
+
+        // ──── Thanh tìm món ăn theo sở thích (chỉ hiện ở tab Đi chợ/Nấu ăn) ────
+        if (_selectedTabIndex == 1 || _selectedTabIndex == 2)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: _buildSearchBar(),
+          ),
+        if (_selectedTabIndex == 1 || _selectedTabIndex == 2) const SizedBox(height: 12),
 
         // ──── Thống kê nhanh ────
         Padding(
@@ -322,6 +671,36 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
     );
   }
 
+  /// Ô tìm kiếm món ăn theo sở thích (theo tên/ mô tả món)
+  Widget _buildSearchBar() {
+    return Container(
+      decoration: BoxDecoration(
+        color: AppColors.inputBackground,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.inputBorder),
+      ),
+      child: TextField(
+        controller: _searchController,
+        textInputAction: TextInputAction.search,
+        decoration: const InputDecoration(
+          hintText: 'Tìm món theo sở thích (ví dụ: cá, bò, cay, miền Nam...)',
+          hintStyle: TextStyle(
+            color: AppColors.textHint,
+            fontSize: 14,
+          ),
+          prefixIcon: Icon(Icons.search, color: AppColors.textHint, size: 22),
+          border: InputBorder.none,
+          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+        ),
+        onChanged: (value) {
+          setState(() {
+            _searchQuery = value;
+          });
+        },
+      ),
+    );
+  }
+
   Widget _buildStatChip(String text, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
@@ -352,7 +731,7 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
               Icon(Icons.shopping_basket_outlined, size: 56, color: AppColors.textHint),
               const SizedBox(height: 12),
               Text(
-                _selectedTabIndex == 1
+                _selectedTabIndex == 1 || _selectedTabIndex == 2
                     ? 'Chưa có món ăn nào trong danh sách'
                     : 'Chưa có mục nào cần mua thêm',
                 style: const TextStyle(
@@ -365,8 +744,8 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
         ),
       );
     }
-    // Tab Món ăn: hiển thị danh sách thẻ món, bấm vào mở màn hình chi tiết
-    if (_selectedTabIndex == 1) {
+    // Tab Đi chợ/Nấu ăn: hiển thị danh sách thẻ món
+    if (_selectedTabIndex == 1 || _selectedTabIndex == 2) {
       return _buildDishCards(sections);
     }
     return Column(
@@ -394,7 +773,13 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
             borderRadius: BorderRadius.circular(16),
             clipBehavior: Clip.antiAlias,
             child: InkWell(
-              onTap: () => _openDishDetail(section),
+              onTap: () {
+                if (_selectedTabIndex == 2) {
+                  _openCookingDetail(section);
+                } else {
+                  _openDishDetail(section);
+                }
+              },
               child: Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
