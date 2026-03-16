@@ -11,6 +11,7 @@ import 'widgets/ai_suggestion_carousel.dart';
 import 'widgets/fridge_stats.dart';
 import '../shopping/shopping_list_screen.dart';
 import '../../models/recipe_suggestion.dart';
+import '../pantry/virtual_fridge_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -131,7 +132,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 0:
         return _buildDashboard();
       case 1:
-        return _buildPlaceholder('Tủ lạnh');
+        return const VirtualFridgeScreen();
       case 2:
         return _buildPlaceholder('Công thức');
       case 3:
