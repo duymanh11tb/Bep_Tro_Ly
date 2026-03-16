@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/shopping_list_item.dart';
 import '../../services/shopping_service.dart';
@@ -22,6 +23,7 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
   String _searchQuery = '';
   String _suggestionText =
       'Dựa trên thực đơn tuần này, bạn có thể cần thêm Hành tím và Nước mắm';
+  static const bool _enableMockFallback = false;
 
   @override
   void initState() {
@@ -49,8 +51,13 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
       return;
     }
 
-    // Fallback demo data when backend has no shopping items yet.
-    _loadMockData();
+    if (_enableMockFallback && kDebugMode) {
+      _loadMockData();
+    } else {
+      _sections = [];
+      _allItems = [];
+    }
+
     if (!mounted) return;
     setState(() => _isLoading = false);
   }
