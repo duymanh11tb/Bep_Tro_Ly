@@ -5,6 +5,7 @@ using BepTroLy.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace BepTroLy.API.Controllers;
 
@@ -74,25 +75,59 @@ public class AuthController : ControllerBase
     [HttpPost("google-login")]
     public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
     {
-        if (string.IsNullOrWhiteSpace(request.IdToken))
-            return BadRequest(new ErrorResponse { Error = "IdToken không được để trống" });
+        if (string.IsNullOrWhiteSpace(request.IdToken) && string.IsNullOrWhiteSpace(request.AccessToken))
+            return BadRequest(new ErrorResponse { Error = "IdToken hoặc AccessToken không được để trống" });
 
         try
         {
-            var config = new ConfigurationBuilder()
-                .SetBasePath(Directory.GetCurrentDirectory())
-                .AddJsonFile("appsettings.json")
-                .AddEnvironmentVariables()
-                .Build();
-            
-            var googleClientId = config["GOOGLE_CLIENT_ID"] ?? config["GoogleAuth:ClientId"];
-            
-            var payload = await Google.Apis.Auth.GoogleJsonWebSignature.ValidateAsync(request.IdToken, new Google.Apis.Auth.GoogleJsonWebSignature.ValidationSettings
-            {
-                Audience = new[] { googleClientId }
-            });
+            string email;
+            string? displayName = null;
+            string? photoUrl = null;
 
-            var email = payload.Email.Trim().ToLower();
+            if (!string.IsNullOrWhiteSpace(request.IdToken))
+            {
+                var config = new ConfigurationBuilder()
+                    .SetBasePath(Directory.GetCurrentDirectory())
+                    .AddJsonFile("appsettings.json")
+                    .AddEnvironmentVariables()
+                    .Build();
+
+                var googleClientId = config["GOOGLE_CLIENT_ID"] ?? config["GoogleAuth:ClientId"];
+
+                var payload = await Google.Apis.Auth.GoogleJsonWebSignature.ValidateAsync(request.IdToken, new Google.Apis.Auth.GoogleJsonWebSignature.ValidationSettings
+                {
+                    Audience = new[] { googleClientId }
+                });
+
+                email = payload.Email.Trim().ToLower();
+                displayName = payload.Name;
+                photoUrl = payload.Picture;
+            }
+            else
+            {
+                using var httpClient = new HttpClient();
+                using var userInfoRequest = new HttpRequestMessage(HttpMethod.Get, "https://www.googleapis.com/oauth2/v3/userinfo");
+                userInfoRequest.Headers.TryAddWithoutValidation("Authorization", $"Bearer {request.AccessToken}");
+                using var userInfoResponse = await httpClient.SendAsync(userInfoRequest);
+
+                if (!userInfoResponse.IsSuccessStatusCode)
+                {
+                    return Unauthorized(new ErrorResponse { Error = "AccessToken Google không hợp lệ hoặc đã hết hạn" });
+                }
+
+                await using var responseStream = await userInfoResponse.Content.ReadAsStreamAsync();
+                using var userInfoJson = await JsonDocument.ParseAsync(responseStream);
+                var root = userInfoJson.RootElement;
+
+                if (!root.TryGetProperty("email", out var emailProperty) || string.IsNullOrWhiteSpace(emailProperty.GetString()))
+                {
+                    return Unauthorized(new ErrorResponse { Error = "Không lấy được email từ Google" });
+                }
+
+                email = emailProperty.GetString()!.Trim().ToLower();
+                displayName = root.TryGetProperty("name", out var nameProperty) ? nameProperty.GetString() : null;
+                photoUrl = root.TryGetProperty("picture", out var pictureProperty) ? pictureProperty.GetString() : null;
+            }
             var user = await _db.Users.FirstOrDefaultAsync(u => u.Email == email);
 
             if (user == null)
@@ -101,8 +136,8 @@ public class AuthController : ControllerBase
                 user = new User
                 {
                     Email = email,
-                    DisplayName = payload.Name ?? email.Split('@')[0],
-                    PhotoUrl = payload.Picture,
+                    DisplayName = displayName ?? email.Split('@')[0],
+                    PhotoUrl = photoUrl,
                     PasswordHash = "GOOGLE_AUTH_" + Guid.NewGuid().ToString("N"), // Không dùng pass này để login thường
                     CreatedAt = DateTime.UtcNow,
                     UpdatedAt = DateTime.UtcNow,
@@ -114,9 +149,9 @@ public class AuthController : ControllerBase
             else
             {
                 user.LastActive = DateTime.UtcNow;
-                if (string.IsNullOrEmpty(user.PhotoUrl) && !string.IsNullOrEmpty(payload.Picture))
+                if (string.IsNullOrEmpty(user.PhotoUrl) && !string.IsNullOrEmpty(photoUrl))
                 {
-                    user.PhotoUrl = payload.Picture;
+                    user.PhotoUrl = photoUrl;
                 }
                 await _db.SaveChangesAsync();
             }

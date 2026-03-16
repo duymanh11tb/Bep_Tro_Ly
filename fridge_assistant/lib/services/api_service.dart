@@ -1,8 +1,7 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
-import 'dart:io';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
   // API Backend deployed on VPS
@@ -36,8 +35,8 @@ class ApiService {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
 
-    print('POST $url');
-    print('Body: ${jsonEncode(body)}');
+    debugPrint('POST $url');
+    debugPrint('Body: ${jsonEncode(body)}');
 
     try {
       final response = await http.post(
@@ -45,11 +44,11 @@ class ApiService {
         headers: headers,
         body: jsonEncode(body),
       );
-      print('Response Status: ${response.statusCode}');
-      print('Response Body: ${response.body}');
+      debugPrint('Response Status: ${response.statusCode}');
+      debugPrint('Response Body: ${response.body}');
       return response;
     } catch (e) {
-      print('API Error: $e');
+      debugPrint('API Error: $e');
       throw Exception('Connection error: $e');
     }
   }

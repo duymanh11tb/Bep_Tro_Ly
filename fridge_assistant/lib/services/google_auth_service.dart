@@ -10,7 +10,7 @@ class GoogleAuthService {
     // Dùng Web Client ID cho cả Web và Android (cùng project)
     clientId: dotenv.env['GOOGLE_CLIENT_ID'],
     serverClientId: kIsWeb ? null : dotenv.env['GOOGLE_CLIENT_ID'],
-    scopes: ['email', 'profile'],
+    scopes: ['openid', 'email', 'profile'],
   );
 
   final AuthService _authService = AuthService();
@@ -23,19 +23,21 @@ class GoogleAuthService {
         return {'success': false, 'message': 'Đã hủy đăng nhập'};
       }
 
-      // 2. Lấy IdToken
+      // 2. Lấy token từ Google
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
+      final String? accessToken = googleAuth.accessToken;
 
-      if (idToken == null) {
+      if (idToken == null && accessToken == null) {
         return {'success': false, 'message': 'Không lấy được Token từ Google'};
       }
 
       // 3. Gửi Token về Backend sử dụng ApiService
-      final response = await ApiService.post('/api/auth/google-login', {
-        'idToken': idToken,
-      });
+      final payload = <String, dynamic>{};
+      if (idToken != null) payload['idToken'] = idToken;
+      if (accessToken != null) payload['accessToken'] = accessToken;
+      final response = await ApiService.post('/api/auth/google-login', payload);
 
       final data = jsonDecode(response.body);
 

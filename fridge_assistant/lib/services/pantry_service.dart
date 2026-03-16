@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'api_service.dart';
 import '../models/recipe_suggestion.dart';
 
@@ -138,7 +139,7 @@ class PantryService {
         return list.map((e) => PantryItem.fromJson(e)).toList();
       }
     } catch (e) {
-      print('PantryService.getItems error: $e');
+      debugPrint('PantryService.getItems error: $e');
     }
     return [];
   }
@@ -157,7 +158,7 @@ class PantryService {
         return items;
       }
     } catch (e) {
-      print('PantryService.getExpiringItems error: $e');
+      debugPrint('PantryService.getExpiringItems error: $e');
     }
     return [];
   }
@@ -173,7 +174,7 @@ class PantryService {
         return stats;
       }
     } catch (e) {
-      print('PantryService.getStats error: $e');
+      debugPrint('PantryService.getStats error: $e');
     }
     return null;
   }
@@ -203,7 +204,7 @@ class PantryService {
       final resp = await ApiService.post('/api/pantry', body, withAuth: true);
       return resp.statusCode == 200;
     } catch (e) {
-      print('PantryService.addItem error: $e');
+      debugPrint('PantryService.addItem error: $e');
       return false;
     }
   }
@@ -214,7 +215,7 @@ class PantryService {
       final resp = await ApiService.delete('/api/pantry/$id');
       return resp.statusCode == 200;
     } catch (e) {
-      print('PantryService.deleteItem error: $e');
+      debugPrint('PantryService.deleteItem error: $e');
       return false;
     }
   }
@@ -239,7 +240,7 @@ class PantryService {
         }
       }
     } catch (e) {
-      print('PantryService.getAiSuggestions error: $e');
+      debugPrint('PantryService.getAiSuggestions error: $e');
     }
     return [];
   }

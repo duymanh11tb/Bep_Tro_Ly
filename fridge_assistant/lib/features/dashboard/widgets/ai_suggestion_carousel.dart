@@ -41,10 +41,10 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
 
   void _startAutoScroll() {
     if (widget.suggestions.length <= 1) return;
-    
+
     _autoScrollTimer = Timer.periodic(widget.autoScrollDuration, (_) {
       if (!mounted) return;
-      
+
       final nextPage = (_currentPage + 1) % widget.suggestions.length;
       _pageController.animateToPage(
         nextPage,
@@ -68,11 +68,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
           padding: EdgeInsets.symmetric(horizontal: 20),
           child: Row(
             children: [
-              Icon(
-                Icons.auto_awesome,
-                color: AppColors.primary,
-                size: 20,
-              ),
+              Icon(Icons.auto_awesome, color: AppColors.primary, size: 20),
               SizedBox(width: 8),
               Text(
                 'Gợi ý hôm nay',
@@ -86,7 +82,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
           ),
         ),
         const SizedBox(height: 12),
-        
+
         // Carousel
         SizedBox(
           height: 230,
@@ -106,9 +102,9 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
             },
           ),
         ),
-        
+
         const SizedBox(height: 12),
-        
+
         // Page indicators
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -158,7 +154,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
                     errorBuilder: (_, __, ___) => _buildPlaceholderBg(),
                   )
                 : _buildPlaceholderBg(),
-            
+
             // Gradient overlay
             Container(
               decoration: BoxDecoration(
@@ -172,7 +168,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
                 ),
               ),
             ),
-            
+
             // Content
             Padding(
               padding: const EdgeInsets.all(16),
@@ -185,28 +181,42 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
                     children: [
                       if (suggestion.ingredientsExpiringCount > 0)
                         Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
                           decoration: BoxDecoration(
                             color: AppColors.warning,
                             borderRadius: BorderRadius.circular(20),
                           ),
                           child: Text(
                             suggestion.expiringBadgeText,
-                            style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                            style: const TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
                       if (suggestion.matchPercentage > 0)
                         Padding(
                           padding: const EdgeInsets.only(left: 8),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
                               color: AppColors.primary,
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: Text(
                               '${suggestion.matchPercentage}% Hợp',
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                              style: const TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         )
@@ -214,22 +224,31 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
                         Padding(
                           padding: const EdgeInsets.only(left: 8),
                           child: Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
                             decoration: BoxDecoration(
-                              color: const Color(0xFF3B82F6), // Blue for discovery
+                              color: const Color(
+                                0xFF3B82F6,
+                              ), // Blue for discovery
                               borderRadius: BorderRadius.circular(20),
                             ),
                             child: const Text(
                               'Khám phá',
-                              style: const TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: Colors.white),
+                              style: TextStyle(
+                                fontSize: 10,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
                             ),
                           ),
                         ),
                     ],
                   ),
-                  
+
                   const Spacer(),
-                  
+
                   // Recipe name
                   Text(
                     suggestion.name,
@@ -240,7 +259,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
                     ),
                   ),
                   const SizedBox(height: 4),
-                  
+
                   // Description
                   Text(
                     suggestion.description,
@@ -252,7 +271,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 12),
-                  
+
                   // View recipe button
                   GestureDetector(
                     onTap: () => widget.onViewRecipeTap?.call(suggestion),
@@ -288,11 +307,7 @@ class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
     return Container(
       color: AppColors.primaryLight,
       child: const Center(
-        child: Icon(
-          Icons.restaurant,
-          size: 60,
-          color: AppColors.primary,
-        ),
+        child: Icon(Icons.restaurant, size: 60, color: AppColors.primary),
       ),
     );
   }

@@ -50,7 +50,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
               icon: Container(
                 padding: const EdgeInsets.all(8),
                 decoration: BoxDecoration(
-                  color: Colors.black.withOpacity(0.3),
+                  color: Colors.black.withValues(alpha: 0.3),
                   shape: BoxShape.circle,
                 ),
                 child: const Icon(Icons.arrow_back_ios_new, color: Colors.white, size: 18),
@@ -69,7 +69,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                         borderRadius: BorderRadius.circular(20),
                         boxShadow: [
                           BoxShadow(
-                            color: Colors.black.withOpacity(0.2),
+                            color: Colors.black.withValues(alpha: 0.2),
                             blurRadius: 4,
                           )
                         ],
@@ -128,7 +128,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                         end: Alignment.bottomCenter,
                         colors: [
                           Colors.transparent,
-                          Colors.black.withOpacity(0.7),
+                          Colors.black.withValues(alpha: 0.7),
                         ],
                       ),
                     ),
@@ -151,7 +151,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                       borderRadius: BorderRadius.circular(10),
                       child: LinearProgressIndicator(
                         value: _progress,
-                        backgroundColor: AppColors.primary.withOpacity(0.1),
+                        backgroundColor: AppColors.primary.withValues(alpha: 0.1),
                         valueColor: const AlwaysStoppedAnimation<Color>(AppColors.primary),
                         minHeight: 8,
                       ),
@@ -166,7 +166,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: AppColors.divider.withOpacity(0.5)),
+                        border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
                       ),
                       child: Row(
                         mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -194,7 +194,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                     decoration: BoxDecoration(
                       color: Colors.white,
                       borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: AppColors.divider.withOpacity(0.5)),
+                      border: Border.all(color: AppColors.divider.withValues(alpha: 0.5)),
                     ),
                     child: Column(
                       children: widget.section.items.map((item) => _buildIngredientItem(item)).toList(),
@@ -333,7 +333,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
       decoration: BoxDecoration(
         color: const Color(0xFFFFF9C4),
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: Colors.orangeAccent.withOpacity(0.3)),
+        border: Border.all(color: Colors.orangeAccent.withValues(alpha: 0.3)),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -370,10 +370,10 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isCompleted ? AppColors.primary.withOpacity(0.05) : Colors.white,
+            color: isCompleted ? AppColors.primary.withValues(alpha: 0.05) : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isCompleted ? AppColors.primary.withOpacity(0.3) : AppColors.divider.withOpacity(0.5),
+              color: isCompleted ? AppColors.primary.withValues(alpha: 0.3) : AppColors.divider.withValues(alpha: 0.5),
               width: isCompleted ? 1.5 : 1,
             ),
           ),
@@ -384,7 +384,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: isCompleted ? AppColors.primary : AppColors.primary.withOpacity(0.1),
+                  color: isCompleted ? AppColors.primary : AppColors.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Center(

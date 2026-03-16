@@ -90,7 +90,7 @@ chmod +x deploy.sh
 Tuy chon bien moi truong:
 
 ```bash
-APP_DIR=/root/bep-tro-ly BRANCH=dev HEALTH_URL=http://127.0.0.1:5001/health ./deploy.sh
+APP_DIR=~/Bep_Tro_Ly BRANCH=dev HEALTH_URL=http://127.0.0.1:5001/health ./deploy.sh
 ```
 
 ## Rollback Nhanh Tren VPS Linux

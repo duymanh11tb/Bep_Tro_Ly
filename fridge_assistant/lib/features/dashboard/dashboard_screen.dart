@@ -7,7 +7,6 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/greeting_section.dart';
 import 'widgets/stat_cards.dart';
 import 'widgets/quick_actions.dart';
-import 'widgets/expiring_items.dart';
 import 'widgets/ai_suggestion_carousel.dart';
 import 'widgets/fridge_stats.dart';
 import '../shopping/shopping_list_screen.dart';
@@ -79,7 +78,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
     } catch (e) {
-      print('Error loading cached data: $e');
+      debugPrint('Error loading cached data: $e');
     }
   }
 
@@ -248,7 +247,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         decoration: BoxDecoration(
           color: AppColors.primarySurface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [
@@ -343,12 +342,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Widget _buildExpiringCard(PantryItem item) {
     Color expiryColor = AppColors.textSecondary;
-    if (item.isExpired)
+    if (item.isExpired) {
       expiryColor = AppColors.error;
-    else if (item.daysUntilExpiry <= 1)
+    } else if (item.daysUntilExpiry <= 1) {
       expiryColor = AppColors.error;
-    else if (item.daysUntilExpiry <= 3)
+    } else if (item.daysUntilExpiry <= 3) {
       expiryColor = AppColors.warning;
+    }
 
     return GestureDetector(
       onTap: () => _openRecipesForIngredient(item),
