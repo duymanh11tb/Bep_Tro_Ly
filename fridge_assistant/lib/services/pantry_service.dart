@@ -104,6 +104,28 @@ class CategoryStat {
 }
 
 class PantryService {
+  static List<PantryItem> _cachedExpiringItems = [];
+  static PantryStats? _cachedStats;
+  static List<RecipeSuggestion> _cachedAiSuggestions = [];
+
+  static Future<List<PantryItem>> getCachedExpiringItems() async {
+    return _cachedExpiringItems;
+  }
+
+  static Future<PantryStats?> getCachedStats() async {
+    return _cachedStats;
+  }
+
+  static Future<List<RecipeSuggestion>> getCachedAiSuggestions() async {
+    return _cachedAiSuggestions;
+  }
+
+  static Future<void> clearCache() async {
+    _cachedExpiringItems = [];
+    _cachedStats = null;
+    _cachedAiSuggestions = [];
+  }
+
   /// Lấy tất cả sản phẩm active
   static Future<List<PantryItem>> getItems() async {
     try {
@@ -130,7 +152,9 @@ class PantryService {
       );
       if (resp.statusCode == 200) {
         final List list = jsonDecode(utf8.decode(resp.bodyBytes));
-        return list.map((e) => PantryItem.fromJson(e)).toList();
+        final items = list.map((e) => PantryItem.fromJson(e)).toList();
+        _cachedExpiringItems = items;
+        return items;
       }
     } catch (e) {
       print('PantryService.getExpiringItems error: $e');
@@ -144,7 +168,9 @@ class PantryService {
       final resp = await ApiService.get('/api/pantry/stats', withAuth: true);
       if (resp.statusCode == 200) {
         final json = jsonDecode(utf8.decode(resp.bodyBytes));
-        return PantryStats.fromJson(json);
+        final stats = PantryStats.fromJson(json);
+        _cachedStats = stats;
+        return stats;
       }
     } catch (e) {
       print('PantryService.getStats error: $e');
@@ -205,7 +231,11 @@ class PantryService {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
         if (data['success'] == true && data['recipes'] != null) {
           final List list = data['recipes'];
-          return list.map((e) => RecipeSuggestion.fromJson(e)).toList();
+          final suggestions = list
+              .map((e) => RecipeSuggestion.fromJson(e))
+              .toList();
+          _cachedAiSuggestions = suggestions;
+          return suggestions;
         }
       }
     } catch (e) {
