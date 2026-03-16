@@ -75,6 +75,9 @@ public class AuthController : ControllerBase
     [HttpPost("google-login")]
     public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
     {
+        request.IdToken = NormalizeToken(request.IdToken);
+        request.AccessToken = NormalizeToken(request.AccessToken);
+
         if (string.IsNullOrWhiteSpace(request.IdToken) && string.IsNullOrWhiteSpace(request.AccessToken))
             return BadRequest(new ErrorResponse { Error = "IdToken hoặc AccessToken không được để trống" });
 
@@ -267,6 +270,16 @@ public class AuthController : ControllerBase
     {
         var claim = User.FindFirst("user_id")?.Value;
         return claim != null ? int.Parse(claim) : null;
+    }
+
+    private static string? NormalizeToken(string? token)
+    {
+        if (string.IsNullOrWhiteSpace(token))
+            return null;
+
+        return token.Replace("\r", string.Empty)
+                    .Replace("\n", string.Empty)
+                    .Trim();
     }
 
     private static UserDto MapUser(User user, bool full = false)

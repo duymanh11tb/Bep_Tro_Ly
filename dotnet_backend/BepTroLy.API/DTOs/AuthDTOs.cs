@@ -1,3 +1,5 @@
+using System.Text.Json.Serialization;
+
 namespace BepTroLy.API.DTOs;
 
 // ==================== REQUEST DTOs ====================
@@ -17,8 +19,35 @@ public class LoginRequest
 
 public class GoogleLoginRequest
 {
+    [JsonPropertyName("id_token")]
     public string? IdToken { get; set; }
+
+    [JsonPropertyName("access_token")]
     public string? AccessToken { get; set; }
+
+    // Backward compatibility: some clients send camelCase payload.
+    [JsonPropertyName("idToken")]
+    public string? IdTokenCamel
+    {
+        get => IdToken;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(IdToken))
+                IdToken = value;
+        }
+    }
+
+    // Backward compatibility: some clients send camelCase payload.
+    [JsonPropertyName("accessToken")]
+    public string? AccessTokenCamel
+    {
+        get => AccessToken;
+        set
+        {
+            if (string.IsNullOrWhiteSpace(AccessToken))
+                AccessToken = value;
+        }
+    }
 }
 
 public class UpdateProfileRequest
