@@ -83,11 +83,17 @@ class ShoppingService {
     if (parsed == null) return false;
 
     try {
-      final resp = await ApiService.put(
-        '/api/shopping/items/$parsed/purchase',
-        {'is_purchased': isPurchased},
-        withAuth: true,
-      );
+      var resp = await ApiService.put('/api/shopping/items/$parsed/purchase', {
+        'is_purchased': isPurchased,
+      }, withAuth: true);
+
+      // Backward compatibility with older backends using /toggle.
+      if (resp.statusCode == 404) {
+        resp = await ApiService.put('/api/shopping/items/$parsed/toggle', {
+          'is_purchased': isPurchased,
+        }, withAuth: true);
+      }
+
       return resp.statusCode == 200;
     } catch (_) {
       return false;

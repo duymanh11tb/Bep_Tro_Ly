@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using System.Text.Json.Serialization;
 using BepTroLy.API.Data;
 using BepTroLy.API.Models;
 using Microsoft.AspNetCore.Authorization;
@@ -155,8 +156,10 @@ public class ShoppingController : ControllerBase
     }
 
     // PUT /api/shopping/items/{itemId}/purchase
+    // PUT /api/shopping/items/{itemId}/toggle (backward compatibility)
     [HttpPut("items/{itemId}/purchase")]
-    public async Task<IActionResult> UpdatePurchaseState(int itemId, [FromBody] PurchaseStateRequest request)
+    [HttpPut("items/{itemId}/toggle")]
+    public async Task<IActionResult> UpdatePurchaseState(int itemId, [FromBody] PurchaseStateRequest? request)
     {
         var userId = GetUserId();
         if (userId == 0) return Unauthorized();
@@ -167,7 +170,7 @@ public class ShoppingController : ControllerBase
 
         if (item == null) return NotFound(new { error = "Khong tim thay shopping item" });
 
-        var nextState = request.IsPurchased ?? !item.IsPurchased;
+        var nextState = request?.IsPurchased ?? !item.IsPurchased;
         item.IsPurchased = nextState;
         item.PurchasedAt = nextState ? DateTime.UtcNow : null;
 
@@ -193,7 +196,20 @@ public class ShoppingController : ControllerBase
 
 public class PurchaseStateRequest
 {
+    [JsonPropertyName("is_purchased")]
     public bool? IsPurchased { get; set; }
+
+    // Backward compatibility: some clients send camelCase body.
+    [JsonPropertyName("isPurchased")]
+    public bool? IsPurchasedCamel
+    {
+        get => IsPurchased;
+        set
+        {
+            if (!IsPurchased.HasValue)
+                IsPurchased = value;
+        }
+    }
 }
 
 public class AddShoppingItemRequest
