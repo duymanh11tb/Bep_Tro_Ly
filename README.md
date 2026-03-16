@@ -82,7 +82,7 @@ docker compose logs -f db
 Sau khi SSH vao VPS, chay:
 
 ```bash
-cd /root/bep-tro-ly
+cd Bep_Tro_Ly
 chmod +x deploy.sh
 ./deploy.sh
 ```
@@ -98,7 +98,7 @@ APP_DIR=/root/bep-tro-ly BRANCH=dev HEALTH_URL=http://127.0.0.1:5001/health ./de
 Neu ban deploy xong ma API loi, rollback ve commit truoc do:
 
 ```bash
-cd /root/bep-tro-ly
+cd Bep_Tro_Ly
 chmod +x rollback.sh
 ./rollback.sh
 ```

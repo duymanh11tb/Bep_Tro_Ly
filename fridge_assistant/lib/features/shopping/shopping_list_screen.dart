@@ -17,6 +17,7 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
   int _selectedTabIndex = 0; // 0: Tất cả, 1: Món ăn, 2: Nấu ăn
   List<ShoppingListSection> _sections = [];
   List<ShoppingListItem> _allItems = [];
+  bool _isUsingMockData = false;
   bool _isLoading = true;
   final TextEditingController _searchController = TextEditingController();
   String _searchQuery = '';
@@ -42,6 +43,7 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
     if (sections.isNotEmpty) {
       if (!mounted) return;
       setState(() {
+        _isUsingMockData = false;
         _sections = sections;
         _allItems = _sections.expand((s) => s.items).toList();
         _isLoading = false;
@@ -52,7 +54,10 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
     // Fallback demo data when backend has no shopping items yet.
     _loadMockData();
     if (!mounted) return;
-    setState(() => _isLoading = false);
+    setState(() {
+      _isUsingMockData = true;
+      _isLoading = false;
+    });
   }
 
   void _loadMockData() {
@@ -1005,6 +1010,11 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
         );
       }).toList();
     });
+
+    // Demo fallback items are local-only and don't exist on backend.
+    if (_isUsingMockData) {
+      return;
+    }
 
     final success = await ShoppingService.setPurchased(
       itemId: item.id,
