@@ -17,18 +17,19 @@ class AuthService {
     if (response.statusCode == 200) {
       final token = data['token'];
       final user = data['user'];
-      
+
       await _saveAuthData(token, user);
       return {'success': true, 'data': data};
     } else {
-      return {
-        'success': false, 
-        'message': data['error'] ?? 'Login failed'
-      };
+      return {'success': false, 'message': data['error'] ?? 'Login failed'};
     }
   }
 
-  Future<Map<String, dynamic>> register(String email, String password, {String? displayName}) async {
+  Future<Map<String, dynamic>> register(
+    String email,
+    String password, {
+    String? displayName,
+  }) async {
     final response = await ApiService.post('/api/auth/register', {
       'email': email,
       'password': password,
@@ -40,13 +41,13 @@ class AuthService {
     if (response.statusCode == 201) {
       final token = data['token'];
       final user = data['user'];
-      
+
       await _saveAuthData(token, user);
       return {'success': true, 'data': data};
     } else {
       return {
-        'success': false, 
-        'message': data['error'] ?? 'Registration failed'
+        'success': false,
+        'message': data['error'] ?? 'Registration failed',
       };
     }
   }
@@ -70,6 +71,31 @@ class AuthService {
   Future<bool> isLoggedIn() async {
     final prefs = await SharedPreferences.getInstance();
     return prefs.containsKey(_tokenKey);
+  }
+
+  Future<bool> validateSession() async {
+    final prefs = await SharedPreferences.getInstance();
+    final token = prefs.getString(_tokenKey);
+    if (token == null || token.isEmpty) {
+      return false;
+    }
+
+    try {
+      final response = await ApiService.get('/api/auth/me', withAuth: true);
+      if (response.statusCode == 200) {
+        return true;
+      }
+
+      if (response.statusCode == 401 || response.statusCode == 403) {
+        await logout();
+        return false;
+      }
+
+      // Với lỗi server/network tạm thời, giữ trạng thái đăng nhập để người dùng thử lại.
+      return true;
+    } catch (_) {
+      return true;
+    }
   }
 
   Future<String?> getToken() async {

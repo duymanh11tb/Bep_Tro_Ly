@@ -11,20 +11,23 @@ import 'widgets/ai_suggestion_carousel.dart';
 import 'widgets/fridge_stats.dart';
 import '../shopping/shopping_list_screen.dart';
 import '../../models/recipe_suggestion.dart';
+import '../meal_plan/meal_plan_screen.dart';
 import '../pantry/virtual_fridge_screen.dart';
 import '../pantry/pantry_overview_screen.dart';
-import '../recipes/recipe_recommendations_screen.dart';
+import '../recipes/recipe_detail_screen.dart';
 import '../scan/scan_ingredient_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final int initialTabIndex;
+
+  const DashboardScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _currentNavIndex = 0;
+  late int _currentNavIndex;
   String _userName = 'User';
   String? _avatarUrl;
 
@@ -37,6 +40,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   @override
   void initState() {
     super.initState();
+    _currentNavIndex = widget.initialTabIndex.clamp(0, 4);
     _initSequence();
   }
 
@@ -137,7 +141,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 1:
         return const PantryOverviewScreen();
       case 2:
-        return const RecipeRecommendationsScreen();
+        return const MealPlanScreen();
       case 3:
         return ShoppingListScreen(
           onGoToFridge: (checkedCount) {
@@ -230,13 +234,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     suggestions: _suggestions,
                     autoScrollDuration: const Duration(seconds: 7),
                     onViewRecipeTap: (recipe) {
-                      // TODO: Navigate to recipe detail
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Xem công thức: ${recipe.name}'),
-                          backgroundColor: AppColors.primary,
-                        ),
-                      );
+                      _openRecipeDetail(recipe);
                     },
                   ),
             const SizedBox(height: 24),
@@ -588,14 +586,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Xem công thức: ${recipe.name}'),
-              backgroundColor: AppColors.primary,
-            ),
-          );
+          Navigator.of(context).pop();
+          _openRecipeDetail(recipe);
         },
       ),
+    );
+  }
+
+  void _openRecipeDetail(RecipeSuggestion recipe) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => RecipeDetailScreen(recipe: recipe)),
     );
   }
 

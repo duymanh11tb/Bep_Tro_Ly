@@ -5,6 +5,8 @@ import 'package:camera/camera.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/bottom_nav_bar.dart';
+import '../dashboard/dashboard_screen.dart';
 import '../../services/barcode_lookup_service.dart';
 import '../../services/pantry_service.dart';
 
@@ -926,7 +928,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
             ),
           ),
           _buildBottomControlBar(),
-          _buildFakeBottomNav(),
+          _buildAppBottomNav(),
         ],
       ),
     );
@@ -1159,59 +1161,17 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     );
   }
 
-  Widget _buildFakeBottomNav() {
-    return Container(
-      color: Colors.white,
-      padding: const EdgeInsets.fromLTRB(14, 0, 14, 8),
-      child: const Row(
-        mainAxisAlignment: MainAxisAlignment.spaceAround,
-        children: [
-          _ScanBottomItem(icon: Icons.home_filled, label: 'Trang chủ'),
-          _ScanBottomItem(
-            icon: Icons.qr_code_scanner,
-            label: 'Quét',
-            active: true,
+  Widget _buildAppBottomNav() {
+    return BottomNavBar(
+      currentIndex: 0,
+      onTap: (index) {
+        Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => DashboardScreen(initialTabIndex: index),
           ),
-          _ScanBottomItem(icon: Icons.shopping_bag_outlined, label: 'Giỏ hàng'),
-          _ScanBottomItem(icon: Icons.menu_book_outlined, label: 'Công thức'),
-          _ScanBottomItem(icon: Icons.person_outline, label: 'Cá nhân'),
-        ],
-      ),
-    );
-  }
-}
-
-class _ScanBottomItem extends StatelessWidget {
-  final IconData icon;
-  final String label;
-  final bool active;
-
-  const _ScanBottomItem({
-    required this.icon,
-    required this.label,
-    this.active = false,
-  });
-
-  @override
-  Widget build(BuildContext context) {
-    final color = active ? AppColors.primary : AppColors.textHint;
-    return Padding(
-      padding: const EdgeInsets.only(top: 4),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(icon, color: color, size: 22),
-          const SizedBox(height: 2),
-          Text(
-            label,
-            style: TextStyle(
-              fontSize: 11,
-              color: color,
-              fontWeight: active ? FontWeight.w700 : FontWeight.w500,
-            ),
-          ),
-        ],
-      ),
+          (route) => false,
+        );
+      },
     );
   }
 }

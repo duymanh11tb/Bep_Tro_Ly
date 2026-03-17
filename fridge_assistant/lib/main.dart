@@ -57,7 +57,7 @@ class _CheckAuthScreenState extends State<CheckAuthScreen> {
 
   Future<void> _checkAuth() async {
     final authService = AuthService();
-    final isLoggedIn = await authService.isLoggedIn();
+    final isLoggedIn = await authService.validateSession();
 
     if (mounted) {
       if (isLoggedIn) {

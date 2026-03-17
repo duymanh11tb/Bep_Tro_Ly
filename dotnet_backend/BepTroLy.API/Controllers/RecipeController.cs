@@ -2,6 +2,7 @@ using BepTroLy.API.DTOs;
 using BepTroLy.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace BepTroLy.API.Controllers;
 
@@ -19,6 +20,7 @@ public class RecipeController : ControllerBase
     /// <summary>Gợi ý món ăn dựa trên nguyên liệu.</summary>
     [HttpPost("suggest")]
     [Authorize]
+    [EnableRateLimiting("ai-heavy")]
     public async Task<IActionResult> SuggestRecipes([FromBody] SuggestRecipesRequest request)
     {
         var result = await _aiService.SuggestRecipesAsync(
@@ -34,6 +36,7 @@ public class RecipeController : ControllerBase
     /// <summary>Gợi ý món ăn từ nguyên liệu trong tủ lạnh.</summary>
     [HttpPost("suggest-from-pantry")]
     [Authorize]
+    [EnableRateLimiting("ai-heavy")]
     public async Task<IActionResult> SuggestFromPantry([FromBody] SuggestFromPantryRequest request)
     {
         var userId = GetCurrentUserId();

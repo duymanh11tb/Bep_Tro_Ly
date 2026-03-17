@@ -1,4 +1,5 @@
 import 'dart:convert';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
@@ -9,6 +10,9 @@ class ApiService {
     // Port 5001 is mapped to API container port 5000 on VPS
     return 'http://103.77.173.6:5001';
   }
+
+  static const Duration _requestTimeout = Duration(seconds: 15);
+  static const int _maxRetries = 2;
 
   static Future<Map<String, String>> getHeaders({bool withAuth = false}) async {
     final headers = {
@@ -38,19 +42,11 @@ class ApiService {
     debugPrint('POST $url');
     debugPrint('Body: ${jsonEncode(body)}');
 
-    try {
-      final response = await http.post(
-        url,
-        headers: headers,
-        body: jsonEncode(body),
-      );
-      debugPrint('Response Status: ${response.statusCode}');
-      debugPrint('Response Body: ${response.body}');
-      return response;
-    } catch (e) {
-      debugPrint('API Error: $e');
-      throw Exception('Connection error: $e');
-    }
+    return _requestWithRetry(
+      () => http
+          .post(url, headers: headers, body: jsonEncode(body))
+          .timeout(_requestTimeout),
+    );
   }
 
   static Future<http.Response> get(
@@ -60,12 +56,9 @@ class ApiService {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
 
-    try {
-      final response = await http.get(url, headers: headers);
-      return response;
-    } catch (e) {
-      throw Exception('Connection error: $e');
-    }
+    return _requestWithRetry(
+      () => http.get(url, headers: headers).timeout(_requestTimeout),
+    );
   }
 
   static Future<http.Response> put(
@@ -75,16 +68,11 @@ class ApiService {
   }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
-    try {
-      final response = await http.put(
-        url,
-        headers: headers,
-        body: jsonEncode(body),
-      );
-      return response;
-    } catch (e) {
-      throw Exception('Connection error: $e');
-    }
+    return _requestWithRetry(
+      () => http
+          .put(url, headers: headers, body: jsonEncode(body))
+          .timeout(_requestTimeout),
+    );
   }
 
   static Future<http.Response> delete(
@@ -93,11 +81,56 @@ class ApiService {
   }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
-    try {
-      final response = await http.delete(url, headers: headers);
-      return response;
-    } catch (e) {
-      throw Exception('Connection error: $e');
+    return _requestWithRetry(
+      () => http.delete(url, headers: headers).timeout(_requestTimeout),
+    );
+  }
+
+  static Future<http.Response> _requestWithRetry(
+    Future<http.Response> Function() send,
+  ) async {
+    var attempt = 0;
+
+    while (true) {
+      try {
+        final response = await send();
+        if (!_shouldRetryStatus(response.statusCode) ||
+            attempt >= _maxRetries) {
+          return response;
+        }
+
+        await Future.delayed(
+          _computeBackoff(response: response, attempt: attempt),
+        );
+      } catch (e) {
+        if (attempt >= _maxRetries) {
+          throw Exception('Connection error: $e');
+        }
+        await Future.delayed(_computeBackoff(attempt: attempt));
+      }
+
+      attempt += 1;
     }
+  }
+
+  static bool _shouldRetryStatus(int statusCode) {
+    return statusCode == 429 || statusCode == 503;
+  }
+
+  static Duration _computeBackoff({
+    http.Response? response,
+    required int attempt,
+  }) {
+    final retryAfter = response?.headers['retry-after'];
+    if (retryAfter != null) {
+      final sec = int.tryParse(retryAfter.trim());
+      if (sec != null && sec > 0) {
+        return Duration(seconds: sec);
+      }
+    }
+
+    final baseMs = 500 * (1 << attempt);
+    final jitterMs = Random().nextInt(250);
+    return Duration(milliseconds: baseMs + jitterMs);
   }
 }

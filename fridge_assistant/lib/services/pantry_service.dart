@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'auth_service.dart';
 import '../models/recipe_suggestion.dart';
 
 class PantryItem {
@@ -105,9 +107,66 @@ class CategoryStat {
 }
 
 class PantryService {
+  static const String _aiSuggestionsCachePrefix = 'pantry_ai_suggestions_v1_';
   static List<PantryItem> _cachedExpiringItems = [];
   static PantryStats? _cachedStats;
   static List<RecipeSuggestion> _cachedAiSuggestions = [];
+
+  static Future<String> _getUserCacheSuffix() async {
+    final authService = AuthService();
+    final user = await authService.getUser();
+
+    if (user == null) return 'guest';
+
+    final raw =
+        user['id']?.toString() ??
+        user['email']?.toString() ??
+        user['display_name']?.toString() ??
+        'guest';
+
+    return raw
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9@._-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+  }
+
+  static Future<String> _getAiSuggestionsCacheKey() async {
+    final suffix = await _getUserCacheSuffix();
+    return '$_aiSuggestionsCachePrefix$suffix';
+  }
+
+  static Future<void> _persistAiSuggestions(
+    List<RecipeSuggestion> suggestions,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = await _getAiSuggestionsCacheKey();
+      final payload = jsonEncode(suggestions.map((e) => e.toJson()).toList());
+      await prefs.setString(cacheKey, payload);
+    } catch (e) {
+      debugPrint('PantryService._persistAiSuggestions error: $e');
+    }
+  }
+
+  static Future<List<RecipeSuggestion>> _loadPersistedAiSuggestions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = await _getAiSuggestionsCacheKey();
+      final raw = prefs.getString(cacheKey);
+      if (raw == null || raw.isEmpty) return [];
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+
+      return decoded
+          .whereType<Map>()
+          .map((e) => RecipeSuggestion.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      debugPrint('PantryService._loadPersistedAiSuggestions error: $e');
+      return [];
+    }
+  }
 
   static Future<List<PantryItem>> getCachedExpiringItems() async {
     return _cachedExpiringItems;
@@ -118,13 +177,37 @@ class PantryService {
   }
 
   static Future<List<RecipeSuggestion>> getCachedAiSuggestions() async {
+    if (_cachedAiSuggestions.isNotEmpty) {
+      return _cachedAiSuggestions;
+    }
+
+    final persisted = await _loadPersistedAiSuggestions();
+    if (persisted.isNotEmpty) {
+      _cachedAiSuggestions = persisted;
+    }
+
     return _cachedAiSuggestions;
   }
 
-  static Future<void> clearCache() async {
+  static Future<void> clearCache({bool clearPersistent = false}) async {
     _cachedExpiringItems = [];
     _cachedStats = null;
     _cachedAiSuggestions = [];
+
+    if (!clearPersistent) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keysToRemove = prefs
+          .getKeys()
+          .where((k) => k.startsWith(_aiSuggestionsCachePrefix))
+          .toList();
+      for (final key in keysToRemove) {
+        await prefs.remove(key);
+      }
+    } catch (e) {
+      debugPrint('PantryService.clearCache persistent error: $e');
+    }
   }
 
   /// Lấy tất cả sản phẩm active
@@ -236,12 +319,13 @@ class PantryService {
               .map((e) => RecipeSuggestion.fromJson(e))
               .toList();
           _cachedAiSuggestions = suggestions;
+          await _persistAiSuggestions(suggestions);
           return suggestions;
         }
       }
     } catch (e) {
       debugPrint('PantryService.getAiSuggestions error: $e');
     }
-    return [];
+    return getCachedAiSuggestions();
   }
 }
