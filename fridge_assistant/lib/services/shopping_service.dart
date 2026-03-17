@@ -1,6 +1,17 @@
 import 'dart:convert';
 import '../models/shopping_list_item.dart';
 import 'api_service.dart';
+import 'pantry_service.dart';
+
+class TransferToFridgeResult {
+  final int successCount;
+  final int failedCount;
+
+  const TransferToFridgeResult({
+    required this.successCount,
+    required this.failedCount,
+  });
+}
 
 class ShoppingService {
   static Future<List<ShoppingListSection>> getCurrentSections() async {
@@ -34,6 +45,9 @@ class ShoppingService {
           detail: detail,
           isChecked: m['is_purchased'] == true,
           recipeId: m['from_recipe_id']?.toString(),
+          quantity: quantity,
+          unit: unit,
+          notes: (m['notes'] as String?)?.trim(),
         );
 
         grouped.putIfAbsent(sectionKey, () => []);
@@ -128,6 +142,30 @@ class ShoppingService {
     } catch (_) {
       return false;
     }
+  }
+
+  static Future<TransferToFridgeResult> transferToFridge({
+    required List<ShoppingListItem> items,
+  }) async {
+    var successCount = 0;
+
+    for (final item in items) {
+      final success = await PantryService.addItem(
+        nameVi: item.name,
+        quantity: item.quantity ?? 1,
+        unit: (item.unit != null && item.unit!.isNotEmpty) ? item.unit! : 'cái',
+        notes: item.notes,
+      );
+
+      if (success) {
+        successCount += 1;
+      }
+    }
+
+    return TransferToFridgeResult(
+      successCount: successCount,
+      failedCount: items.length - successCount,
+    );
   }
 
   static String _buildDetail(double? quantity, String? unit, String? notes) {

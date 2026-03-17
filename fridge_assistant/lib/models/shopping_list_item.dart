@@ -5,6 +5,9 @@ class ShoppingListItem {
   final String detail; // VD: "Khúc giữa - 500g", "1 bó nhỏ"
   final bool isChecked;
   final String? recipeId; // null = thuộc "Cần mua thêm"
+  final double? quantity;
+  final String? unit;
+  final String? notes;
 
   ShoppingListItem({
     required this.id,
@@ -12,6 +15,9 @@ class ShoppingListItem {
     required this.detail,
     this.isChecked = false,
     this.recipeId,
+    this.quantity,
+    this.unit,
+    this.notes,
   });
 
   ShoppingListItem copyWith({
@@ -20,6 +26,9 @@ class ShoppingListItem {
     String? detail,
     bool? isChecked,
     String? recipeId,
+    double? quantity,
+    String? unit,
+    String? notes,
   }) {
     return ShoppingListItem(
       id: id ?? this.id,
@@ -27,6 +36,9 @@ class ShoppingListItem {
       detail: detail ?? this.detail,
       isChecked: isChecked ?? this.isChecked,
       recipeId: recipeId ?? this.recipeId,
+      quantity: quantity ?? this.quantity,
+      unit: unit ?? this.unit,
+      notes: notes ?? this.notes,
     );
   }
 }
@@ -34,13 +46,13 @@ class ShoppingListItem {
 /// Thông tin món ăn (cho section từ công thức)
 class RecipeInfo {
   final String recipeId;
-  final int servings;      // Số phần ăn
-  final int cookTime;      // Thời gian nấu (phút)
-  final int prepTime;      // Thời gian chuẩn bị (phút)
+  final int servings; // Số phần ăn
+  final int cookTime; // Thời gian nấu (phút)
+  final int prepTime; // Thời gian chuẩn bị (phút)
   final String difficulty; // easy, medium, hard -> Dễ, Trung bình, Khó
   final String? description; // Mô tả ngắn món ăn
-  final String? tips;       // Mẹo chế biến
-  final String? imageUrl;   // Ảnh minh họa (tùy chọn)
+  final String? tips; // Mẹo chế biến
+  final String? imageUrl; // Ảnh minh họa (tùy chọn)
   final List<String>? steps; // Các bước thực hiện chi tiết
 
   RecipeInfo({
@@ -57,9 +69,12 @@ class RecipeInfo {
 
   String get difficultyLabel {
     switch (difficulty) {
-      case 'easy': return 'Dễ';
-      case 'hard': return 'Khó';
-      default: return 'Trung bình';
+      case 'easy':
+        return 'Dễ';
+      case 'hard':
+        return 'Khó';
+      default:
+        return 'Trung bình';
     }
   }
 }

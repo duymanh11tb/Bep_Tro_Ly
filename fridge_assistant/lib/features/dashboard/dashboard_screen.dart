@@ -12,6 +12,9 @@ import 'widgets/fridge_stats.dart';
 import '../shopping/shopping_list_screen.dart';
 import '../../models/recipe_suggestion.dart';
 import '../pantry/virtual_fridge_screen.dart';
+import '../pantry/pantry_overview_screen.dart';
+import '../recipes/recipe_recommendations_screen.dart';
+import '../scan/scan_ingredient_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
@@ -132,11 +135,24 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 0:
         return _buildDashboard();
       case 1:
-        return const VirtualFridgeScreen();
+        return const PantryOverviewScreen();
       case 2:
-        return _buildPlaceholder('Công thức');
+        return const RecipeRecommendationsScreen();
       case 3:
-        return const ShoppingListScreen();
+        return ShoppingListScreen(
+          onGoToFridge: (checkedCount) {
+            setState(() => _currentNavIndex = 1);
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: Text('Đã thêm $checkedCount mục vào tủ lạnh.'),
+                  backgroundColor: AppColors.primary,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+          },
+        );
       case 4:
         return _buildSettingsPage();
       default:
@@ -180,7 +196,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             // Quick Actions
             QuickActions(
-              onScanTap: () {},
+              onScanTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ScanIngredientScreen(),
+                  ),
+                );
+              },
               onAddTap: () async {
                 final result = await Navigator.pushNamed(
                   context,
@@ -309,7 +331,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const Spacer(),
               GestureDetector(
                 onTap: () {
-                  setState(() => _currentNavIndex = 1);
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      transitionDuration: const Duration(milliseconds: 260),
+                      reverseTransitionDuration: const Duration(
+                        milliseconds: 220,
+                      ),
+                      pageBuilder: (_, __, ___) => const Scaffold(
+                        backgroundColor: AppColors.background,
+                        body: SafeArea(child: VirtualFridgeScreen()),
+                      ),
+                      transitionsBuilder:
+                          (_, animation, secondaryAnimation, child) {
+                            final slide =
+                                Tween<Offset>(
+                                  begin: const Offset(0.15, 0),
+                                  end: Offset.zero,
+                                ).animate(
+                                  CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                );
+                            final fade = Tween<double>(begin: 0.0, end: 1.0)
+                                .animate(
+                                  CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOut,
+                                  ),
+                                );
+
+                            return FadeTransition(
+                              opacity: fade,
+                              child: SlideTransition(
+                                position: slide,
+                                child: child,
+                              ),
+                            );
+                          },
+                    ),
+                  );
                 },
                 child: const Text(
                   'Xem tất cả',

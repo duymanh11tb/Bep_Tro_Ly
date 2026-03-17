@@ -1,14 +1,17 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'auth_service.dart';
 import 'api_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class GoogleAuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    // Dùng Web Client ID cho cả Web và Android (cùng project)
-    clientId: dotenv.env['GOOGLE_CLIENT_ID'],
+    // Android nên dùng serverClientId; clientId chỉ cần cho Web/iOS.
+    clientId: (kIsWeb || Platform.isIOS)
+        ? dotenv.env['GOOGLE_CLIENT_ID']
+        : null,
     serverClientId: kIsWeb ? null : dotenv.env['GOOGLE_CLIENT_ID'],
     scopes: ['openid', 'email', 'profile'],
   );

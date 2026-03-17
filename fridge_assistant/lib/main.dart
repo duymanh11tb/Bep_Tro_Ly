@@ -7,6 +7,7 @@ import 'features/onboarding/onboarding_screen.dart';
 import 'services/auth_service.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/product/add_product_screen.dart';
+import 'features/pantry/virtual_fridge_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -31,6 +32,10 @@ class BepTroLyApp extends StatelessWidget {
         '/auth': (context) => const AuthScreen(),
         '/home': (context) => const DashboardScreen(),
         '/add-product': (context) => const AddProductScreen(),
+        '/expiring-items': (context) => const Scaffold(
+          backgroundColor: AppColors.background,
+          body: SafeArea(child: VirtualFridgeScreen()),
+        ),
       },
     );
   }

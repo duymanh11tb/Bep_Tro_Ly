@@ -2,6 +2,7 @@ using BepTroLy.API.Data;
 using BepTroLy.API.DTOs;
 using BepTroLy.API.Models;
 using BepTroLy.API.Services;
+using Google.Apis.Auth;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -83,30 +84,39 @@ public class AuthController : ControllerBase
 
         try
         {
-            string email;
+            string email = string.Empty;
             string? displayName = null;
             string? photoUrl = null;
+            var validatedByIdToken = false;
 
             if (!string.IsNullOrWhiteSpace(request.IdToken))
             {
-                var config = new ConfigurationBuilder()
-                    .SetBasePath(Directory.GetCurrentDirectory())
-                    .AddJsonFile("appsettings.json")
-                    .AddEnvironmentVariables()
-                    .Build();
-
-                var googleClientId = config["GOOGLE_CLIENT_ID"] ?? config["GoogleAuth:ClientId"];
-
-                var payload = await Google.Apis.Auth.GoogleJsonWebSignature.ValidateAsync(request.IdToken, new Google.Apis.Auth.GoogleJsonWebSignature.ValidationSettings
+                try
                 {
-                    Audience = new[] { googleClientId }
-                });
+                    var audiences = GetGoogleAudiences();
 
-                email = payload.Email.Trim().ToLower();
-                displayName = payload.Name;
-                photoUrl = payload.Picture;
+                    var payload = await GoogleJsonWebSignature.ValidateAsync(request.IdToken, new GoogleJsonWebSignature.ValidationSettings
+                    {
+                        Audience = audiences.Length > 0 ? audiences : null
+                    });
+
+                    email = payload.Email.Trim().ToLower();
+                    displayName = payload.Name;
+                    photoUrl = payload.Picture;
+                    validatedByIdToken = true;
+                }
+                catch (InvalidJwtException ex)
+                {
+                    _logger.LogWarning(ex, "Invalid Google IdToken; fallback to AccessToken if available");
+
+                    if (string.IsNullOrWhiteSpace(request.AccessToken))
+                    {
+                        return Unauthorized(new ErrorResponse { Error = "Token Google không hợp lệ hoặc đã hết hạn" });
+                    }
+                }
             }
-            else
+
+            if (!validatedByIdToken)
             {
                 using var httpClient = new HttpClient();
                 using var userInfoRequest = new HttpRequestMessage(HttpMethod.Get, "https://www.googleapis.com/oauth2/v3/userinfo");
@@ -166,7 +176,7 @@ public class AuthController : ControllerBase
                 Token = _jwt.GenerateToken(user.UserId)
             });
         }
-        catch (Google.Apis.Auth.InvalidJwtException ex)
+        catch (InvalidJwtException ex)
         {
             _logger.LogWarning(ex, "Invalid Google IdToken");
             return Unauthorized(new ErrorResponse { Error = "Token Google không hợp lệ hoặc đã hết hạn" });
@@ -280,6 +290,29 @@ public class AuthController : ControllerBase
         return token.Replace("\r", string.Empty)
                     .Replace("\n", string.Empty)
                     .Trim();
+    }
+
+    private string[] GetGoogleAudiences()
+    {
+        var config = new ConfigurationBuilder()
+            .SetBasePath(Directory.GetCurrentDirectory())
+            .AddJsonFile("appsettings.json")
+            .AddEnvironmentVariables()
+            .Build();
+
+        var rawValues = new[]
+        {
+            config["GOOGLE_CLIENT_ID"],
+            config["GOOGLE_CLIENT_IDS"],
+            config["GoogleAuth:ClientId"],
+            config["GoogleAuth:ClientIds"]
+        };
+
+        return rawValues
+            .Where(v => !string.IsNullOrWhiteSpace(v))
+            .SelectMany(v => v!.Split(',', ';', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            .Distinct(StringComparer.Ordinal)
+            .ToArray();
     }
 
     private static UserDto MapUser(User user, bool full = false)

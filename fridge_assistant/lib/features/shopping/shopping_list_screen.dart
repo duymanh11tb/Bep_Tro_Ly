@@ -8,7 +8,9 @@ import 'cooking_detail_screen.dart';
 
 /// Màn hình Danh sách mua sắm (tab Đi chợ)
 class ShoppingListScreen extends StatefulWidget {
-  const ShoppingListScreen({super.key});
+  final ValueChanged<int>? onGoToFridge;
+
+  const ShoppingListScreen({super.key, this.onGoToFridge});
 
   @override
   State<ShoppingListScreen> createState() => _ShoppingListScreenState();
@@ -24,6 +26,7 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
   String _suggestionText =
       'Dựa trên thực đơn tuần này, bạn có thể cần thêm Hành tím và Nước mắm';
   static const bool _enableMockFallback = false;
+  bool _isTransferringToFridge = false;
 
   @override
   void initState() {
@@ -1050,7 +1053,9 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
     }
   }
 
-  void _onMoveToFridge() {
+  Future<void> _onMoveToFridge() async {
+    if (_isTransferringToFridge) return;
+
     final checked = _allItems.where((i) => i.isChecked).toList();
     if (checked.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -1062,15 +1067,40 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
       );
       return;
     }
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Đã chuyển ${checked.length} mục vào tủ lạnh (tính năng đang phát triển)',
+
+    setState(() => _isTransferringToFridge = true);
+    final result = await ShoppingService.transferToFridge(items: checked);
+    if (!mounted) return;
+    setState(() => _isTransferringToFridge = false);
+
+    if (result.successCount > 0) {
+      widget.onGoToFridge?.call(result.successCount);
+    }
+
+    if (result.failedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã thêm ${result.successCount} mục, còn ${result.failedCount} mục chưa chuyển được.',
+          ),
+          backgroundColor: AppColors.warning,
+          behavior: SnackBarBehavior.floating,
         ),
-        backgroundColor: AppColors.primary,
-        behavior: SnackBarBehavior.floating,
-      ),
-    );
+      );
+      return;
+    }
+
+    if (result.successCount == 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Không thể chuyển mục nào vào tủ lạnh. Vui lòng thử lại.',
+          ),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   Future<void> _showAddItemDialog() async {
@@ -1934,20 +1964,36 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
               ),
               const Spacer(),
               GestureDetector(
-                onTap: _onMoveToFridge,
-                child: const Row(
+                onTap: _isTransferringToFridge ? null : _onMoveToFridge,
+                child: Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    Text(
-                      'Vào tủ lạnh',
-                      style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w600,
-                        color: Colors.white,
+                    if (_isTransferringToFridge)
+                      const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            Colors.white,
+                          ),
+                        ),
+                      )
+                    else
+                      const Text(
+                        'Vào tủ lạnh',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.white,
+                        ),
                       ),
+                    const SizedBox(width: 4),
+                    const Icon(
+                      Icons.arrow_forward,
+                      size: 20,
+                      color: Colors.white,
                     ),
-                    SizedBox(width: 4),
-                    Icon(Icons.arrow_forward, size: 20, color: Colors.white),
                   ],
                 ),
               ),

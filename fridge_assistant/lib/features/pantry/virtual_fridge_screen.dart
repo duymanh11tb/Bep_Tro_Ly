@@ -10,21 +10,13 @@ class VirtualFridgeScreen extends StatefulWidget {
 }
 
 class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
-  static const List<String> _categoryTabs = [
-    'Tất cả',
-    'Rau củ',
-    'Thịt cá',
-    'Sữa',
-    'Trái cây',
-    'Khác',
-  ];
-
-  final TextEditingController _searchController = TextEditingController();
+  static const String _filterUrgent = 'Khẩn cấp';
+  static const String _filterAll = 'Tất cả';
+  static const String _filterVegetable = 'Rau củ';
 
   List<PantryItem> _items = [];
   bool _isLoading = true;
-  String _selectedCategory = 'Tất cả';
-  String _searchQuery = '';
+  String _selectedFilter = _filterUrgent;
 
   @override
   void initState() {
@@ -32,28 +24,15 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
     _loadItems();
   }
 
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
-  }
-
   Future<void> _loadItems() async {
     setState(() => _isLoading = true);
-    final items = await PantryService.getItems();
+    final items = await PantryService.getExpiringItems(days: 7);
     if (!mounted) return;
 
     setState(() {
       _items = items;
       _isLoading = false;
     });
-  }
-
-  Future<void> _openAddProduct() async {
-    final result = await Navigator.pushNamed(context, '/add-product');
-    if (result == true) {
-      await _loadItems();
-    }
   }
 
   Future<void> _deleteItem(PantryItem item) async {
@@ -101,21 +80,26 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
   }
 
   List<PantryItem> get _filteredItems {
-    final q = _searchQuery.trim().toLowerCase();
-
     return _items.where((item) {
-      final mappedCategory = _mapCategory(item.category);
-      final categoryMatched =
-          _selectedCategory == 'Tất cả' || mappedCategory == _selectedCategory;
-
-      if (!categoryMatched) return false;
-
-      if (q.isEmpty) return true;
-
-      final name = item.name.toLowerCase();
-      final category = item.category.toLowerCase();
-      return name.contains(q) || category.contains(q);
+      switch (_selectedFilter) {
+        case _filterUrgent:
+          return item.daysUntilExpiry <= 1;
+        case _filterVegetable:
+          return _mapCategory(item.category) == _filterVegetable;
+        default:
+          return true;
+      }
     }).toList();
+  }
+
+  int get _urgentCount {
+    return _items.where((item) => item.daysUntilExpiry <= 1).length;
+  }
+
+  int get _vegetableCount {
+    return _items
+        .where((item) => _mapCategory(item.category) == _filterVegetable)
+        .length;
   }
 
   String _mapCategory(String raw) {
@@ -148,193 +132,208 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
   }
 
   String _remainingText(PantryItem item) {
-    if (item.expiryDate == null) return 'Không rõ hạn';
-    if (item.isExpired) {
-      return 'Quá hạn ${item.daysUntilExpiry.abs()} ngày';
-    }
-    if (item.daysUntilExpiry == 0) return 'Hôm nay';
-    if (item.daysUntilExpiry == 1) return 'Còn 1 ngày';
-    return 'Còn ${item.daysUntilExpiry} ngày';
+    if (item.expiryDate == null) return 'HSD: Không rõ';
+    if (item.daysUntilExpiry < 0) return 'HSD: Quá hạn';
+    if (item.daysUntilExpiry == 0) return 'HSD : Hôm nay';
+    if (item.daysUntilExpiry == 1) return 'HSD : Ngày mai';
+    return 'HSD : ${item.daysUntilExpiry} ngày';
   }
 
   @override
   Widget build(BuildContext context) {
     final items = _filteredItems;
+    final subtitle = _urgentCount == 0
+        ? 'Không có nguyên liệu cần dùng ngay'
+        : '$_urgentCount nguyên liệu cần dùng ngay';
 
-    return Stack(
-      children: [
-        RefreshIndicator(
-          onRefresh: _loadItems,
-          color: AppColors.primary,
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
+    return RefreshIndicator(
+      onRefresh: _loadItems,
+      color: AppColors.primary,
+      child: ListView(
+        padding: const EdgeInsets.fromLTRB(12, 10, 12, 20),
+        children: [
+          Row(
             children: [
-              const Center(
-                child: Text(
-                  'Tủ lạnh ảo',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
+              Container(
+                width: 34,
+                height: 34,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: const Color(0xFFE5E7EB)),
+                ),
+                child: IconButton(
+                  onPressed: () {
+                    if (Navigator.of(context).canPop()) {
+                      Navigator.of(context).pop();
+                    }
+                  },
+                  icon: const Icon(
+                    Icons.arrow_back_ios_new,
+                    size: 14,
                     color: AppColors.textPrimary,
                   ),
                 ),
               ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: _searchController,
-                onChanged: (value) {
-                  setState(() => _searchQuery = value);
-                },
-                decoration: InputDecoration(
-                  hintText: 'Tìm kiếm nguyên liệu',
-                  prefixIcon: const Icon(Icons.search, size: 18),
-                  filled: true,
-                  fillColor: const Color(0xFFF4F5F7),
-                  contentPadding: const EdgeInsets.symmetric(vertical: 0),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(24),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              SizedBox(
-                height: 34,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: _categoryTabs.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final category = _categoryTabs[index];
-                    final selected = category == _selectedCategory;
-                    return ChoiceChip(
-                      label: Text(category),
-                      selected: selected,
-                      onSelected: (_) {
-                        setState(() => _selectedCategory = category);
-                      },
-                      selectedColor: AppColors.primary,
-                      backgroundColor: const Color(0xFFF1F3F5),
-                      labelStyle: TextStyle(
-                        color: selected
-                            ? Colors.white
-                            : AppColors.textSecondary,
-                        fontWeight: FontWeight.w600,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      'Sắp hết hạn',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      subtitle,
+                      style: const TextStyle(
                         fontSize: 12,
-                      ),
-                      side: BorderSide.none,
-                      showCheckmark: false,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    );
-                  },
-                ),
-              ),
-              const SizedBox(height: 14),
-              if (_isLoading)
-                const Padding(
-                  padding: EdgeInsets.only(top: 40),
-                  child: Center(
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  ),
-                )
-              else if (items.isEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 28,
-                  ),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFF8FAF8),
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.divider),
-                  ),
-                  child: const Column(
-                    children: [
-                      Icon(
-                        Icons.kitchen_outlined,
-                        size: 34,
                         color: AppColors.textSecondary,
                       ),
-                      SizedBox(height: 10),
-                      Text(
-                        'Tủ lạnh đang trống',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                          color: AppColors.textPrimary,
-                        ),
-                      ),
-                      SizedBox(height: 4),
-                      Text(
-                        'Nhấn nút + để thêm nguyên liệu mới',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ],
-                  ),
-                )
-              else
-                ...items.map((item) => _buildItemCard(item)),
+                    ),
+                  ],
+                ),
+              ),
             ],
           ),
-        ),
-        Positioned(
-          right: 18,
-          bottom: 16,
-          child: FloatingActionButton(
-            onPressed: _openAddProduct,
-            backgroundColor: AppColors.primary,
-            shape: const CircleBorder(),
-            child: const Icon(Icons.add, color: Colors.white),
+          const SizedBox(height: 12),
+          SizedBox(
+            height: 34,
+            child: ListView(
+              scrollDirection: Axis.horizontal,
+              children: [
+                _buildFilterChip(_filterUrgent, _urgentCount),
+                const SizedBox(width: 8),
+                _buildFilterChip(_filterAll, _items.length),
+                const SizedBox(width: 8),
+                _buildFilterChip(_filterVegetable, _vegetableCount),
+              ],
+            ),
           ),
-        ),
-      ],
+          const SizedBox(height: 10),
+          _buildWarningCard(_urgentCount),
+          const SizedBox(height: 8),
+          if (_isLoading)
+            const Padding(
+              padding: EdgeInsets.only(top: 36),
+              child: Center(
+                child: CircularProgressIndicator(color: AppColors.primary),
+              ),
+            )
+          else if (items.isEmpty)
+            Container(
+              margin: const EdgeInsets.only(top: 24),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 22),
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppColors.divider),
+              ),
+              child: const Column(
+                children: [
+                  Icon(Icons.inventory_2_outlined, color: AppColors.textHint),
+                  SizedBox(height: 8),
+                  Text(
+                    'Không có nguyên liệu phù hợp',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.textPrimary,
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ...items.map(_buildItemCard),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildFilterChip(String title, int count) {
+    final isSelected = _selectedFilter == title;
+    return ChoiceChip(
+      label: Text('$title ($count)'),
+      selected: isSelected,
+      onSelected: (_) => setState(() => _selectedFilter = title),
+      backgroundColor: const Color(0xFFE5E7EB),
+      selectedColor: const Color(0xFF212121),
+      labelStyle: TextStyle(
+        fontSize: 12,
+        fontWeight: FontWeight.w600,
+        color: isSelected ? Colors.white : AppColors.textPrimary,
+      ),
+      side: BorderSide.none,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      showCheckmark: false,
+      visualDensity: const VisualDensity(horizontal: -1.5, vertical: -2),
+    );
+  }
+
+  Widget _buildWarningCard(int urgentCount) {
+    final message = urgentCount == 0
+        ? 'Hiện tại không có nguyên liệu nào cần xử lý gấp.'
+        : '$urgentCount nguyên liệu sẽ hết hạn trong 24h tới. Hãy sử dụng hoặc chế biến ngay.';
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFEEBEE),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Icon(Icons.warning_rounded, size: 18, color: AppColors.error),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Hành động ngay!',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.error,
+                  ),
+                ),
+                const SizedBox(height: 1),
+                Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: Color(0xFFB91C1C),
+                    height: 1.3,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 
   Widget _buildItemCard(PantryItem item) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      margin: const EdgeInsets.only(bottom: 10),
+      padding: const EdgeInsets.all(8),
       decoration: BoxDecoration(
-        color: const Color(0xFFF3F4F6),
-        borderRadius: BorderRadius.circular(14),
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: const Color(0xFFEDEFF2)),
       ),
       child: Row(
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: const Color(0xFFE5E7EB),
-              borderRadius: BorderRadius.circular(10),
-            ),
-            child: item.imageUrl != null && item.imageUrl!.isNotEmpty
-                ? ClipRRect(
-                    borderRadius: BorderRadius.circular(10),
-                    child: Image.network(
-                      item.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) {
-                        return const Icon(
-                          Icons.inventory_2_outlined,
-                          size: 18,
-                          color: AppColors.textSecondary,
-                        );
-                      },
-                    ),
-                  )
-                : const Icon(
-                    Icons.inventory_2_outlined,
-                    size: 18,
-                    color: AppColors.textSecondary,
-                  ),
-          ),
-          const SizedBox(width: 10),
+          _buildItemImage(item),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
@@ -345,41 +344,29 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
                   overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
-                    fontSize: 14,
+                    fontSize: 15,
                     color: AppColors.textPrimary,
                   ),
                 ),
-                const SizedBox(height: 2),
+                const SizedBox(height: 1),
                 Text(
-                  '${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} ${item.unit}',
+                  'Số lượng: ${item.quantity % 1 == 0 ? item.quantity.toInt() : item.quantity} ${item.unit}',
                   style: const TextStyle(
                     fontSize: 12,
                     color: AppColors.textSecondary,
                   ),
                 ),
+                const SizedBox(height: 2),
+                Text(
+                  _remainingText(item),
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _statusColor(item),
+                  ),
+                ),
               ],
             ),
-          ),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                _statusText(item),
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: _statusColor(item),
-                ),
-              ),
-              const SizedBox(height: 2),
-              Text(
-                _remainingText(item),
-                style: const TextStyle(
-                  fontSize: 11,
-                  color: AppColors.textSecondary,
-                ),
-              ),
-            ],
           ),
           IconButton(
             onPressed: () => _deleteItem(item),
@@ -387,6 +374,38 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
             icon: const Icon(Icons.delete, size: 18, color: AppColors.error),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildItemImage(PantryItem item) {
+    if (item.imageUrl != null && item.imageUrl!.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: Image.network(
+          item.imageUrl!,
+          width: 78,
+          height: 62,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _buildImageFallback(),
+        ),
+      );
+    }
+    return _buildImageFallback();
+  }
+
+  Widget _buildImageFallback() {
+    return Container(
+      width: 78,
+      height: 62,
+      decoration: BoxDecoration(
+        color: const Color(0xFFF3F4F6),
+        borderRadius: BorderRadius.circular(10),
+      ),
+      child: const Icon(
+        Icons.inventory_2_outlined,
+        size: 22,
+        color: AppColors.textSecondary,
       ),
     );
   }
