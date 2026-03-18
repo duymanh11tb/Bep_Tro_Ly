@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
+import '../../services/google_auth_service.dart';
 import '../../services/pantry_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import 'widgets/dashboard_header.dart';
@@ -1053,13 +1054,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _handleLogout() async {
-    final authService = AuthService();
-    await authService.logout();
+    final googleAuthService = GoogleAuthService();
+    await googleAuthService.signOut();
     await PantryService.clearCache();
     if (mounted) {
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil('/onboarding', (route) => false);
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        '/onboarding',
+        (route) => false,
+        arguments: {'showLogoutNotice': true},
+      );
     }
   }
 }

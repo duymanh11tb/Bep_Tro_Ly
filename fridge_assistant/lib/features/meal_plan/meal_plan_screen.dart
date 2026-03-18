@@ -88,10 +88,25 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
     );
 
     if (!mounted) return;
+    final effective = data.isNotEmpty
+        ? data
+        : (_discoverySuggestions.isNotEmpty
+              ? _discoverySuggestions.take(6).toList()
+              : data);
+
     setState(() {
-      _ingredientSuggestions = data;
+      _ingredientSuggestions = effective;
       _isGeneratingByIngredients = false;
     });
+
+    if (effective.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Tạm thời chưa có món phù hợp, vui lòng thử lại sau.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
   }
 
   DateTime get _selectedDate =>

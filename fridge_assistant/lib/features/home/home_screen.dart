@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
-import '../../services/auth_service.dart';
+import '../../services/google_auth_service.dart';
 
 class HomeScreen extends StatelessWidget {
   const HomeScreen({super.key});
@@ -47,13 +47,14 @@ class HomeScreen extends StatelessWidget {
   }
 
   Future<void> _handleLogout(BuildContext context) async {
-    final authService = AuthService();
-    await authService.logout();
-    
+    final googleAuthService = GoogleAuthService();
+    await googleAuthService.signOut();
+
     if (context.mounted) {
       Navigator.of(context).pushNamedAndRemoveUntil(
-        '/onboarding', 
+        '/onboarding',
         (route) => false,
+        arguments: {'showLogoutNotice': true},
       );
     }
   }

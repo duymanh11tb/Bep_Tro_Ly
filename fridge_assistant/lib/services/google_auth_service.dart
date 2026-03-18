@@ -20,6 +20,11 @@ class GoogleAuthService {
 
   Future<Map<String, dynamic>> signInWithGoogle() async {
     try {
+      // Đảm bảo mở lại trình chọn tài khoản thay vì bám phiên cũ.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
       // 1. Khởi động quy trình đăng nhập Google
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
@@ -62,7 +67,17 @@ class GoogleAuthService {
   }
 
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
-    await _authService.logout();
+    try {
+      // disconnect sẽ revoke quyền và xóa phiên Google local,
+      // giúp lần đăng nhập sau hiện lại hộp chọn tài khoản.
+      await _googleSignIn.disconnect();
+    } catch (_) {
+      // Fallback nếu chưa từng connect hoặc revoke thất bại.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+    } finally {
+      await _authService.logout();
+    }
   }
 }
