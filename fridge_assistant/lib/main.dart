@@ -5,6 +5,7 @@ import 'core/theme/app_colors.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
 import 'services/auth_service.dart';
+import 'services/local_notification_service.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/product/add_product_screen.dart';
 import 'features/pantry/virtual_fridge_screen.dart';
@@ -12,6 +13,7 @@ import 'features/pantry/virtual_fridge_screen.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await dotenv.load(fileName: ".env");
+  await LocalNotificationService.init();
   runApp(const BepTroLyApp());
 }
 

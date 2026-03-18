@@ -13,6 +13,11 @@ class ApiService {
 
   static const Duration _requestTimeout = Duration(seconds: 15);
   static const int _maxRetries = 2;
+  static const Duration _tapDebounceWindow = Duration(milliseconds: 900);
+
+  // Prevent request spam from rapid repeated taps.
+  static final Map<String, Future<http.Response>> _inFlightRequests = {};
+  static final Map<String, _RecentResponse> _recentResponses = {};
 
   static Future<Map<String, String>> getHeaders({bool withAuth = false}) async {
     final headers = {
@@ -38,12 +43,19 @@ class ApiService {
   }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
+    final requestKey = _buildRequestKey(
+      method: 'POST',
+      endpoint: endpoint,
+      withAuth: withAuth,
+      body: body,
+    );
 
     debugPrint('POST $url');
     debugPrint('Body: ${jsonEncode(body)}');
 
-    return _requestWithRetry(
-      () => http
+    return _sendWithTapGuard(
+      requestKey: requestKey,
+      send: () => http
           .post(url, headers: headers, body: jsonEncode(body))
           .timeout(_requestTimeout),
     );
@@ -55,9 +67,15 @@ class ApiService {
   }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
+    final requestKey = _buildRequestKey(
+      method: 'GET',
+      endpoint: endpoint,
+      withAuth: withAuth,
+    );
 
-    return _requestWithRetry(
-      () => http.get(url, headers: headers).timeout(_requestTimeout),
+    return _sendWithTapGuard(
+      requestKey: requestKey,
+      send: () => http.get(url, headers: headers).timeout(_requestTimeout),
     );
   }
 
@@ -68,8 +86,16 @@ class ApiService {
   }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
-    return _requestWithRetry(
-      () => http
+    final requestKey = _buildRequestKey(
+      method: 'PUT',
+      endpoint: endpoint,
+      withAuth: withAuth,
+      body: body,
+    );
+
+    return _sendWithTapGuard(
+      requestKey: requestKey,
+      send: () => http
           .put(url, headers: headers, body: jsonEncode(body))
           .timeout(_requestTimeout),
     );
@@ -81,9 +107,58 @@ class ApiService {
   }) async {
     final url = Uri.parse('$baseUrl$endpoint');
     final headers = await getHeaders(withAuth: withAuth);
-    return _requestWithRetry(
-      () => http.delete(url, headers: headers).timeout(_requestTimeout),
+    final requestKey = _buildRequestKey(
+      method: 'DELETE',
+      endpoint: endpoint,
+      withAuth: withAuth,
     );
+
+    return _sendWithTapGuard(
+      requestKey: requestKey,
+      send: () => http.delete(url, headers: headers).timeout(_requestTimeout),
+    );
+  }
+
+  static String _buildRequestKey({
+    required String method,
+    required String endpoint,
+    required bool withAuth,
+    Map<String, dynamic>? body,
+  }) {
+    final bodyEncoded = body == null ? '' : jsonEncode(body);
+    return '$method|$endpoint|auth:$withAuth|$bodyEncoded';
+  }
+
+  static Future<http.Response> _sendWithTapGuard({
+    required String requestKey,
+    required Future<http.Response> Function() send,
+  }) async {
+    final inFlight = _inFlightRequests[requestKey];
+    if (inFlight != null) {
+      debugPrint('ApiService: dedupe in-flight request $requestKey');
+      return inFlight;
+    }
+
+    final now = DateTime.now();
+    final recent = _recentResponses[requestKey];
+    if (recent != null && now.difference(recent.at) < _tapDebounceWindow) {
+      debugPrint('ApiService: throttled rapid repeat request $requestKey');
+      return recent.response;
+    }
+
+    final future = _requestWithRetry(send);
+    _inFlightRequests[requestKey] = future;
+
+    try {
+      final response = await future;
+      _recentResponses[requestKey] = _RecentResponse(
+        response: response,
+        at: DateTime.now(),
+      );
+      return response;
+    } finally {
+      _inFlightRequests.remove(requestKey);
+    }
   }
 
   static Future<http.Response> _requestWithRetry(
@@ -133,4 +208,11 @@ class ApiService {
     final jitterMs = Random().nextInt(250);
     return Duration(milliseconds: baseMs + jitterMs);
   }
+}
+
+class _RecentResponse {
+  final http.Response response;
+  final DateTime at;
+
+  const _RecentResponse({required this.response, required this.at});
 }

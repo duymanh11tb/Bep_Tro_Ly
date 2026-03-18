@@ -16,6 +16,7 @@ import '../meal_plan/meal_plan_screen.dart';
 import '../pantry/virtual_fridge_screen.dart';
 import '../pantry/pantry_overview_screen.dart';
 import '../recipes/recipe_detail_screen.dart';
+import '../recipes/recipe_recommendations_screen.dart';
 import '../scan/scan_ingredient_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
@@ -215,7 +216,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 );
                 if (result == true) _refresh();
               },
-              onSearchTap: () {},
+              onSearchTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const RecipeRecommendationsScreen(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 24),
 
