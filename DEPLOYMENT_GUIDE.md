@@ -45,15 +45,7 @@ git checkout dev
 ```
 
 ### Step 2: Create/Update .env File
-VPS should have `.env` in the project root:
-```bash
-cat > /root/bep-tro-ly/.env << 'EOF'
-DB_PASSWORD=manhduy1107@
-JWT_SECRET=bep-tro-ly-secret-key-2026-super-secure-jwt-token-key
-GEMINI_API_KEY=AIzaSyCihIwxRtjZ1mCV_VuhTT_7q_cj2bihqgA
-GOOGLE_CLIENT_ID=977314472436-s2jjffb8348anlep9uqch7em9jmr9f30.apps.googleusercontent.com
-EOF
-```
+
 
 ### Step 3: Run Deployment Script
 ```bash
