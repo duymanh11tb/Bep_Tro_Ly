@@ -78,14 +78,6 @@ git clone https://github.com/duymanh11tb/Bep_Tro_Ly.git bep-tro-ly
 cd bep-tro-ly
 git checkout dev
 
-# 3. Create .env file (paste credentials)
-cat > .env << 'EOF'
-DB_PASSWORD=manhduy1107@
-JWT_SECRET=bep-tro-ly-secret-key-2026-super-secure-jwt-token-key
-GEMINI_API_KEY=AIzaSyCihIwxRtjZ1mCV_VuhTT_7q_cj2bihqgA
-GOOGLE_CLIENT_ID=977314472436-s2jjffb8348anlep9uqch7em9jmr9f30.apps.googleusercontent.com
-EOF
-
 # 4. Run deploy script (automated)
 bash deploy.sh
 
