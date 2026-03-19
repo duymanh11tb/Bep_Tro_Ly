@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
 import '../../services/pantry_service.dart';
+import '../../services/region_preference_service.dart';
 import 'recipe_detail_screen.dart';
 
 class RecipeRecommendationsScreen extends StatefulWidget {
@@ -27,10 +28,13 @@ class _RecipeRecommendationsScreenState
   final Set<String> _loadedRecipeKeys = <String>{};
   bool _isLoading = true;
   bool _isLoadingMore = false;
+  bool _hasMore = true;
   String _selectedTab = _tabAll;
   String _searchQuery = '';
-  int _limit = _batchSize;
+  int _nextOffset = 0;
   int _ingredientCount = 0;
+  RegionalProfile? _regionalProfile;
+  bool _isLoadingRegion = false;
   late final AnimationController _shimmerController;
 
   @override
@@ -53,16 +57,21 @@ class _RecipeRecommendationsScreenState
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
 
-    final cached = await PantryService.getCachedAiSuggestions();
+    await _loadRegionalProfile();
+    final regionCacheKey = _regionalProfile?.cacheKey ?? 'all';
+    final cached = await PantryService.getCachedAiSuggestions(
+      regionCacheKey: regionCacheKey,
+    );
     if (mounted && cached.isNotEmpty) {
       setState(() {
         _replaceSuggestions(cached);
-        _limit = cached.length > _batchSize ? cached.length : _batchSize;
+        _nextOffset = cached.length;
+        _hasMore = true;
       });
     }
 
     await _loadPantryIngredientCount();
-    await _refreshSuggestions(limit: _limit);
+    await _refreshSuggestions(limit: _batchSize, offset: 0, append: false);
 
     if (!mounted) return;
     setState(() => _isLoading = false);
@@ -74,41 +83,57 @@ class _RecipeRecommendationsScreenState
     setState(() => _ingredientCount = items.length);
   }
 
-  Future<void> _refreshSuggestions({required int limit}) async {
-    final data = await PantryService.getAiSuggestions(limit: limit);
+  Future<void> _refreshSuggestions({
+    required int limit,
+    required int offset,
+    required bool append,
+  }) async {
+    final data = await PantryService.getAiSuggestions(
+      limit: limit,
+      offset: offset,
+      regionalProfile: _regionalProfile,
+    );
     if (!mounted) return;
 
-    if (data.isNotEmpty) {
-      setState(() {
+    setState(() {
+      if (append) {
+        _appendSuggestions(data);
+      } else {
         _replaceSuggestions(data);
-      });
-    }
+      }
+
+      _nextOffset = offset + data.length;
+      _hasMore = data.length >= limit;
+    });
   }
 
   Future<void> _loadMoreSuggestions() async {
-    if (_isLoadingMore) return;
+    if (_isLoadingMore || !_hasMore) return;
 
     setState(() => _isLoadingMore = true);
-    final nextLimit = _limit + _batchSize;
-    final data = await PantryService.getAiSuggestions(limit: nextLimit);
+    final data = await PantryService.getAiSuggestions(
+      limit: _batchSize,
+      offset: _nextOffset,
+      regionalProfile: _regionalProfile,
+    );
     if (!mounted) return;
 
     int appended = 0;
-    if (data.isNotEmpty) {
-      setState(() {
-        appended = _appendSuggestions(data);
-      });
-    }
-
     setState(() {
-      _limit = nextLimit;
+      appended = _appendSuggestions(data);
+      _nextOffset += data.length;
+      _hasMore = data.length >= _batchSize;
       _isLoadingMore = false;
     });
 
-    if (appended == 0) {
+    if (appended == 0 || !_hasMore) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Hiện chưa có thêm món mới để gợi ý.'),
+        SnackBar(
+          content: Text(
+            _hasMore
+                ? 'Hiện chưa có thêm món mới để gợi ý.'
+                : 'Bạn đã xem hết gợi ý hiện có.',
+          ),
           behavior: SnackBarBehavior.floating,
         ),
       );
@@ -116,8 +141,76 @@ class _RecipeRecommendationsScreenState
   }
 
   Future<void> _refresh() async {
+    await _loadRegionalProfile(forceRefresh: true);
     await _loadPantryIngredientCount();
-    await _refreshSuggestions(limit: _limit);
+    await _refreshSuggestions(limit: _batchSize, offset: 0, append: false);
+  }
+
+  Future<void> _loadRegionalProfile({bool forceRefresh = false}) async {
+    if (!mounted) return;
+    setState(() => _isLoadingRegion = true);
+
+    final profile = await RegionPreferenceService.getProfile(
+      forceRefresh: forceRefresh,
+    );
+
+    if (!mounted) return;
+    setState(() {
+      _regionalProfile = profile;
+      _isLoadingRegion = false;
+    });
+  }
+
+  Future<void> _setManualRegion(VietnamRegion region) async {
+    await RegionPreferenceService.setManualRegion(region);
+    await _loadRegionalProfile();
+    await _refreshSuggestions(limit: _batchSize, offset: 0, append: false);
+  }
+
+  Future<void> _setAutoRegion() async {
+    await RegionPreferenceService.clearManualRegion();
+    await _loadRegionalProfile(forceRefresh: true);
+    await _refreshSuggestions(limit: _batchSize, offset: 0, append: false);
+  }
+
+  String _seasoningHintText() {
+    final profile = _regionalProfile;
+    if (profile == null) return '';
+    return profile.seasoningPreference;
+  }
+
+  String _regionSummaryText() {
+    final profile = _regionalProfile;
+    if (profile == null) return 'Đang xác định vùng miền...';
+
+    final source = profile.isAutoDetected ? 'Tự động' : 'Bạn đã chọn';
+    final location = profile.detectedLocation?.trim();
+    if (location != null && location.isNotEmpty) {
+      return '$source: $location • ${profile.regionLabel}';
+    }
+    return '$source: ${profile.regionLabel}';
+  }
+
+  String _regionBadgeLabel() {
+    final profile = _regionalProfile;
+    if (profile == null) return 'Hợp vị Việt Nam';
+    return 'Hợp vị ${profile.regionLabel}';
+  }
+
+  Color _regionBadgeColor() {
+    final region = _regionalProfile?.region;
+    if (region == VietnamRegion.north) return const Color(0xFFE3F2FD);
+    if (region == VietnamRegion.central) return const Color(0xFFFFF3E0);
+    if (region == VietnamRegion.south) return const Color(0xFFE8F5E9);
+    return const Color(0xFFEFF6FF);
+  }
+
+  Color _regionBadgeTextColor() {
+    final region = _regionalProfile?.region;
+    if (region == VietnamRegion.north) return const Color(0xFF0D47A1);
+    if (region == VietnamRegion.central) return const Color(0xFFB45309);
+    if (region == VietnamRegion.south) return const Color(0xFF1B5E20);
+    return const Color(0xFF1E3A8A);
   }
 
   void _replaceSuggestions(List<RecipeSuggestion> data) {
@@ -288,6 +381,102 @@ class _RecipeRecommendationsScreenState
                 ),
               ),
               const SizedBox(height: 8),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: AppColors.divider),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.location_on_outlined,
+                          size: 18,
+                          color: AppColors.primary,
+                        ),
+                        const SizedBox(width: 6),
+                        const Text(
+                          'Gợi ý theo vùng miền',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const Spacer(),
+                        if (_isLoadingRegion)
+                          const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      _regionSummaryText(),
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      'Nêm vị ưu tiên: ${_seasoningHintText()}',
+                      style: const TextStyle(
+                        fontSize: 12,
+                        color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        ChoiceChip(
+                          label: const Text('Tự động'),
+                          selected: _regionalProfile?.isAutoDetected ?? true,
+                          onSelected: (_) => _setAutoRegion(),
+                          showCheckmark: false,
+                        ),
+                        ChoiceChip(
+                          label: const Text('Miền Bắc'),
+                          selected:
+                              _regionalProfile?.region == VietnamRegion.north &&
+                              !(_regionalProfile?.isAutoDetected ?? true),
+                          onSelected: (_) =>
+                              _setManualRegion(VietnamRegion.north),
+                          showCheckmark: false,
+                        ),
+                        ChoiceChip(
+                          label: const Text('Miền Trung'),
+                          selected:
+                              _regionalProfile?.region ==
+                                  VietnamRegion.central &&
+                              !(_regionalProfile?.isAutoDetected ?? true),
+                          onSelected: (_) =>
+                              _setManualRegion(VietnamRegion.central),
+                          showCheckmark: false,
+                        ),
+                        ChoiceChip(
+                          label: const Text('Miền Nam'),
+                          selected:
+                              _regionalProfile?.region == VietnamRegion.south &&
+                              !(_regionalProfile?.isAutoDetected ?? true),
+                          onSelected: (_) =>
+                              _setManualRegion(VietnamRegion.south),
+                          showCheckmark: false,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
               Text(
                 'Dựa trên ${_ingredientCount > 0 ? _ingredientCount : 0} nguyên liệu trong tủ lạnh của bạn',
                 style: const TextStyle(
@@ -322,7 +511,9 @@ class _RecipeRecommendationsScreenState
           right: 14,
           bottom: 12,
           child: ElevatedButton.icon(
-            onPressed: _isLoadingMore ? null : _loadMoreSuggestions,
+            onPressed: (_isLoadingMore || !_hasMore)
+                ? null
+                : _loadMoreSuggestions,
             icon: _isLoadingMore
                 ? const SizedBox(
                     width: 14,
@@ -333,7 +524,7 @@ class _RecipeRecommendationsScreenState
                     ),
                   )
                 : const Icon(Icons.auto_awesome, size: 16),
-            label: const Text('Gợi ý mới'),
+            label: Text(_hasMore ? 'Gợi ý mới' : 'Đã hết gợi ý'),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
@@ -432,6 +623,25 @@ class _RecipeRecommendationsScreenState
                     ),
                   ),
                   const SizedBox(height: 6),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: _regionBadgeColor(),
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Text(
+                      _regionBadgeLabel(),
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: _regionBadgeTextColor(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
                   Row(
                     children: [
                       const Icon(

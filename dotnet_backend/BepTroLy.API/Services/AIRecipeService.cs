@@ -3,6 +3,7 @@ using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Collections.Concurrent;
+using System.Globalization;
 using BepTroLy.API.Data;
 using BepTroLy.API.Models;
 using Microsoft.EntityFrameworkCore;
@@ -17,6 +18,85 @@ public class AIRecipeService
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> _cacheKeyLocks = new();
     private static readonly object _circuitLock = new();
+    private static readonly HashSet<string> _blockedImageHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "imgur.com",
+        "i.imgur.com",
+        "m.imgur.com",
+        "source.unsplash.com",
+        "picsum.photos",
+        "loremflickr.com"
+    };
+
+    private static readonly Dictionary<string, string> _exactDishFallbackImages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["pho bo"] = "https://images.pexels.com/photos/6646035/pexels-photo-6646035.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        ["bun bo hue"] = "https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        ["bun rieu cua"] = "https://images.pexels.com/photos/884600/pexels-photo-884600.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        ["thit bo luc lac"] = "https://images.pexels.com/photos/1860204/pexels-photo-1860204.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        ["ca kho to"] = "https://images.pexels.com/photos/262959/pexels-photo-262959.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        ["goi cuon tom thit"] = "https://images.pexels.com/photos/2097090/pexels-photo-2097090.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        ["com chien duong chau"] = "https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        ["mi xao bo"] = "https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    };
+
+    private static readonly Dictionary<string, string[]> _keywordFallbackImages = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["bo"] = new[]
+        {
+            "https://images.pexels.com/photos/1860204/pexels-photo-1860204.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            "https://images.pexels.com/photos/361184/asparagus-steak-veal-steak-veal-361184.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            "https://images.pexels.com/photos/769289/pexels-photo-769289.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["ga"] = new[]
+        {
+            "https://images.pexels.com/photos/616354/pexels-photo-616354.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            "https://images.pexels.com/photos/2338407/pexels-photo-2338407.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["ca"] = new[]
+        {
+            "https://images.pexels.com/photos/262959/pexels-photo-262959.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            "https://images.pexels.com/photos/1516415/pexels-photo-1516415.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["tom"] = new[]
+        {
+            "https://images.pexels.com/photos/3296277/pexels-photo-3296277.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            "https://images.pexels.com/photos/725991/pexels-photo-725991.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["bun"] = new[]
+        {
+            "https://images.pexels.com/photos/884600/pexels-photo-884600.jpeg?auto=compress&cs=tinysrgb&w=1200",
+            "https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["pho"] = new[]
+        {
+            "https://images.pexels.com/photos/6646035/pexels-photo-6646035.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["mi"] = new[]
+        {
+            "https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["lau"] = new[]
+        {
+            "https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["com"] = new[]
+        {
+            "https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        },
+        ["chay"] = new[]
+        {
+            "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200"
+        }
+    };
+
+    private static readonly string[] _genericFallbackImages =
+    {
+        "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        "https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=1200",
+        "https://images.pexels.com/photos/958547/pexels-photo-958547.jpeg?auto=compress&cs=tinysrgb&w=1200"
+    };
+
     private static int _consecutiveGeminiFailures;
     private static DateTime _circuitOpenUntilUtc = DateTime.MinValue;
     private static readonly TimeSpan _geminiTimeout = TimeSpan.FromSeconds(20);
@@ -42,28 +122,26 @@ public class AIRecipeService
     public async Task<Dictionary<string, object>> SuggestRecipesAsync(
         List<string> ingredients,
         Dictionary<string, object>? preferences = null,
-        int limit = 5)
+        int limit = 8,
+        int offset = 0)
     {
+        limit = Math.Clamp(limit, 1, 24);
+        offset = Math.Max(0, offset);
+        const int generationLimit = 24;
+
         // If no ingredients, we enter "Discovery" mode
         ingredients ??= new List<string>();
 
-        // Ensure preferences is not null and include limit so cache key
-        // differentiates between different requested recipe counts.
+        // Ensure preferences is not null.
         preferences ??= new Dictionary<string, object>();
-        preferences["limit"] = limit;
 
         // Check cache
-        var cacheKey = GenerateCacheKey(ingredients, preferences);
+        var cacheKey = GenerateCacheKey(ingredients, preferences, generationLimit);
         var cached = await GetFromCacheAsync(cacheKey);
         if (cached != null)
         {
             var cachedWithImages = EnsureRecipeImages(cached);
-            return new Dictionary<string, object>
-            {
-                ["success"] = true,
-                ["source"] = "cache",
-                ["recipes"] = cachedWithImages
-            };
+            return BuildPagedSuccessResponse(cachedWithImages, "cache", limit, offset);
         }
 
         // Prevent thundering herd: same cache key should generate AI only once at a time.
@@ -77,39 +155,30 @@ public class AIRecipeService
             if (cached != null)
             {
                 var cachedWithImages = EnsureRecipeImages(cached);
-                return new Dictionary<string, object>
-                {
-                    ["success"] = true,
-                    ["source"] = "cache",
-                    ["recipes"] = cachedWithImages
-                };
+                return BuildPagedSuccessResponse(cachedWithImages, "cache", limit, offset);
             }
 
-            var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit);
+            var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, generationLimit);
+            if (aiRecipes.Count < generationLimit)
+            {
+                var fallback = BuildLocalFallbackRecipes(ingredients, generationLimit);
+                aiRecipes = MergeUniqueRecipes(aiRecipes, fallback, generationLimit);
+            }
+
             var recipesWithImages = EnsureRecipeImages(aiRecipes);
             await SaveToCacheAsync(cacheKey, recipesWithImages);
 
-            return new Dictionary<string, object>
-            {
-                ["success"] = true,
-                ["source"] = "ai",
-                ["recipes"] = recipesWithImages
-            };
+            return BuildPagedSuccessResponse(recipesWithImages, "ai", limit, offset);
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "AI suggestion error");
 
-            var fallbackRecipes = BuildLocalFallbackRecipes(ingredients, limit);
+            var fallbackRecipes = BuildLocalFallbackRecipes(ingredients, generationLimit);
             if (fallbackRecipes.Count > 0)
             {
                 await SaveToCacheAsync(cacheKey, fallbackRecipes, ttlHours: 2);
-                return new Dictionary<string, object>
-                {
-                    ["success"] = true,
-                    ["source"] = "local_fallback",
-                    ["recipes"] = fallbackRecipes
-                };
+                return BuildPagedSuccessResponse(fallbackRecipes, "local_fallback", limit, offset);
             }
 
             return new Dictionary<string, object>
@@ -135,14 +204,15 @@ public class AIRecipeService
     public async Task<Dictionary<string, object>> SuggestFromPantryAsync(
         int userId,
         Dictionary<string, object>? preferences = null,
-        int limit = 5)
+        int limit = 8,
+        int offset = 0)
     {
         var pantryItems = await _db.PantryItems
             .Where(p => p.UserId == userId && p.Status == "active")
             .ToListAsync();
 
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
-        return await SuggestRecipesAsync(ingredients, preferences, limit);
+        return await SuggestRecipesAsync(ingredients, preferences, limit, offset);
     }
 
     private async Task<List<object>> GenerateAISuggestionsAsync(
@@ -157,24 +227,31 @@ public class AIRecipeService
 
         var dietary = preferences.TryGetValue("dietary_restrictions", out var d) ? d?.ToString() ?? "" : "";
         var cuisine = preferences.TryGetValue("cuisine", out var c) ? c?.ToString() ?? "Việt Nam" : "Việt Nam";
+        var regionalSeasoning = preferences.TryGetValue("regional_seasoning", out var rs) ? rs?.ToString() ?? "" : "";
         var difficulty = preferences.TryGetValue("difficulty", out var diff) ? diff?.ToString() ?? "any" : "any";
 
         var dietaryText = !string.IsNullOrEmpty(dietary) ? $"Chế độ ăn đặc biệt: {dietary}" : "";
+        var regionalSeasoningText = !string.IsNullOrEmpty(regionalSeasoning)
+            ? $"Định hướng nêm vị theo vùng miền: {regionalSeasoning}"
+            : "";
         var difficultyText = difficulty != "any" ? $"Độ khó: {difficulty}" : "";
 
         var statusText = ingredients.Any()
             ? $"CHẾ ĐỘ GỢI Ý: Dựa trên {ingredients.Count} nguyên liệu có sẵn: {string.Join(", ", ingredients)}."
             : "CHẾ ĐỘ KHÁM PHÁ: Tủ lạnh đang trống. Hãy gợi ý những món ăn Việt Nam 'quốc dân' cực kỳ hấp dẫn, dễ làm và phổ biến.";
 
+        var overGenerateLimit = Math.Min(24, Math.Max(limit + 4, limit * 2));
+
         var prompt = $$"""
             Bạn là một đầu bếp Việt Nam tài ba với kiến thức sâu rộng về ẩm thực 3 miền.
             
             {{statusText}}
             Phong cách ẩm thực yêu thích: {{cuisine}}
+            {{regionalSeasoningText}}
             {{dietaryText}}
             {{difficultyText}}
 
-            NHIỆM VỤ: Đề xuất {{limit}} món ăn. 
+            NHIỆM VỤ: Đề xuất {{overGenerateLimit}} món ăn KHÁC NHAU rõ ràng, không trùng lặp tên món.
             - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất.
             - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy chọn những món ngon nhất, dễ tìm mua nguyên liệu nhất.
 
@@ -274,7 +351,7 @@ public class AIRecipeService
             var recipes = resultDoc.RootElement.GetProperty("recipes");
             var parsed = JsonSerializer.Deserialize<List<object>>(recipes.GetRawText()) ?? new List<object>();
             RecordGeminiSuccess();
-            return parsed;
+            return NormalizeAndRankAiRecipes(parsed, ingredients, limit);
         }
         catch (JsonException)
         {
@@ -286,7 +363,7 @@ public class AIRecipeService
                 var recipes = resultDoc.RootElement.GetProperty("recipes");
                 var parsed = JsonSerializer.Deserialize<List<object>>(recipes.GetRawText()) ?? new List<object>();
                 RecordGeminiSuccess();
-                return parsed;
+                return NormalizeAndRankAiRecipes(parsed, ingredients, limit);
             }
 
             RecordGeminiFailure();
@@ -332,13 +409,325 @@ public class AIRecipeService
         }
     }
 
-    private string GenerateCacheKey(List<string> ingredients, Dictionary<string, object>? preferences)
+    private string GenerateCacheKey(List<string> ingredients, Dictionary<string, object>? preferences, int limit)
     {
         var normalized = ingredients.Select(i => i.ToLower().Trim()).OrderBy(i => i).ToList();
-        var keyData = new { ingredients = normalized, preferences = preferences ?? new Dictionary<string, object>() };
+        var keyData = new
+        {
+            ingredients = normalized,
+            preferences = preferences ?? new Dictionary<string, object>(),
+            limit
+        };
         var keyString = JsonSerializer.Serialize(keyData, new JsonSerializerOptions { WriteIndented = false });
         var hashBytes = MD5.HashData(Encoding.UTF8.GetBytes(keyString));
         return Convert.ToHexString(hashBytes).ToLower();
+    }
+
+    private List<object> NormalizeAndRankAiRecipes(List<object> rawRecipes, List<string> ingredients, int maxCount)
+    {
+        var normalizedIngredients = ingredients
+            .Select(NormalizeText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet();
+
+        var unique = new Dictionary<string, Dictionary<string, object>>(StringComparer.Ordinal);
+
+        foreach (var raw in rawRecipes)
+        {
+            var map = ToDictionary(raw);
+            if (map == null) continue;
+
+            var normalized = NormalizeRecipeMap(map, normalizedIngredients);
+            var key = BuildRecipeKey(normalized);
+            if (string.IsNullOrWhiteSpace(key)) continue;
+
+            if (!unique.TryGetValue(key, out var existing))
+            {
+                unique[key] = normalized;
+                continue;
+            }
+
+            var oldScore = ParseDouble(existing, "match_score", 0.0);
+            var newScore = ParseDouble(normalized, "match_score", 0.0);
+            if (newScore > oldScore)
+            {
+                unique[key] = normalized;
+            }
+        }
+
+        return unique.Values
+            .OrderByDescending(x => ParseDouble(x, "match_score", 0.0))
+            .ThenBy(x => ParseInt(x, "prep_time", 0) + ParseInt(x, "cook_time", 0))
+            .Take(maxCount)
+            .Select(x => (object)x)
+            .ToList();
+    }
+
+    private Dictionary<string, object> BuildPagedSuccessResponse(
+        List<object> allRecipes,
+        string source,
+        int limit,
+        int offset)
+    {
+        var normalized = EnsureRecipeImages(allRecipes);
+        var paged = normalized.Skip(offset).Take(limit).ToList();
+        var nextOffset = offset + paged.Count;
+        var hasMore = nextOffset < normalized.Count;
+
+        return new Dictionary<string, object>
+        {
+            ["success"] = true,
+            ["source"] = source,
+            ["recipes"] = paged,
+            ["offset"] = offset,
+            ["limit"] = limit,
+            ["next_offset"] = nextOffset,
+            ["has_more"] = hasMore,
+            ["total_candidates"] = normalized.Count
+        };
+    }
+
+    private Dictionary<string, object> NormalizeRecipeMap(
+        Dictionary<string, object> map,
+        HashSet<string> normalizedIngredients)
+    {
+        var normalized = new Dictionary<string, object>(StringComparer.OrdinalIgnoreCase);
+
+        var name = map.TryGetValue("name", out var rawName)
+            ? rawName?.ToString()?.Trim() ?? "Món ngon Việt Nam"
+            : "Món ngon Việt Nam";
+
+        var description = map.TryGetValue("description", out var rawDescription)
+            ? rawDescription?.ToString()?.Trim() ?? "Món ngon dễ làm, hợp vị gia đình."
+            : "Món ngon dễ làm, hợp vị gia đình.";
+
+        var ingredientsUsed = NormalizeStringList(map, "ingredients_used");
+        var ingredientsMissing = NormalizeStringList(map, "ingredients_missing");
+        var instructions = NormalizeStringList(map, "instructions");
+
+        if (ingredientsUsed.Count == 0 && normalizedIngredients.Count > 0)
+        {
+            var matching = normalizedIngredients
+                .Where(i => NormalizeText(name).Contains(i) || NormalizeText(description).Contains(i))
+                .Take(4)
+                .ToList();
+            ingredientsUsed = matching;
+        }
+
+        var prepTime = Math.Clamp(ParseInt(map, "prep_time", 8), 0, 180);
+        var cookTime = Math.Clamp(ParseInt(map, "cook_time", 15), 1, 240);
+        var servings = Math.Clamp(ParseInt(map, "servings", 2), 1, 12);
+        var score = Math.Clamp(ParseDouble(map, "match_score", 0.55), 0.0, 1.0);
+
+        normalized["name"] = name;
+        normalized["description"] = description;
+        normalized["difficulty"] = NormalizeDifficulty(map.TryGetValue("difficulty", out var rawDifficulty)
+            ? rawDifficulty?.ToString()
+            : null);
+        normalized["prep_time"] = prepTime;
+        normalized["cook_time"] = cookTime;
+        normalized["servings"] = servings;
+        normalized["ingredients_used"] = ingredientsUsed;
+        normalized["ingredients_missing"] = ingredientsMissing;
+        normalized["instructions"] = instructions;
+        normalized["tips"] = map.TryGetValue("tips", out var rawTips)
+            ? rawTips?.ToString() ?? "Nêm nếm vừa vị trước khi tắt bếp."
+            : "Nêm nếm vừa vị trước khi tắt bếp.";
+        normalized["match_score"] = score;
+        normalized["ingredients_expiring_count"] = ParseInt(map, "ingredients_expiring_count", 0);
+
+        if (map.TryGetValue("image_url", out var imageObj) && IsValidRecipeImageUrl(imageObj?.ToString()))
+        {
+            normalized["image_url"] = imageObj!.ToString()!;
+        }
+        else
+        {
+            normalized["image_url"] = BuildFallbackImageUrl(name);
+        }
+
+        return normalized;
+    }
+
+    private static List<string> NormalizeStringList(Dictionary<string, object> map, string key)
+    {
+        if (!map.TryGetValue(key, out var value) || value == null)
+        {
+            return new List<string>();
+        }
+
+        if (value is JsonElement element && element.ValueKind == JsonValueKind.Array)
+        {
+            return element.EnumerateArray()
+                .Select(x => x.ToString().Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        if (value is IEnumerable<string> stringList)
+        {
+            return stringList
+                .Select(x => x.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        if (value is IEnumerable<object> list)
+        {
+            return list
+                .Select(x => x?.ToString()?.Trim())
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x!)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+
+        var single = value.ToString()?.Trim();
+        if (string.IsNullOrWhiteSpace(single))
+        {
+            return new List<string>();
+        }
+
+        return single
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+    }
+
+    private static int ParseInt(Dictionary<string, object> map, string key, int fallback)
+    {
+        if (!map.TryGetValue(key, out var value) || value == null)
+        {
+            return fallback;
+        }
+
+        if (value is JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Number && element.TryGetInt32(out var numeric))
+            {
+                return numeric;
+            }
+
+            if (element.ValueKind == JsonValueKind.String && int.TryParse(element.GetString(), out var fromString))
+            {
+                return fromString;
+            }
+        }
+
+        if (value is int i) return i;
+        if (int.TryParse(value.ToString(), out var parsed)) return parsed;
+        return fallback;
+    }
+
+    private static double ParseDouble(Dictionary<string, object> map, string key, double fallback)
+    {
+        if (!map.TryGetValue(key, out var value) || value == null)
+        {
+            return fallback;
+        }
+
+        if (value is JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var numeric))
+            {
+                return numeric;
+            }
+
+            if (element.ValueKind == JsonValueKind.String && double.TryParse(element.GetString(), out var fromString))
+            {
+                return fromString;
+            }
+        }
+
+        if (value is double d) return d;
+        if (value is float f) return f;
+        if (double.TryParse(value.ToString(), out var parsed)) return parsed;
+        return fallback;
+    }
+
+    private static string NormalizeDifficulty(string? raw)
+    {
+        var value = raw?.Trim().ToLowerInvariant();
+        return value switch
+        {
+            "easy" => "easy",
+            "medium" => "medium",
+            "hard" => "hard",
+            _ => "easy"
+        };
+    }
+
+    private static string BuildRecipeKey(Dictionary<string, object> map)
+    {
+        var name = map.TryGetValue("name", out var rawName)
+            ? NormalizeText(rawName?.ToString() ?? string.Empty)
+            : string.Empty;
+
+        var used = NormalizeStringList(map, "ingredients_used")
+            .Select(NormalizeText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .OrderBy(x => x)
+            .Take(4);
+
+        return $"{name}|{string.Join("|", used)}";
+    }
+
+    private static string NormalizeText(string input)
+    {
+        if (string.IsNullOrWhiteSpace(input)) return string.Empty;
+
+        var normalized = input.Trim().ToLowerInvariant().Normalize(NormalizationForm.FormD);
+        var sb = new StringBuilder(normalized.Length);
+
+        foreach (var c in normalized)
+        {
+            var category = CharUnicodeInfo.GetUnicodeCategory(c);
+            if (category == UnicodeCategory.NonSpacingMark) continue;
+
+            if (c == 'đ')
+            {
+                sb.Append('d');
+                continue;
+            }
+
+            sb.Append(c);
+        }
+
+        return Regex.Replace(sb.ToString(), "\\s+", " ").Trim();
+    }
+
+    private static List<object> MergeUniqueRecipes(List<object> primary, List<object> secondary, int limit)
+    {
+        var merged = new List<object>();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        foreach (var recipe in primary.Concat(secondary))
+        {
+            if (recipe is not Dictionary<string, object> map)
+            {
+                merged.Add(recipe);
+                if (merged.Count >= limit) break;
+                continue;
+            }
+
+            var key = BuildRecipeKey(map);
+            if (string.IsNullOrWhiteSpace(key) || seen.Contains(key))
+            {
+                continue;
+            }
+
+            seen.Add(key);
+            merged.Add(recipe);
+
+            if (merged.Count >= limit)
+            {
+                break;
+            }
+        }
+
+        return merged;
     }
 
     private List<object> EnsureRecipeImages(List<object> recipes)
@@ -362,7 +751,7 @@ public class AIRecipeService
                 ? imageObj?.ToString()
                 : null;
 
-            if (string.IsNullOrWhiteSpace(imageUrl) || !Uri.IsWellFormedUriString(imageUrl, UriKind.Absolute))
+            if (!IsValidRecipeImageUrl(imageUrl))
             {
                 map["image_url"] = BuildFallbackImageUrl(name);
             }
@@ -400,8 +789,48 @@ public class AIRecipeService
 
     private string BuildFallbackImageUrl(string recipeName)
     {
-        var query = Uri.EscapeDataString($"vietnamese food {recipeName}");
-        return $"https://source.unsplash.com/1200x800/?{query}";
+        var normalized = NormalizeText(recipeName);
+
+        foreach (var pair in _exactDishFallbackImages)
+        {
+            if (normalized.Contains(pair.Key))
+            {
+                return pair.Value;
+            }
+        }
+
+        foreach (var pair in _keywordFallbackImages)
+        {
+            if (!normalized.Contains(pair.Key)) continue;
+
+            var options = pair.Value;
+            var index = Math.Abs(recipeName.GetHashCode()) % options.Length;
+            return options[index];
+        }
+
+        var genericIndex = Math.Abs(recipeName.GetHashCode()) % _genericFallbackImages.Length;
+        return _genericFallbackImages[genericIndex];
+    }
+
+    private static bool IsValidRecipeImageUrl(string? imageUrl)
+    {
+        if (string.IsNullOrWhiteSpace(imageUrl)) return false;
+
+        if (!Uri.TryCreate(imageUrl, UriKind.Absolute, out var uri)) return false;
+        if (!(uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps)) return false;
+
+        if (_blockedImageHosts.Contains(uri.Host)) return false;
+
+        var url = imageUrl.ToLowerInvariant();
+        if (url.Contains("source.unsplash.com") ||
+            url.Contains("picsum.photos") ||
+            url.Contains("loremflickr.com") ||
+            url.Contains("imgur.com"))
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private async Task<List<object>?> GetFromCacheAsync(string cacheKey)

@@ -38,6 +38,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   List<PantryItem> _expiringItems = [];
   PantryStats? _stats;
   List<RecipeSuggestion> _suggestions = [];
+  bool _hasMoreSuggestions = false;
 
   @override
   void initState() {
@@ -98,18 +99,37 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
-      final results = await Future.wait([
+      final coreResults = await Future.wait([
         PantryService.getExpiringItems(days: 7),
         PantryService.getStats(),
-        // Lấy nhiều gợi ý để người dùng vuốt xem đa dạng hơn.
-        PantryService.getAiSuggestions(limit: 10),
       ]);
+
+      // Đồng bộ với cơ chế phân trang mới để dữ liệu AI ổn định hơn.
+      final firstPage = await PantryService.getAiSuggestionsPage(
+        limit: 10,
+        offset: 0,
+      );
+
+      var suggestions = List<RecipeSuggestion>.from(firstPage.suggestions);
+      var hasMore = firstPage.hasMore;
+
+      if (hasMore && suggestions.length < 10) {
+        final remaining = 10 - suggestions.length;
+        final secondPage = await PantryService.getAiSuggestionsPage(
+          limit: remaining,
+          offset: firstPage.nextOffset,
+        );
+
+        suggestions = [...suggestions, ...secondPage.suggestions];
+        hasMore = secondPage.hasMore;
+      }
 
       if (mounted) {
         setState(() {
-          _expiringItems = results[0] as List<PantryItem>;
-          _stats = results[1] as PantryStats?;
-          _suggestions = results[2] as List<RecipeSuggestion>;
+          _expiringItems = coreResults[0] as List<PantryItem>;
+          _stats = coreResults[1] as PantryStats?;
+          _suggestions = suggestions;
+          _hasMoreSuggestions = hasMore;
           _isLoading = false;
         });
       }
@@ -238,12 +258,30 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   )
                 : _suggestions.isEmpty
                 ? _buildEmptySuggestions()
-                : AiSuggestionCarousel(
-                    suggestions: _suggestions,
-                    autoScrollDuration: const Duration(seconds: 7),
-                    onViewRecipeTap: (recipe) {
-                      _openRecipeDetail(recipe);
-                    },
+                : Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      AiSuggestionCarousel(
+                        suggestions: _suggestions,
+                        autoScrollDuration: const Duration(seconds: 7),
+                        onViewRecipeTap: (recipe) {
+                          _openRecipeDetail(recipe);
+                        },
+                      ),
+                      if (_hasMoreSuggestions)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 8, left: 4),
+                          child: Text(
+                            'Còn thêm gợi ý mới trong trang Công thức',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppColors.textSecondary.withValues(
+                                alpha: 0.9,
+                              ),
+                            ),
+                          ),
+                        ),
+                    ],
                   ),
             const SizedBox(height: 24),
 

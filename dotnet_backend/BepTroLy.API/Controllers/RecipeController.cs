@@ -26,7 +26,8 @@ public class RecipeController : ControllerBase
         var result = await _aiService.SuggestRecipesAsync(
             request.Ingredients ?? new List<string>(),
             request.Preferences,
-            request.Limit
+            request.Limit,
+            request.Offset
         );
 
         var success = (bool)result["success"];
@@ -45,7 +46,8 @@ public class RecipeController : ControllerBase
         var result = await _aiService.SuggestFromPantryAsync(
             userId.Value,
             request.Preferences,
-            request.Limit
+            request.Limit,
+            request.Offset
         );
 
         var success = (bool)result["success"];

@@ -4,13 +4,15 @@ public class SuggestRecipesRequest
 {
     public List<string> Ingredients { get; set; } = new();
     public Dictionary<string, object>? Preferences { get; set; }
-    public int Limit { get; set; } = 5;
+    public int Limit { get; set; } = 8;
+    public int Offset { get; set; } = 0;
 }
 
 public class SuggestFromPantryRequest
 {
     public Dictionary<string, object>? Preferences { get; set; }
-    public int Limit { get; set; } = 5;
+    public int Limit { get; set; } = 8;
+    public int Offset { get; set; } = 0;
 }
 
 public class RecipeSuggestionResponse

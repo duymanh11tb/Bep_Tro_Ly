@@ -274,6 +274,57 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Cập nhật thành công!", user = MapUser(user, full: true) });
     }
 
+    /// <summary>Upload ảnh đại diện.</summary>
+    [HttpPost("avatar")]
+    [Authorize]
+    public async Task<IActionResult> UploadAvatar(IFormFile avatar)
+    {
+        if (avatar == null || avatar.Length == 0)
+            return BadRequest(new ErrorResponse { Error = "Vui lòng chọn ảnh" });
+
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return NotFound();
+
+        try
+        {
+            var uploadsDir = Path.Combine(
+                Directory.GetCurrentDirectory(),
+                "wwwroot",
+                "uploads",
+                "avatars"
+            );
+            if (!Directory.Exists(uploadsDir)) Directory.CreateDirectory(uploadsDir);
+
+            var ext = Path.GetExtension(avatar.FileName);
+            var fileName = $"{userId}_{DateTime.UtcNow.Ticks}{ext}";
+            var filePath = Path.Combine(uploadsDir, fileName);
+
+            await using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await avatar.CopyToAsync(stream);
+            }
+
+            var photoUrl = $"/uploads/avatars/{fileName}";
+            user.PhotoUrl = photoUrl;
+            user.UpdatedAt = DateTime.UtcNow;
+            await _db.SaveChangesAsync();
+
+            return Ok(new
+            {
+                message = "Đã cập nhật ảnh đại diện",
+                user = MapUser(user, full: true)
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading avatar for user {UserId}", userId);
+            return StatusCode(500, new ErrorResponse { Error = "Lỗi hệ thống khi tải ảnh lên" });
+        }
+    }
+
     // ==================== Helpers ====================
 
     private int? GetCurrentUserId()

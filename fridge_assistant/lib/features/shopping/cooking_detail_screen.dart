@@ -1,9 +1,12 @@
 import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/shopping_list_item.dart';
 import '../../services/local_notification_service.dart';
+
+enum _CookerMode { beginner, experienced }
 
 /// Màn hình Công thức nấu ăn chi tiết - Phiên bản nâng cấp
 class CookingDetailScreen extends StatefulWidget {
@@ -16,10 +19,18 @@ class CookingDetailScreen extends StatefulWidget {
 }
 
 class _CookingDetailScreenState extends State<CookingDetailScreen> {
+  static const String _cookerModePrefKey = 'cooking_mode_preference_v1';
+  final GlobalKey _step3SectionKey = GlobalKey();
+  final ScrollController _scrollController = ScrollController();
+
+  late List<String> _steps;
+  late int _prepStepCount;
   late List<bool> _stepCompleted;
   Timer? _countdownTimer;
   late int _remainingSeconds;
   bool _isTimerRunning = false;
+  bool _cookingPhaseStarted = false;
+  _CookerMode _cookerMode = _CookerMode.beginner;
 
   int get _notificationId {
     final recipeKey =
@@ -30,15 +41,18 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
   @override
   void initState() {
     super.initState();
-    final stepsCount = widget.section.recipeInfo?.steps?.length ?? 3;
-    _stepCompleted = List.generate(stepsCount, (index) => false);
+    _steps = _resolveSteps();
+    _prepStepCount = _detectPrepStepCount(_steps);
+    _stepCompleted = List.generate(_steps.length, (index) => false);
     final cookMinutes = widget.section.recipeInfo?.cookTime ?? 0;
     _remainingSeconds = (cookMinutes > 0 ? cookMinutes : 20) * 60;
+    _loadSavedCookerMode();
   }
 
   @override
   void dispose() {
     _countdownTimer?.cancel();
+    _scrollController.dispose();
     LocalNotificationService.cancelNotification(_notificationId);
     super.dispose();
   }
@@ -49,21 +63,200 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
     return completedCount / _stepCompleted.length;
   }
 
+  bool get _isPrepDone {
+    if (_prepStepCount <= 0) return true;
+    for (var i = 0; i < _prepStepCount; i++) {
+      if (!_stepCompleted[i]) return false;
+    }
+    return true;
+  }
+
+  int get _currentPrepStepIndex {
+    for (var i = 0; i < _prepStepCount; i++) {
+      if (!_stepCompleted[i]) return i;
+    }
+    return -1;
+  }
+
+  int get _currentCookingStepIndex {
+    for (var i = _prepStepCount; i < _stepCompleted.length; i++) {
+      if (!_stepCompleted[i]) return i;
+    }
+    return -1;
+  }
+
+  bool _isStepEnabled(int index) {
+    if (_isExperiencedMode) return true;
+
+    if (index < _prepStepCount) {
+      final currentPrep = _currentPrepStepIndex;
+      if (currentPrep == -1) return _stepCompleted[index];
+      return index == currentPrep || _stepCompleted[index];
+    }
+
+    if (!_cookingPhaseStarted) return false;
+
+    final currentCooking = _currentCookingStepIndex;
+    if (currentCooking == -1) return _stepCompleted[index];
+    return index == currentCooking || _stepCompleted[index];
+  }
+
+  String _stepLockHint(int index) {
+    if (index < _prepStepCount) {
+      final currentPrep = _currentPrepStepIndex;
+      if (currentPrep == -1) return 'Bạn đã hoàn tất các bước chuẩn bị.';
+      return 'Hãy hoàn thành Bước ${currentPrep + 1} trước để mở bước tiếp theo.';
+    }
+
+    if (!_cookingPhaseStarted) {
+      return 'Hãy bấm "Bước 2: Bắt đầu nấu" sau khi hoàn tất sơ chế.';
+    }
+
+    final currentCooking = _currentCookingStepIndex;
+    if (currentCooking == -1) return 'Bạn đã hoàn tất các bước nấu.';
+    return 'Hãy hoàn thành Bước ${currentCooking + 1} trước để mở bước tiếp theo.';
+  }
+
+  bool get _allStepsDone => _stepCompleted.every((c) => c);
+
+  bool get _isExperiencedMode => _cookerMode == _CookerMode.experienced;
+
+  bool get _canFinishDish {
+    if (_remainingSeconds > 0) return false;
+    if (_isExperiencedMode) return true;
+    return _cookingPhaseStarted && _allStepsDone;
+  }
+
+  bool get _isReadyForStep2 =>
+      !_isExperiencedMode && _isPrepDone && !_cookingPhaseStarted;
+
+  List<String> _resolveSteps() {
+    final infoSteps = widget.section.recipeInfo?.steps
+        ?.where((e) => e.trim().isNotEmpty)
+        .toList();
+    if (infoSteps != null && infoSteps.isNotEmpty) {
+      return infoSteps;
+    }
+    return const [
+      'Sơ chế nguyên liệu: rửa sạch, cắt và chuẩn bị gia vị.',
+      'Chuẩn bị dụng cụ nấu: nồi/chảo, muỗng, bếp ở mức lửa phù hợp.',
+      'Bắt đầu nấu: cho nguyên liệu chính vào nồi/chảo theo thứ tự phù hợp.',
+      'Nêm nếm, hoàn thiện món ăn và trình bày ra đĩa.',
+    ];
+  }
+
+  int _detectPrepStepCount(List<String> steps) {
+    final cookingKeywords = <String>[
+      'bat dau nau',
+      'nau',
+      'xao',
+      'chien',
+      'luoc',
+      'ham',
+      'kho',
+      'nuong',
+      'ap chao',
+      'om',
+      'rim',
+      'rang',
+    ];
+
+    for (var i = 0; i < steps.length; i++) {
+      final normalized = _normalize(steps[i]);
+      final isCooking = cookingKeywords.any(normalized.contains);
+      if (isCooking) {
+        return i == 0 ? 1 : i;
+      }
+    }
+
+    if (steps.length <= 1) return 1;
+    return (steps.length / 2).ceil();
+  }
+
+  String _normalize(String text) {
+    var value = text.toLowerCase();
+    const map = {
+      'à': 'a',
+      'á': 'a',
+      'ạ': 'a',
+      'ả': 'a',
+      'ã': 'a',
+      'â': 'a',
+      'ầ': 'a',
+      'ấ': 'a',
+      'ậ': 'a',
+      'ẩ': 'a',
+      'ẫ': 'a',
+      'ă': 'a',
+      'ằ': 'a',
+      'ắ': 'a',
+      'ặ': 'a',
+      'ẳ': 'a',
+      'ẵ': 'a',
+      'è': 'e',
+      'é': 'e',
+      'ẹ': 'e',
+      'ẻ': 'e',
+      'ẽ': 'e',
+      'ê': 'e',
+      'ề': 'e',
+      'ế': 'e',
+      'ệ': 'e',
+      'ể': 'e',
+      'ễ': 'e',
+      'ì': 'i',
+      'í': 'i',
+      'ị': 'i',
+      'ỉ': 'i',
+      'ĩ': 'i',
+      'ò': 'o',
+      'ó': 'o',
+      'ọ': 'o',
+      'ỏ': 'o',
+      'õ': 'o',
+      'ô': 'o',
+      'ồ': 'o',
+      'ố': 'o',
+      'ộ': 'o',
+      'ổ': 'o',
+      'ỗ': 'o',
+      'ơ': 'o',
+      'ờ': 'o',
+      'ớ': 'o',
+      'ợ': 'o',
+      'ở': 'o',
+      'ỡ': 'o',
+      'ù': 'u',
+      'ú': 'u',
+      'ụ': 'u',
+      'ủ': 'u',
+      'ũ': 'u',
+      'ư': 'u',
+      'ừ': 'u',
+      'ứ': 'u',
+      'ự': 'u',
+      'ử': 'u',
+      'ữ': 'u',
+      'ỳ': 'y',
+      'ý': 'y',
+      'ỵ': 'y',
+      'ỷ': 'y',
+      'ỹ': 'y',
+      'đ': 'd',
+    };
+    map.forEach((k, v) => value = value.replaceAll(k, v));
+    return value;
+  }
+
   @override
   Widget build(BuildContext context) {
     final info = widget.section.recipeInfo;
     final hasRecipeInfo = info != null;
-    final steps =
-        info?.steps ??
-        [
-          'Sơ chế nguyên liệu sạch sẽ và chuẩn bị gia vị.',
-          'Bắt đầu nấu: cho nguyên liệu chính vào nồi/chảo theo thứ tự phù hợp.',
-          'Nêm nếm, hoàn thiện món ăn và trình bày ra đĩa.',
-        ];
 
     return Scaffold(
       backgroundColor: AppColors.background,
       body: CustomScrollView(
+        controller: _scrollController,
         slivers: [
           // ──── App Bar với Ảnh & Tiến độ ────
           SliverAppBar(
@@ -173,7 +366,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   // ──── Thanh tiến trình ────
-                  if (_stepCompleted.isNotEmpty) ...[
+                  if (_stepCompleted.isNotEmpty && !_isExperiencedMode) ...[
                     ClipRRect(
                       borderRadius: BorderRadius.circular(10),
                       child: LinearProgressIndicator(
@@ -189,6 +382,62 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                     ),
                     const SizedBox(height: 24),
                   ],
+
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: AppColors.divider.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Chế độ',
+                          style: TextStyle(
+                            fontSize: 14,
+                            fontWeight: FontWeight.w700,
+                            color: AppColors.textPrimary,
+                          ),
+                        ),
+                        const SizedBox(height: 10),
+                        Wrap(
+                          spacing: 8,
+                          children: [
+                            ChoiceChip(
+                              label: const Text('Chế độ chi tiết'),
+                              selected: _cookerMode == _CookerMode.beginner,
+                              onSelected: (_) =>
+                                  _setCookerMode(_CookerMode.beginner),
+                              showCheckmark: false,
+                            ),
+                            ChoiceChip(
+                              label: const Text('Chế độ nhanh'),
+                              selected: _cookerMode == _CookerMode.experienced,
+                              onSelected: (_) =>
+                                  _setCookerMode(_CookerMode.experienced),
+                              showCheckmark: false,
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          _isExperiencedMode
+                              ? 'Nấu quen: bấm giờ nấu và nhận thông báo hoàn tất.'
+                              : 'Nấu mới: sơ chế theo từng bước, sau đó mới bắt đầu nấu.',
+                          style: const TextStyle(
+                            color: AppColors.textSecondary,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 16),
 
                   // ──── Thông tin nhanh ────
                   if (hasRecipeInfo)
@@ -275,7 +524,10 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                         Column(
                           children: [
                             ElevatedButton(
-                              onPressed: _remainingSeconds == 0
+                              onPressed:
+                                  (!_cookingPhaseStarted &&
+                                          !_isExperiencedMode) ||
+                                      _remainingSeconds == 0
                                   ? null
                                   : (_isTimerRunning
                                         ? _pauseTimer
@@ -292,7 +544,10 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                             ),
                             const SizedBox(height: 8),
                             OutlinedButton(
-                              onPressed: _resetTimer,
+                              onPressed:
+                                  (_cookingPhaseStarted || _isExperiencedMode)
+                                  ? _resetTimer
+                                  : null,
                               style: OutlinedButton.styleFrom(
                                 minimumSize: const Size(92, 36),
                               ),
@@ -304,6 +559,24 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                     ),
                   ),
                   const SizedBox(height: 24),
+
+                  if (!_cookingPhaseStarted && !_isExperiencedMode)
+                    Container(
+                      width: double.infinity,
+                      margin: const EdgeInsets.only(bottom: 24),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFF1F5F9),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: const Color(0xFFCBD5E1)),
+                      ),
+                      child: Text(
+                        _isPrepDone
+                            ? 'Bạn đã hoàn tất sơ chế. Bấm "Bước 2: Bắt đầu nấu" để mở phần nấu và hẹn giờ.'
+                            : 'Đây là giai đoạn chuẩn bị/sơ chế, chưa tính là nấu. Hoàn tất tuần tự các bước trước.',
+                        style: const TextStyle(color: AppColors.textSecondary),
+                      ),
+                    ),
 
                   // ──── Nguyên liệu ────
                   const Text(
@@ -347,20 +620,107 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                     const SizedBox(height: 24),
                   ],
 
-                  // ──── Các bước thực hiện ────
-                  const Text(
-                    'Các bước thực hiện',
-                    style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.textPrimary,
+                  if (!_isExperiencedMode) ...[
+                    // ──── Các bước thực hiện ────
+                    const Text(
+                      'Các bước thực hiện',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: AppColors.textPrimary,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 16),
-                  ...List.generate(
-                    steps.length,
-                    (index) => _buildStepItem(index, steps[index]),
-                  ),
+                    const SizedBox(height: 16),
+                    const Text(
+                      'Bước 1: Sơ chế & chuẩn bị',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...List.generate(
+                      _prepStepCount,
+                      (index) => _buildStepItem(
+                        index,
+                        _steps[index],
+                        enabled: _isStepEnabled(index),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton(
+                        onPressed: _isPrepDone ? _startCookingPhase : null,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: _isReadyForStep2
+                              ? const Color(0xFF2E7D32)
+                              : AppColors.primary,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          side: _isReadyForStep2
+                              ? const BorderSide(
+                                  color: Color(0xFFA5D6A7),
+                                  width: 1.4,
+                                )
+                              : null,
+                          shadowColor: _isReadyForStep2
+                              ? const Color(0x552E7D32)
+                              : null,
+                          elevation: _isReadyForStep2 ? 3 : 0,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                        child: Text(
+                          _cookingPhaseStarted
+                              ? 'Bước 2: Đã bắt đầu nấu'
+                              : 'Bước 2: Bắt đầu nấu',
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 18),
+                    Container(
+                      key: _step3SectionKey,
+                      child: const Text(
+                        'Bước 3: Nấu món',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    ...List.generate(_steps.length - _prepStepCount, (offset) {
+                      final index = _prepStepCount + offset;
+                      return _buildStepItem(
+                        index,
+                        _steps[index],
+                        enabled: _isStepEnabled(index),
+                      );
+                    }),
+                  ] else ...[
+                    Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: AppColors.divider.withValues(alpha: 0.6),
+                        ),
+                      ),
+                      child: const Text(
+                        'Chế độ nhanh: chỉ cần bật hẹn giờ nấu, hệ thống sẽ thông báo khi món hoàn thành.',
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                  ],
 
                   const SizedBox(height: 40),
 
@@ -369,6 +729,18 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                     width: double.infinity,
                     child: ElevatedButton(
                       onPressed: () {
+                        if (!_cookingPhaseStarted && !_isExperiencedMode) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(
+                              content: Text(
+                                'Hãy hoàn tất sơ chế và bấm "Bước 2: Bắt đầu nấu" trước nhé.',
+                              ),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                          return;
+                        }
+
                         if (_remainingSeconds > 0) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
@@ -381,7 +753,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                           return;
                         }
 
-                        if (_progress < 1.0) {
+                        if (!_isExperiencedMode && !_allStepsDone) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
                               content: Text(
@@ -390,12 +762,13 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                               behavior: SnackBarBehavior.floating,
                             ),
                           );
-                        } else {
-                          Navigator.pop(context);
+                          return;
                         }
+
+                        Navigator.pop(context);
                       },
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: _progress == 1.0
+                        backgroundColor: _canFinishDish
                             ? AppColors.primary
                             : Colors.grey[400],
                         foregroundColor: Colors.white,
@@ -406,7 +779,7 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                         elevation: 0,
                       ),
                       child: Text(
-                        _progress == 1.0
+                        _canFinishDish
                             ? 'Hoàn thành món ăn ✨'
                             : 'Đang thực hiện...',
                         style: const TextStyle(
@@ -506,27 +879,51 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
     );
   }
 
-  Widget _buildStepItem(int index, String content) {
+  Widget _buildStepItem(int index, String content, {required bool enabled}) {
     final isCompleted = _stepCompleted[index];
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 16),
       child: InkWell(
         onTap: () {
+          if (!enabled) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(_stepLockHint(index)),
+                behavior: SnackBarBehavior.floating,
+              ),
+            );
+            return;
+          }
+          if (isCompleted) return;
+
+          final wasPrepDone = _isPrepDone;
           setState(() {
-            _stepCompleted[index] = !_stepCompleted[index];
+            _stepCompleted[index] = true;
           });
+
+          final isLastPrepStep = index == _prepStepCount - 1;
+          if (!wasPrepDone &&
+              isLastPrepStep &&
+              _isPrepDone &&
+              !_isExperiencedMode) {
+            _startCookingPhase(autoStartedFromPrep: true);
+          }
         },
         borderRadius: BorderRadius.circular(16),
         child: Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: isCompleted
+            color: !enabled
+                ? const Color(0xFFF8FAFC)
+                : isCompleted
                 ? AppColors.primary.withValues(alpha: 0.05)
                 : Colors.white,
             borderRadius: BorderRadius.circular(16),
             border: Border.all(
-              color: isCompleted
+              color: !enabled
+                  ? const Color(0xFFE2E8F0)
+                  : isCompleted
                   ? AppColors.primary.withValues(alpha: 0.3)
                   : AppColors.divider.withValues(alpha: 0.5),
               width: isCompleted ? 1.5 : 1,
@@ -539,13 +936,17 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                 width: 28,
                 height: 28,
                 decoration: BoxDecoration(
-                  color: isCompleted
+                  color: !enabled
+                      ? const Color(0xFFE2E8F0)
+                      : isCompleted
                       ? AppColors.primary
                       : AppColors.primary.withValues(alpha: 0.1),
                   shape: BoxShape.circle,
                 ),
                 child: Center(
-                  child: isCompleted
+                  child: !enabled
+                      ? const Icon(Icons.lock_outline, size: 14)
+                      : isCompleted
                       ? const Icon(Icons.check, color: Colors.white, size: 16)
                       : Text(
                           '${index + 1}',
@@ -563,7 +964,9 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
                   content,
                   style: TextStyle(
                     fontSize: 15,
-                    color: isCompleted
+                    color: !enabled
+                        ? AppColors.textHint
+                        : isCompleted
                         ? AppColors.textHint
                         : AppColors.textPrimary,
                     height: 1.5,
@@ -579,8 +982,22 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
   }
 
   void _startTimer() {
+    if (!_cookingPhaseStarted && !_isExperiencedMode) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Hãy bấm "Bước 2: Bắt đầu nấu" sau khi hoàn tất sơ chế.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
     if (_remainingSeconds <= 0) return;
-    setState(() => _isTimerRunning = true);
+    setState(() {
+      _isTimerRunning = true;
+      _cookingPhaseStarted = true;
+    });
     LocalNotificationService.scheduleCookingDoneNotification(
       notificationId: _notificationId,
       recipeName: widget.section.title,
@@ -598,6 +1015,12 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
         setState(() {
           _remainingSeconds = 0;
           _isTimerRunning = false;
+          _cookingPhaseStarted = true;
+          if (!_isExperiencedMode) {
+            for (var i = 0; i < _stepCompleted.length; i++) {
+              _stepCompleted[i] = true;
+            }
+          }
         });
         LocalNotificationService.cancelNotification(_notificationId);
         _notifyCookingDone();
@@ -652,6 +1075,97 @@ class _CookingDetailScreenState extends State<CookingDetailScreen> {
           ],
         );
       },
+    );
+  }
+
+  Future<void> _startCookingPhase({bool autoStartedFromPrep = false}) async {
+    if (_cookingPhaseStarted) return;
+    if (!_isPrepDone) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Bạn chưa hoàn tất các bước chuẩn bị.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _cookingPhaseStarted = true;
+    });
+
+    if (autoStartedFromPrep) {
+      await _scrollToCookingSection();
+    }
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          autoStartedFromPrep
+              ? 'Đã hoàn tất sơ chế và tự động chuyển sang phần nấu.'
+              : 'Đã bắt đầu giai đoạn nấu. Bạn có thể chạy hẹn giờ.',
+        ),
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
+  Future<void> _scrollToCookingSection() async {
+    await Future<void>.delayed(const Duration(milliseconds: 120));
+    if (!mounted) return;
+
+    if (_scrollController.hasClients) {
+      final max = _scrollController.position.maxScrollExtent;
+      await _scrollController.animateTo(
+        max,
+        duration: const Duration(milliseconds: 420),
+        curve: Curves.easeOutCubic,
+      );
+      return;
+    }
+
+    final targetContext = _step3SectionKey.currentContext;
+    if (targetContext == null) return;
+    await Scrollable.ensureVisible(
+      targetContext,
+      duration: const Duration(milliseconds: 420),
+      curve: Curves.easeOutCubic,
+      alignment: 0.1,
+    );
+  }
+
+  void _setCookerMode(_CookerMode mode) {
+    if (_cookerMode == mode) return;
+    setState(() {
+      _cookerMode = mode;
+      if (_isExperiencedMode) {
+        _cookingPhaseStarted = true;
+      } else {
+        _cookingPhaseStarted = _isPrepDone;
+      }
+    });
+    _saveCookerMode(mode);
+  }
+
+  Future<void> _loadSavedCookerMode() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_cookerModePrefKey);
+    final mode = raw == 'experienced'
+        ? _CookerMode.experienced
+        : _CookerMode.beginner;
+
+    if (!mounted) return;
+    setState(() {
+      _cookerMode = mode;
+      _cookingPhaseStarted = _isExperiencedMode || _isPrepDone;
+    });
+  }
+
+  Future<void> _saveCookerMode(_CookerMode mode) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(
+      _cookerModePrefKey,
+      mode == _CookerMode.experienced ? 'experienced' : 'beginner',
     );
   }
 }

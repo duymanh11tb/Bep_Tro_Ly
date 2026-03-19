@@ -20,6 +20,7 @@ class RecipeDetailScreen extends StatefulWidget {
 class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   bool _isLoadingPantry = true;
   bool _isAddingMissing = false;
+  bool _isStartingCooking = false;
   bool _hasShownMissingSuggestionNotif = false;
   List<_IngredientState> _ingredients = const [];
   final Set<String> _checkedIngredientKeys = <String>{};
@@ -294,9 +295,13 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
 
     var successCount = 0;
     for (final missing in _missingIngredients) {
+      final guidance = PantryService.getIngredientGuidance(missing.label);
+      final notes = guidance == null
+          ? 'Thiếu cho món ${recipe.name}'
+          : 'Thiếu cho món ${recipe.name}. ${guidance.purchaseHint} ${guidance.usageHint}';
       final success = await ShoppingService.addItem(
         name: missing.label,
-        notes: 'Thiếu cho món ${recipe.name}',
+        notes: notes,
       );
       if (success) successCount += 1;
     }
@@ -348,7 +353,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     });
   }
 
-  void _startCooking() {
+  Future<void> _startCooking() async {
     if (!_canStartCooking) {
       final missingCount = _missingIngredients.length;
       final uncheckedCount =
@@ -365,6 +370,28 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
         context,
       ).showSnackBar(SnackBar(content: Text(message)));
       return;
+    }
+
+    if (_isStartingCooking) return;
+    setState(() => _isStartingCooking = true);
+
+    final consumedCount = await PantryService.consumeIngredientsByNames(
+      _availableIngredients.map((e) => e.label).toList(),
+    );
+
+    if (!mounted) return;
+
+    setState(() => _isStartingCooking = false);
+
+    if (consumedCount > 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Đã trừ $consumedCount nguyên liệu khỏi tủ lạnh cho món này.',
+          ),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     }
 
     Navigator.push(
@@ -510,7 +537,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _startCooking,
+                  onPressed: _isStartingCooking ? null : _startCooking,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _canStartCooking
                         ? const Color(0xFF10D93A)
@@ -529,7 +556,9 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                     ),
                   ),
                   child: Text(
-                    _canStartCooking
+                    _isStartingCooking
+                        ? 'Đang chuẩn bị nấu...'
+                        : _canStartCooking
                         ? 'Bắt đầu nấu'
                         : 'Chuẩn bị đủ nguyên liệu để nấu',
                   ),
@@ -610,23 +639,62 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                   ),
             const SizedBox(width: 10),
             Expanded(
-              child: Text(
-                ingredient.label,
-                style: TextStyle(
-                  fontSize: 16,
-                  color: ingredient.isAvailable
-                      ? AppColors.textPrimary
-                      : const Color(0xFF9A3412),
-                ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    ingredient.label,
+                    style: TextStyle(
+                      fontSize: 16,
+                      color: ingredient.isAvailable
+                          ? AppColors.textPrimary
+                          : const Color(0xFF9A3412),
+                    ),
+                  ),
+                  if (PantryService.getIngredientGuidance(ingredient.label) !=
+                      null)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 2),
+                      child: Text(
+                        PantryService.getIngredientGuidance(
+                          ingredient.label,
+                        )!.usageHint,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ),
+                ],
               ),
             ),
             if (!ingredient.isAvailable)
-              const Text(
-                'Cần mua',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w700,
-                  color: Color(0xFFEF6C00),
+              Padding(
+                padding: const EdgeInsets.only(left: 8),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Text(
+                      'Cần mua',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: Color(0xFFEF6C00),
+                      ),
+                    ),
+                    if (PantryService.getIngredientGuidance(ingredient.label) !=
+                        null)
+                      Text(
+                        PantryService.getIngredientGuidance(
+                          ingredient.label,
+                        )!.purchaseHint,
+                        style: const TextStyle(
+                          fontSize: 11,
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                  ],
                 ),
               ),
           ],
