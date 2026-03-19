@@ -70,6 +70,10 @@ namespace BepTroLy.API.Migrations
                         .HasColumnType("json")
                         .HasColumnName("extra_data");
 
+                    b.Property<int?>("FridgeId")
+                        .HasColumnType("int")
+                        .HasColumnName("fridge_id");
+
                     b.Property<int?>("RelatedItemId")
                         .HasColumnType("int")
                         .HasColumnName("related_item_id");
@@ -87,72 +91,6 @@ namespace BepTroLy.API.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("activity_logs");
-                });
-
-            modelBuilder.Entity("BepTroLy.API.Models.BatchJob", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("int")
-                        .HasColumnName("id");
-
-                    b.Property<string>("BatchName")
-                        .IsRequired()
-                        .HasMaxLength(256)
-                        .HasColumnType("varchar(256)")
-                        .HasColumnName("batch_name");
-
-                    b.Property<DateTime?>("CompletedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("completed_at");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("datetime(6)")
-                        .HasColumnName("created_at");
-
-                    b.Property<string>("DisplayName")
-                        .IsRequired()
-                        .HasMaxLength(128)
-                        .HasColumnType("varchar(128)")
-                        .HasColumnName("display_name");
-
-                    b.Property<string>("ErrorMessage")
-                        .HasColumnType("longtext")
-                        .HasColumnName("error_message");
-
-                    b.Property<int>("FailedCount")
-                        .HasColumnType("int")
-                        .HasColumnName("failed_count");
-
-                    b.Property<string>("InputData")
-                        .HasColumnType("json")
-                        .HasColumnName("input_data");
-
-                    b.Property<int>("RequestCount")
-                        .HasColumnType("int")
-                        .HasColumnName("request_count");
-
-                    b.Property<string>("ResultData")
-                        .HasColumnType("json")
-                        .HasColumnName("result_data");
-
-                    b.Property<string>("State")
-                        .IsRequired()
-                        .HasMaxLength(32)
-                        .HasColumnType("varchar(32)")
-                        .HasColumnName("state");
-
-                    b.Property<int>("SucceededCount")
-                        .HasColumnType("int")
-                        .HasColumnName("succeeded_count");
-
-                    b.Property<int?>("UserId")
-                        .HasColumnType("int")
-                        .HasColumnName("user_id");
-
-                    b.HasKey("Id");
-
-                    b.ToTable("batch_jobs");
                 });
 
             modelBuilder.Entity("BepTroLy.API.Models.Category", b =>
@@ -213,6 +151,86 @@ namespace BepTroLy.API.Migrations
                     b.HasKey("CategoryId");
 
                     b.ToTable("categories");
+                });
+
+            modelBuilder.Entity("BepTroLy.API.Models.Fridge", b =>
+                {
+                    b.Property<int>("FridgeId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("fridge_id");
+
+                    b.Property<DateTime>("CreatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("created_at");
+
+                    b.Property<string>("Location")
+                        .HasMaxLength(255)
+                        .HasColumnType("varchar(255)")
+                        .HasColumnName("location");
+
+                    b.Property<string>("Name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("varchar(100)")
+                        .HasColumnName("name");
+
+                    b.Property<int>("OwnerId")
+                        .HasColumnType("int")
+                        .HasColumnName("owner_id");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("status");
+
+                    b.Property<DateTime>("UpdatedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("updated_at");
+
+                    b.HasKey("FridgeId");
+
+                    b.HasIndex("OwnerId");
+
+                    b.ToTable("fridges");
+                });
+
+            modelBuilder.Entity("BepTroLy.API.Models.FridgeMember", b =>
+                {
+                    b.Property<int>("FridgeId")
+                        .HasColumnType("int")
+                        .HasColumnName("fridge_id");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("int")
+                        .HasColumnName("user_id");
+
+                    b.Property<DateTime>("InvitedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("invited_at");
+
+                    b.Property<DateTime?>("JoinedAt")
+                        .HasColumnType("datetime(6)")
+                        .HasColumnName("joined_at");
+
+                    b.Property<string>("Role")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("role");
+
+                    b.Property<string>("Status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("varchar(20)")
+                        .HasColumnName("status");
+
+                    b.HasKey("FridgeId", "UserId");
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("fridge_members");
                 });
 
             modelBuilder.Entity("BepTroLy.API.Models.MealPlan", b =>
@@ -395,6 +413,10 @@ namespace BepTroLy.API.Migrations
                         .HasColumnType("date")
                         .HasColumnName("expiry_date");
 
+                    b.Property<int?>("FridgeId")
+                        .HasColumnType("int")
+                        .HasColumnName("fridge_id");
+
                     b.Property<string>("ImageUrl")
                         .HasMaxLength(500)
                         .HasColumnType("varchar(500)")
@@ -450,6 +472,8 @@ namespace BepTroLy.API.Migrations
                     b.HasKey("ItemId");
 
                     b.HasIndex("CategoryId");
+
+                    b.HasIndex("FridgeId");
 
                     b.HasIndex("UserId");
 
@@ -944,6 +968,36 @@ namespace BepTroLy.API.Migrations
                     b.Navigation("User");
                 });
 
+            modelBuilder.Entity("BepTroLy.API.Models.Fridge", b =>
+                {
+                    b.HasOne("BepTroLy.API.Models.User", "Owner")
+                        .WithMany()
+                        .HasForeignKey("OwnerId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Owner");
+                });
+
+            modelBuilder.Entity("BepTroLy.API.Models.FridgeMember", b =>
+                {
+                    b.HasOne("BepTroLy.API.Models.Fridge", "Fridge")
+                        .WithMany("Members")
+                        .HasForeignKey("FridgeId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("BepTroLy.API.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Fridge");
+
+                    b.Navigation("User");
+                });
+
             modelBuilder.Entity("BepTroLy.API.Models.MealPlan", b =>
                 {
                     b.HasOne("BepTroLy.API.Models.User", "User")
@@ -991,6 +1045,10 @@ namespace BepTroLy.API.Migrations
                         .WithMany("PantryItems")
                         .HasForeignKey("CategoryId");
 
+                    b.HasOne("BepTroLy.API.Models.Fridge", "Fridge")
+                        .WithMany("PantryItems")
+                        .HasForeignKey("FridgeId");
+
                     b.HasOne("BepTroLy.API.Models.User", "User")
                         .WithMany("PantryItems")
                         .HasForeignKey("UserId")
@@ -998,6 +1056,8 @@ namespace BepTroLy.API.Migrations
                         .IsRequired();
 
                     b.Navigation("Category");
+
+                    b.Navigation("Fridge");
 
                     b.Navigation("User");
                 });
@@ -1075,6 +1135,13 @@ namespace BepTroLy.API.Migrations
 
             modelBuilder.Entity("BepTroLy.API.Models.Category", b =>
                 {
+                    b.Navigation("PantryItems");
+                });
+
+            modelBuilder.Entity("BepTroLy.API.Models.Fridge", b =>
+                {
+                    b.Navigation("Members");
+
                     b.Navigation("PantryItems");
                 });
 

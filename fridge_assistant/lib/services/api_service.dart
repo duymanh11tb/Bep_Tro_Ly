@@ -3,12 +3,12 @@ import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
   // API Backend deployed on VPS
   static String get baseUrl {
-    // Port 5001 is mapped to API container port 5000 on VPS
-    return 'http://103.77.173.6:5001';
+    return dotenv.env['API_URL'] ?? 'http://localhost:5001';
   }
 
   static const Duration _requestTimeout = Duration(seconds: 15);
@@ -97,6 +97,28 @@ class ApiService {
       requestKey: requestKey,
       send: () => http
           .put(url, headers: headers, body: jsonEncode(body))
+          .timeout(_requestTimeout),
+    );
+  }
+
+  static Future<http.Response> patch(
+    String endpoint,
+    Map<String, dynamic> body, {
+    bool withAuth = true,
+  }) async {
+    final url = Uri.parse('$baseUrl$endpoint');
+    final headers = await getHeaders(withAuth: withAuth);
+    final requestKey = _buildRequestKey(
+      method: 'PATCH',
+      endpoint: endpoint,
+      withAuth: withAuth,
+      body: body,
+    );
+
+    return _sendWithTapGuard(
+      requestKey: requestKey,
+      send: () => http
+          .patch(url, headers: headers, body: jsonEncode(body))
           .timeout(_requestTimeout),
     );
   }

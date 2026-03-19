@@ -4,15 +4,27 @@ import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
 import 'features/dashboard/dashboard_screen.dart';
 import 'features/onboarding/onboarding_screen.dart';
+import 'features/profile/profile_screen.dart';
 import 'services/auth_service.dart';
 import 'services/local_notification_service.dart';
 import 'features/auth/auth_screen.dart';
 import 'features/product/add_product_screen.dart';
 import 'features/pantry/virtual_fridge_screen.dart';
+import 'features/settings/settings_screen.dart';
+import 'features/auth/change_password_screen.dart';
+import 'features/profile/eating_preferences_screen.dart';
+import 'features/profile/cooking_level_screen.dart';
+import 'features/fridge/fridge_management_screen.dart';
+import 'features/fridge/add_fridge_screen.dart';
+import 'features/fridge/edit_fridge_screen.dart';
+import 'features/notifications/notifications_screen.dart';
+import 'features/fridge/manage_members_screen.dart';
+import 'features/settings/help_feedback_screen.dart';
+import 'models/fridge_model.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env");
+  await dotenv.load(fileName: "assets/.env");
   await LocalNotificationService.init();
   runApp(const BepTroLyApp());
 }
@@ -38,6 +50,23 @@ class BepTroLyApp extends StatelessWidget {
           backgroundColor: AppColors.background,
           body: SafeArea(child: VirtualFridgeScreen()),
         ),
+        '/settings': (context) => const SettingsScreen(),
+        '/profile': (context) => const ProfileScreen(),
+        '/change-password': (context) => const ChangePasswordScreen(),
+        '/eating-preferences': (context) => const EatingPreferencesScreen(),
+        '/cooking-level': (context) => const CookingLevelScreen(),
+        '/fridge-management': (context) => const FridgeManagementScreen(),
+        '/add-fridge': (context) => const AddFridgeScreen(),
+        '/notifications': (context) => const NotificationsScreen(),
+        '/edit-fridge': (context) {
+           final fridge = ModalRoute.of(context)!.settings.arguments as FridgeModel;
+           return EditFridgeScreen(fridge: fridge);
+        },
+        '/manage-members': (context) {
+           final fridge = ModalRoute.of(context)!.settings.arguments as FridgeModel;
+           return ManageMembersScreen(fridge: fridge);
+        },
+        '/help-feedback': (context) => const HelpFeedbackScreen(),
       },
     );
   }

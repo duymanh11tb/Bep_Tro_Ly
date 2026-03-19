@@ -9,6 +9,16 @@ using BepTroLy.API.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
+// Đảm bảo WebRootPath được thiết lập (quan trọng để UseStaticFiles hoạt động)
+if (string.IsNullOrEmpty(builder.Environment.WebRootPath))
+{
+    builder.Environment.WebRootPath = Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+}
+if (!Directory.Exists(builder.Environment.WebRootPath))
+{
+    Directory.CreateDirectory(builder.Environment.WebRootPath);
+}
+
 // ==================== Services ====================
 
 // Controllers with snake_case JSON (matches Flask API format)
@@ -102,14 +112,7 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Custom services
 builder.Services.AddSingleton<JwtService>();
-builder.Services.AddHttpClient("Gemini");
-builder.Services.AddHttpClient("Wikimedia", c =>
-{
-    c.DefaultRequestHeaders.UserAgent.ParseAdd("BepTroLy/1.0 (https://github.com/duymanh11tb/Bep_Tro_Ly.git)");
-});
 builder.Services.AddScoped<AIRecipeService>();
-builder.Services.AddScoped<GeminiBatchService>();
-builder.Services.AddHostedService<BatchPollingService>();
 
 // CORS (cho Flutter app)
 builder.Services.AddCors(options =>
@@ -162,7 +165,25 @@ using (var scope = app.Services.CreateScope())
 app.UseSwagger();
 app.UseSwaggerUI();
 
-app.UseStaticFiles();
+Console.WriteLine($"[DEBUG] ContentRootPath: {app.Environment.ContentRootPath}");
+Console.WriteLine($"[DEBUG] WebRootPath: {app.Environment.WebRootPath}");
+
+// Logging middleware để debug
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.Value?.Contains("/uploads/") == true)
+    {
+        Console.WriteLine($"[DEBUG] File Request: {context.Request.Method} {context.Request.Path}");
+    }
+    await next();
+    if (context.Request.Path.Value?.Contains("/uploads/") == true)
+    {
+        Console.WriteLine($"[DEBUG] File Response: {context.Response.StatusCode}");
+    }
+});
+
+app.UseStaticFiles(); // Phục vụ từ wwwroot mặc định
+
 app.UseCors();
 app.UseRateLimiter();
 app.UseAuthentication();

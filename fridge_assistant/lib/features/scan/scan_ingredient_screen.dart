@@ -966,13 +966,13 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
           ),
           Positioned.fill(
             child: IgnorePointer(
-              child: Container(color: Colors.black.withValues(alpha: 0.2)),
+              child: Container(color: Colors.black.withOpacity(0.2)),
             ),
           ),
           if (_isScanningText)
             Positioned.fill(
               child: Container(
-                color: Colors.black.withValues(alpha: 0.45),
+                color: Colors.black.withOpacity(0.45),
                 child: const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
@@ -1008,7 +1008,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                       vertical: 6,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.black.withValues(alpha: 0.45),
+                      color: Colors.black.withOpacity(0.45),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Text(
@@ -1121,7 +1121,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                 shape: BoxShape.circle,
                 boxShadow: [
                   BoxShadow(
-                    color: AppColors.primary.withValues(alpha: 0.35),
+                    color: AppColors.primary.withOpacity(0.35),
                     blurRadius: 16,
                     spreadRadius: 1,
                   ),

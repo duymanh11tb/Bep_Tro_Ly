@@ -473,7 +473,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
                       border: Border.all(
                         color: selected
                             ? AppColors.primary
-                            : AppColors.primary.withValues(alpha: 0.25),
+                            : AppColors.primary.withOpacity(0.25),
                       ),
                     ),
                     child: Column(
@@ -696,14 +696,14 @@ class _MealSection extends StatelessWidget {
               decoration: BoxDecoration(
                 borderRadius: BorderRadius.circular(16),
                 color: isHovering
-                    ? AppColors.primary.withValues(alpha: 0.06)
+                    ? AppColors.primary.withOpacity(0.06)
                     : Colors.transparent,
               ),
               child: CustomPaint(
                 painter: _DashedRoundedRectPainter(
                   color: isHovering
                       ? AppColors.primary
-                      : AppColors.primary.withValues(alpha: 0.5),
+                      : AppColors.primary.withOpacity(0.5),
                   radius: 16,
                   strokeWidth: isHovering ? 2 : 1.4,
                 ),

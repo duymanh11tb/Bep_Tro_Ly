@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using Microsoft.AspNetCore.Hosting;
 
 namespace BepTroLy.API.Controllers;
 
@@ -17,12 +18,14 @@ public class AuthController : ControllerBase
     private readonly AppDbContext _db;
     private readonly JwtService _jwt;
     private readonly ILogger<AuthController> _logger;
+    private readonly IWebHostEnvironment _env;
 
-    public AuthController(AppDbContext db, JwtService jwt, ILogger<AuthController> logger)
+    public AuthController(AppDbContext db, JwtService jwt, ILogger<AuthController> logger, IWebHostEnvironment env)
     {
         _db = db;
         _jwt = jwt;
         _logger = logger;
+        _env = env;
     }
 
     /// <summary>Đăng ký tài khoản mới.</summary>
@@ -274,6 +277,24 @@ public class AuthController : ControllerBase
         return Ok(new { message = "Cập nhật thành công!", user = MapUser(user, full: true) });
     }
 
+    /// <summary>Tìm kiếm người dùng bằng email hoặc số điện thoại.</summary>
+    [HttpGet("search")]
+    [Authorize]
+    public async Task<IActionResult> SearchUser([FromQuery] string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+            return BadRequest(new ErrorResponse { Error = "Vui lòng nhập email hoặc số điện thoại" });
+
+        var term = query.Trim().ToLower();
+        var user = await _db.Users.FirstOrDefaultAsync(u => 
+            u.Email == term || u.PhoneNumber == term);
+
+        if (user == null)
+            return NotFound(new ErrorResponse { Error = "Không tìm thấy người dùng" });
+
+        return Ok(new { user = MapUser(user, full: false) });
+    }
+    
     /// <summary>Upload ảnh đại diện.</summary>
     [HttpPost("avatar")]
     [Authorize]
@@ -290,39 +311,75 @@ public class AuthController : ControllerBase
 
         try
         {
-            var uploadsDir = Path.Combine(
-                Directory.GetCurrentDirectory(),
-                "wwwroot",
-                "uploads",
-                "avatars"
-            );
+            // Tạo thư mục nếu chưa có (Sử dụng WebRootPath để phục vụ file tĩnh)
+            var webRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+            var uploadsDir = Path.Combine(webRoot, "uploads", "avatars");
             if (!Directory.Exists(uploadsDir)) Directory.CreateDirectory(uploadsDir);
 
-            var ext = Path.GetExtension(avatar.FileName);
-            var fileName = $"{userId}_{DateTime.UtcNow.Ticks}{ext}";
+            // Tên file duy nhất
+            var fileName = $"{userId}_{DateTime.Now.Ticks}{Path.GetExtension(avatar.FileName)}";
             var filePath = Path.Combine(uploadsDir, fileName);
 
-            await using (var stream = new FileStream(filePath, FileMode.Create))
+            using (var stream = new FileStream(filePath, FileMode.Create))
             {
                 await avatar.CopyToAsync(stream);
             }
 
+            // Lưu URL (tương đối) vào DB
             var photoUrl = $"/uploads/avatars/{fileName}";
             user.PhotoUrl = photoUrl;
             user.UpdatedAt = DateTime.UtcNow;
             await _db.SaveChangesAsync();
 
-            return Ok(new
-            {
-                message = "Đã cập nhật ảnh đại diện",
-                user = MapUser(user, full: true)
-            });
+            return Ok(new { message = "Đã cập nhật ảnh đại diện", user = MapUser(user, full: true) });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error uploading avatar for user {UserId}", userId);
             return StatusCode(500, new ErrorResponse { Error = "Lỗi hệ thống khi tải ảnh lên" });
         }
+    }
+
+    [HttpPost("change-password")]
+    [Authorize]
+    public async Task<IActionResult> ChangePassword([FromBody] ChangePasswordRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.CurrentPassword) || string.IsNullOrWhiteSpace(request.NewPassword))
+            return BadRequest(new ErrorResponse { Error = "Mật khẩu hiện tại và mật khẩu mới là bắt buộc" });
+
+        if (request.NewPassword.Length < 6)
+            return BadRequest(new ErrorResponse { Error = "Mật khẩu mới phải có ít nhất 6 ký tự" });
+
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var user = await _db.Users.FindAsync(userId);
+        if (user == null) return NotFound();
+
+        // Kiểm tra mật khẩu hiện tại (Chỉ áp dụng cho user có pass, không áp dụng cho Google Auth trực tiếp nếu chưa đặt pass)
+        if (user.PasswordHash.StartsWith("GOOGLE_AUTH_"))
+        {
+            // Nếu là user Google chưa đặt mật khẩu bao giờ, có thể cho phép đặt mật khẩu mới mà không cần pass cũ
+            // Nhưng thiết kế đơn giản nhất là yêu cầu họ dùng tính năng khác hoặc báo lỗi
+            return BadRequest(new ErrorResponse { Error = "Tài khoản đăng nhập bằng Google không thể đổi mật khẩu theo cách này" });
+        }
+
+        try
+        {
+            if (!BCrypt.Net.BCrypt.Verify(request.CurrentPassword, user.PasswordHash))
+                return BadRequest(new ErrorResponse { Error = "Mật khẩu hiện tại không chính xác" });
+        }
+        catch (Exception)
+        {
+            return BadRequest(new ErrorResponse { Error = "Lỗi xác thực mật khẩu" });
+        }
+
+        // Cập nhật mật khẩu mới
+        user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Đổi mật khẩu thành công!" });
     }
 
     // ==================== Helpers ====================

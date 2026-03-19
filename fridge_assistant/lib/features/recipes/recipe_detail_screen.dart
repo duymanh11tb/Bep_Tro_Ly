@@ -5,6 +5,8 @@ import '../../models/shopping_list_item.dart';
 import '../../services/local_notification_service.dart';
 import '../../services/pantry_service.dart';
 import '../../services/shopping_service.dart';
+import '../../services/activity_log_service.dart';
+import '../../services/fridge_service.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../shopping/cooking_detail_screen.dart';
 
@@ -20,11 +22,8 @@ class RecipeDetailScreen extends StatefulWidget {
 class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   bool _isLoadingPantry = true;
   bool _isAddingMissing = false;
-  bool _isStartingCooking = false;
-  bool _isLoadingSuggestions = false;
   bool _hasShownMissingSuggestionNotif = false;
   List<_IngredientState> _ingredients = const [];
-  List<RecipeSuggestion> _similiarRecipes = const [];
   final Set<String> _checkedIngredientKeys = <String>{};
 
   RecipeSuggestion get recipe => widget.recipe;
@@ -33,7 +32,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   void initState() {
     super.initState();
     _loadIngredientState();
-    _loadSimiliarRecipeSuggestions();
   }
 
   Future<void> _loadIngredientState() async {
@@ -62,31 +60,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
         recipeName: recipe.name,
         missingIngredients: missingLabels,
       );
-    }
-  }
-
-  Future<void> _loadSimiliarRecipeSuggestions() async {
-    if (!mounted) return;
-
-    setState(() => _isLoadingSuggestions = true);
-
-    try {
-      final suggestions = await PantryService.getAiSuggestions(limit: 5);
-      if (!mounted) return;
-
-      // Lọc bỏ công thức hiện tại
-      final filtered = suggestions
-          .where((r) => r.name.toLowerCase() != recipe.name.toLowerCase())
-          .toList();
-
-      setState(() {
-        _similiarRecipes = filtered.take(4).toList();
-        _isLoadingSuggestions = false;
-      });
-    } catch (e) {
-      if (mounted) {
-        setState(() => _isLoadingSuggestions = false);
-      }
     }
   }
 
@@ -323,13 +296,9 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
 
     var successCount = 0;
     for (final missing in _missingIngredients) {
-      final guidance = PantryService.getIngredientGuidance(missing.label);
-      final notes = guidance == null
-          ? 'Thiếu cho món ${recipe.name}'
-          : 'Thiếu cho món ${recipe.name}. ${guidance.purchaseHint} ${guidance.usageHint}';
       final success = await ShoppingService.addItem(
         name: missing.label,
-        notes: notes,
+        notes: 'Thiếu cho món ${recipe.name}',
       );
       if (success) successCount += 1;
     }
@@ -381,7 +350,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     });
   }
 
-  Future<void> _startCooking() async {
+  void _startCooking() {
     if (!_canStartCooking) {
       final missingCount = _missingIngredients.length;
       final uncheckedCount =
@@ -400,27 +369,8 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
       return;
     }
 
-    if (_isStartingCooking) return;
-    setState(() => _isStartingCooking = true);
-
-    final consumedCount = await PantryService.consumeIngredientsByNames(
-      _availableIngredients.map((e) => e.label).toList(),
-    );
-
-    if (!mounted) return;
-
-    setState(() => _isStartingCooking = false);
-
-    if (consumedCount > 0) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            'Đã trừ $consumedCount nguyên liệu khỏi tủ lạnh cho món này.',
-          ),
-          behavior: SnackBarBehavior.floating,
-        ),
-      );
-    }
+    // Log activity
+    _logCookingActivity();
 
     Navigator.push(
       context,
@@ -428,6 +378,19 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
         builder: (_) => CookingDetailScreen(section: _buildCookingSection()),
       ),
     );
+  }
+
+  Future<void> _logCookingActivity() async {
+    try {
+      final fridgeId = await FridgeService.getActiveFridgeId();
+      await ActivityLogService.logCooking(
+        fridgeId,
+        recipe.name,
+        recipeId: int.tryParse(recipe.id),
+      );
+    } catch (e) {
+      debugPrint('Error logging cooking: $e');
+    }
   }
 
   @override
@@ -565,7 +528,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
               SizedBox(
                 width: double.infinity,
                 child: ElevatedButton(
-                  onPressed: _isStartingCooking ? null : _startCooking,
+                  onPressed: _startCooking,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: _canStartCooking
                         ? const Color(0xFF10D93A)
@@ -584,24 +547,12 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                     ),
                   ),
                   child: Text(
-                    _isStartingCooking
-                        ? 'Đang chuẩn bị nấu...'
-                        : _canStartCooking
+                    _canStartCooking
                         ? 'Bắt đầu nấu'
                         : 'Chuẩn bị đủ nguyên liệu để nấu',
                   ),
                 ),
               ),
-              const SizedBox(height: 24),
-              if (_isLoadingSuggestions)
-                const Center(
-                  child: Padding(
-                    padding: EdgeInsets.symmetric(vertical: 16),
-                    child: CircularProgressIndicator(color: AppColors.primary),
-                  ),
-                )
-              else if (_similiarRecipes.isNotEmpty)
-                _buildSimiliarRecipesSection(),
             ],
           ),
         ),
@@ -677,62 +628,23 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                   ),
             const SizedBox(width: 10),
             Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    ingredient.label,
-                    style: TextStyle(
-                      fontSize: 16,
-                      color: ingredient.isAvailable
-                          ? AppColors.textPrimary
-                          : const Color(0xFF9A3412),
-                    ),
-                  ),
-                  if (PantryService.getIngredientGuidance(ingredient.label) !=
-                      null)
-                    Padding(
-                      padding: const EdgeInsets.only(top: 2),
-                      child: Text(
-                        PantryService.getIngredientGuidance(
-                          ingredient.label,
-                        )!.usageHint,
-                        style: const TextStyle(
-                          fontSize: 12,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                ],
+              child: Text(
+                ingredient.label,
+                style: TextStyle(
+                  fontSize: 16,
+                  color: ingredient.isAvailable
+                      ? AppColors.textPrimary
+                      : const Color(0xFF9A3412),
+                ),
               ),
             ),
             if (!ingredient.isAvailable)
-              Padding(
-                padding: const EdgeInsets.only(left: 8),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Text(
-                      'Cần mua',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: Color(0xFFEF6C00),
-                      ),
-                    ),
-                    if (PantryService.getIngredientGuidance(ingredient.label) !=
-                        null)
-                      Text(
-                        PantryService.getIngredientGuidance(
-                          ingredient.label,
-                        )!.purchaseHint,
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                  ],
+              const Text(
+                'Cần mua',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: Color(0xFFEF6C00),
                 ),
               ),
           ],
@@ -787,134 +699,6 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
           secondary,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => _buildImageFallback(recipe.name),
-        );
-      },
-    );
-  }
-
-  Widget _buildSimiliarRecipesSection() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'Gợi ý trong bữa ăn',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
-        ),
-        const SizedBox(height: 12),
-        SizedBox(
-          height: 200,
-          child: ListView.builder(
-            scrollDirection: Axis.horizontal,
-            itemCount: _similiarRecipes.length,
-            itemBuilder: (context, index) {
-              final recipe = _similiarRecipes[index];
-              return Padding(
-                padding: EdgeInsets.only(
-                  right: index == _similiarRecipes.length - 1 ? 0 : 12,
-                ),
-                child: GestureDetector(
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => RecipeDetailScreen(recipe: recipe),
-                    ),
-                  ),
-                  child: Container(
-                    width: 160,
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(0.05),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Expanded(
-                          child: ClipRRect(
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(14),
-                              topRight: Radius.circular(14),
-                            ),
-                            child: _buildRecipeImage(recipe),
-                          ),
-                        ),
-                        Padding(
-                          padding: const EdgeInsets.all(10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                recipe.name,
-                                maxLines: 2,
-                                overflow: TextOverflow.ellipsis,
-                                style: const TextStyle(
-                                  fontSize: 14,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppColors.textPrimary,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Row(
-                                children: [
-                                  Icon(
-                                    Icons.schedule,
-                                    size: 12,
-                                    color: AppColors.textSecondary,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    '${recipe.cookTimeMinutes}min',
-                                    style: const TextStyle(
-                                      fontSize: 11,
-                                      color: AppColors.textSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildRecipeImage(RecipeSuggestion recipe) {
-    final imageUrl = recipe.imageUrl;
-    if (imageUrl == null || imageUrl.isEmpty) {
-      return Image.network(
-        RecipeSuggestion.fallbackImageForRecipe(recipe),
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => Container(
-          color: Colors.grey[300],
-          child: const Center(child: Icon(Icons.image_not_supported)),
-        ),
-      );
-    }
-    return Image.network(
-      imageUrl,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        return Image.network(
-          RecipeSuggestion.fallbackImageForRecipe(recipe),
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Container(
-            color: Colors.grey[300],
-            child: const Center(child: Icon(Icons.image_not_supported)),
-          ),
         );
       },
     );

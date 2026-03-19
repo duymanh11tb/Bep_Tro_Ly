@@ -125,12 +125,7 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
     return AppColors.success;
   }
 
-  // ignore: unused_element
-  String _statusText(PantryItem item) {
-    if (item.isExpired) return 'Đã hết hạn';
-    if (item.isExpiringSoon) return 'Sắp hết hạn';
-    return 'An toàn';
-  }
+  // _statusText was removed as it is not used.
 
   String _remainingText(PantryItem item) {
     if (item.expiryDate == null) return 'HSD: Không rõ';
