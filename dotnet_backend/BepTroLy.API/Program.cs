@@ -102,7 +102,14 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Custom services
 builder.Services.AddSingleton<JwtService>();
+builder.Services.AddHttpClient("Gemini");
+builder.Services.AddHttpClient("Wikimedia", c =>
+{
+    c.DefaultRequestHeaders.UserAgent.ParseAdd("BepTroLy/1.0 (https://github.com/duymanh11tb/Bep_Tro_Ly.git)");
+});
 builder.Services.AddScoped<AIRecipeService>();
+builder.Services.AddScoped<GeminiBatchService>();
+builder.Services.AddHostedService<BatchPollingService>();
 
 // CORS (cho Flutter app)
 builder.Services.AddCors(options =>

@@ -21,8 +21,10 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   bool _isLoadingPantry = true;
   bool _isAddingMissing = false;
   bool _isStartingCooking = false;
+  bool _isLoadingSuggestions = false;
   bool _hasShownMissingSuggestionNotif = false;
   List<_IngredientState> _ingredients = const [];
+  List<RecipeSuggestion> _similiarRecipes = const [];
   final Set<String> _checkedIngredientKeys = <String>{};
 
   RecipeSuggestion get recipe => widget.recipe;
@@ -31,6 +33,7 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
   void initState() {
     super.initState();
     _loadIngredientState();
+    _loadSimiliarRecipeSuggestions();
   }
 
   Future<void> _loadIngredientState() async {
@@ -59,6 +62,31 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
         recipeName: recipe.name,
         missingIngredients: missingLabels,
       );
+    }
+  }
+
+  Future<void> _loadSimiliarRecipeSuggestions() async {
+    if (!mounted) return;
+
+    setState(() => _isLoadingSuggestions = true);
+
+    try {
+      final suggestions = await PantryService.getAiSuggestions(limit: 5);
+      if (!mounted) return;
+
+      // Lọc bỏ công thức hiện tại
+      final filtered = suggestions
+          .where((r) => r.name.toLowerCase() != recipe.name.toLowerCase())
+          .toList();
+
+      setState(() {
+        _similiarRecipes = filtered.take(4).toList();
+        _isLoadingSuggestions = false;
+      });
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoadingSuggestions = false);
+      }
     }
   }
 
@@ -564,6 +592,16 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                   ),
                 ),
               ),
+              const SizedBox(height: 24),
+              if (_isLoadingSuggestions)
+                const Center(
+                  child: Padding(
+                    padding: EdgeInsets.symmetric(vertical: 16),
+                    child: CircularProgressIndicator(color: AppColors.primary),
+                  ),
+                )
+              else if (_similiarRecipes.isNotEmpty)
+                _buildSimiliarRecipesSection(),
             ],
           ),
         ),
@@ -749,6 +787,134 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
           secondary,
           fit: BoxFit.cover,
           errorBuilder: (_, __, ___) => _buildImageFallback(recipe.name),
+        );
+      },
+    );
+  }
+
+  Widget _buildSimiliarRecipesSection() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'Gợi ý trong bữa ăn',
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 200,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _similiarRecipes.length,
+            itemBuilder: (context, index) {
+              final recipe = _similiarRecipes[index];
+              return Padding(
+                padding: EdgeInsets.only(
+                  right: index == _similiarRecipes.length - 1 ? 0 : 12,
+                ),
+                child: GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => RecipeDetailScreen(recipe: recipe),
+                    ),
+                  ),
+                  child: Container(
+                    width: 160,
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(14),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withOpacity(0.05),
+                          blurRadius: 8,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: ClipRRect(
+                            borderRadius: const BorderRadius.only(
+                              topLeft: Radius.circular(14),
+                              topRight: Radius.circular(14),
+                            ),
+                            child: _buildRecipeImage(recipe),
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.all(10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                recipe.name,
+                                maxLines: 2,
+                                overflow: TextOverflow.ellipsis,
+                                style: const TextStyle(
+                                  fontSize: 14,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppColors.textPrimary,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Row(
+                                children: [
+                                  Icon(
+                                    Icons.schedule,
+                                    size: 12,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    '${recipe.cookTimeMinutes}min',
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      color: AppColors.textSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildRecipeImage(RecipeSuggestion recipe) {
+    final imageUrl = recipe.imageUrl;
+    if (imageUrl == null || imageUrl.isEmpty) {
+      return Image.network(
+        RecipeSuggestion.fallbackImageForRecipe(recipe),
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) => Container(
+          color: Colors.grey[300],
+          child: const Center(child: Icon(Icons.image_not_supported)),
+        ),
+      );
+    }
+    return Image.network(
+      imageUrl,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) {
+        return Image.network(
+          RecipeSuggestion.fallbackImageForRecipe(recipe),
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Container(
+            color: Colors.grey[300],
+            child: const Center(child: Icon(Icons.image_not_supported)),
+          ),
         );
       },
     );

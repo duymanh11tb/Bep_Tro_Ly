@@ -31,6 +31,7 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
     });
   }
 
+  // ignore: unused_element
   int get _checkedCount => _items.where((i) => i.isChecked).length;
 
   @override
@@ -45,7 +46,11 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
         elevation: 0,
         scrolledUnderElevation: 0.5,
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: AppColors.textPrimary, size: 20),
+          icon: const Icon(
+            Icons.arrow_back_ios_new,
+            color: AppColors.textPrimary,
+            size: 20,
+          ),
           onPressed: () => Navigator.pop(context, _items),
         ),
         title: Text(
@@ -64,7 +69,7 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // ──── Ảnh món ăn ────
-            if (hasRecipeInfo) _buildDishImage(info!),
+            if (hasRecipeInfo) _buildDishImage(info),
             if (hasRecipeInfo) const SizedBox(height: 16),
 
             // ──── Mô tả ngắn ────
@@ -81,7 +86,7 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
             ],
 
             // ──── 4 ô thông tin: Chuẩn bị / Nấu / Khẩu phần / Độ khó ────
-            if (hasRecipeInfo) _buildInfoGrid(info!),
+            if (hasRecipeInfo) _buildInfoGrid(info),
             if (hasRecipeInfo) const SizedBox(height: 24),
 
             // ──── Mẹo chế biến ────
@@ -213,6 +218,7 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildDescriptionCard(String text) {
     return Container(
       width: double.infinity,
@@ -245,7 +251,11 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.lightbulb_outline, color: AppColors.warning, size: 22),
+          const Icon(
+            Icons.lightbulb_outline,
+            color: AppColors.warning,
+            size: 22,
+          ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
@@ -372,7 +382,8 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
               Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => CookingDetailScreen(section: widget.section),
+                  builder: (context) =>
+                      CookingDetailScreen(section: widget.section),
                 ),
               );
             },
@@ -387,10 +398,7 @@ class _DishDetailScreenState extends State<DishDetailScreen> {
             ),
             child: const Text(
               'Bắt đầu nấu',
-              style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.bold,
-              ),
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
             ),
           ),
         ),

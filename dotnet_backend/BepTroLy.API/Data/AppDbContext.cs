@@ -23,6 +23,7 @@ public class AppDbContext : DbContext
     public DbSet<UserFavorite> UserFavorites { get; set; }
     public DbSet<UserRating> UserRatings { get; set; }
     public DbSet<AICache> AICache { get; set; }
+    public DbSet<BatchJob> BatchJobs { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

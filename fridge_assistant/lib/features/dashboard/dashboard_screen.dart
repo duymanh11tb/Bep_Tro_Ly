@@ -812,6 +812,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // ignore: unused_element
   void _showAddItemDialog() {
     final nameCtrl = TextEditingController();
     final quantityCtrl = TextEditingController(text: '1');
@@ -1037,6 +1038,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  // ignore: unused_element
   Widget _buildPlaceholder(String title) {
     return Center(
       child: Column(

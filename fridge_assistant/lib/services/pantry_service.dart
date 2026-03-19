@@ -739,25 +739,6 @@ class PantryService {
     return matchCount >= requiredMatches;
   }
 
-  static List<RecipeSuggestion> _filterRecipesByPantry(
-    List<RecipeSuggestion> suggestions,
-    List<PantryItem> pantry,
-  ) {
-    if (pantry.isEmpty || suggestions.isEmpty) return suggestions;
-
-    final strict = suggestions
-        .where((s) => isRelevantRecipe(s, pantry))
-        .toList();
-    if (strict.isNotEmpty) return strict;
-
-    final loose = suggestions
-        .where((s) => _countPantryMatches(s, pantry) >= 1)
-        .toList();
-    if (loose.isNotEmpty) return loose;
-
-    return suggestions;
-  }
-
   /// Lấy gợi ý món ăn từ AI
   static Future<AiSuggestionPage> getAiSuggestionsPage({
     int limit = 15,
@@ -802,47 +783,52 @@ class PantryService {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
         if (data['success'] == true && data['recipes'] != null) {
           final List list = data['recipes'];
-          final dedupedSuggestions = _dedupeRecipeSuggestions(
+          final suggestions = _dedupeRecipeSuggestions(
             list.map((e) => RecipeSuggestion.fromJson(e)).toList(),
           );
-          final pantryItems = await getItems();
-          final suggestions = _filterRecipesByPantry(
-            dedupedSuggestions,
-            pantryItems,
-          );
+
+          final items = await getItems();
+
+          // Filter relevance
+          final filtered = suggestions
+              .where((r) => isRelevantRecipe(r, items))
+              .toList();
 
           final safeLimit = (data['limit'] as num?)?.toInt() ?? limit;
           final safeOffset = (data['offset'] as num?)?.toInt() ?? offset;
           final safeNextOffset =
               (data['next_offset'] as num?)?.toInt() ??
-              (safeOffset + suggestions.length);
+              (safeOffset + filtered.length);
           final hasMore =
               (data['has_more'] as bool?) ??
-              (suggestions.length >= safeLimit && suggestions.isNotEmpty);
+              (filtered.length >= safeLimit && filtered.isNotEmpty);
           final totalCandidates =
               (data['total_candidates'] as num?)?.toInt() ?? 0;
 
-          _pageCache[offset] = suggestions;
+          // Deduplicate nâng cao
+          final merged = offset <= 0
+              ? <RecipeSuggestion>[]
+              : List<RecipeSuggestion>.from(_cachedAiSuggestions);
+          final existingKeys = merged
+              .map((e) => normalizeRecipeName(e.name))
+              .toSet();
 
-          if (offset <= 0) {
-            _cachedAiSuggestions = suggestions;
-          } else {
-            final merged = List<RecipeSuggestion>.from(_cachedAiSuggestions);
+          for (final item in filtered) {
+            final key = normalizeRecipeName(item.name);
+            final isDup = existingKeys.any((k) => isSimilar(k, key));
+            if (isDup) continue;
 
-            for (final item in suggestions) {
-              if (_isDuplicateRecipe(item, merged)) continue;
-              merged.add(item);
-            }
-
-            _cachedAiSuggestions = merged;
+            merged.add(item);
+            existingKeys.add(key);
           }
 
-          if (offset == 0) {
-            await _persistAiSuggestions(_cachedAiSuggestions, profile.cacheKey);
-          }
+          // update cache
+          _cachedAiSuggestions = merged;
+          _pageCache[offset] = filtered;
+          await _persistAiSuggestions(_cachedAiSuggestions, profile.cacheKey);
 
           return AiSuggestionPage(
-            suggestions: suggestions,
+            suggestions: filtered,
             limit: safeLimit,
             offset: safeOffset,
             nextOffset: safeNextOffset,
