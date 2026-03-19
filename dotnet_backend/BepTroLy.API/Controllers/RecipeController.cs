@@ -36,7 +36,7 @@ public class RecipeController : ControllerBase
         return success ? Ok(result) : StatusCode(500, result);
     }
 
-    /// <summary>Gợi ý món ăn từ nguyên liệu trong tủ lạnh.</summary>
+    /// <summary>Gợi ý món ăn từ nguyên liệu trong tủ lạnh (POST).</summary>
     [HttpPost("suggest-from-pantry")]
     [Authorize]
     [EnableRateLimiting("ai-heavy")]
@@ -49,6 +49,25 @@ public class RecipeController : ControllerBase
             userId.Value,
             request.Preferences,
             request.Limit
+        );
+
+        var success = (bool)result["success"];
+        return success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>Gợi ý món ăn từ nguyên liệu trong tủ lạnh (GET — dùng bởi Flutter).</summary>
+    [HttpGet("suggest-from-pantry")]
+    [Authorize]
+    [EnableRateLimiting("ai-heavy")]
+    public async Task<IActionResult> SuggestFromPantryGet([FromQuery] int limit = 5)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var result = await _aiService.SuggestFromPantryAsync(
+            userId.Value,
+            null,
+            limit
         );
 
         var success = (bool)result["success"];
