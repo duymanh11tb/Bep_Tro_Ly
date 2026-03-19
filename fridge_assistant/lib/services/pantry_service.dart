@@ -1,6 +1,9 @@
 import 'dart:convert';
+import 'package:flutter/foundation.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
+import 'auth_service.dart';
+import 'fridge_service.dart';
 import '../models/recipe_suggestion.dart';
 
 class PantryItem {
@@ -14,6 +17,7 @@ class PantryItem {
   final DateTime? expiryDate;
   final String? imageUrl;
   final String status;
+  final int? fridgeId;
 
   PantryItem({
     required this.id,
@@ -26,22 +30,8 @@ class PantryItem {
     this.expiryDate,
     this.imageUrl,
     required this.status,
+    this.fridgeId,
   });
-
-  Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'quantity': quantity,
-      'unit': unit,
-      'category': category,
-      'category_id': categoryId,
-      'location': location,
-      'expiry_date': expiryDate?.toIso8601String(),
-      'image_url': imageUrl,
-      'status': status,
-    };
-  }
 
   factory PantryItem.fromJson(Map<String, dynamic> json) {
     DateTime? expiry;
@@ -61,6 +51,7 @@ class PantryItem {
       expiryDate: expiry,
       imageUrl: json['image_url'],
       status: json['status'] ?? 'active',
+      fridgeId: json['fridge_id'],
     );
   }
 
@@ -93,14 +84,6 @@ class PantryStats {
     required this.byCategory,
   });
 
-  Map<String, dynamic> toJson() {
-    return {
-      'total_items': totalItems,
-      'expiring_soon': expiringSoon,
-      'by_category': byCategory.map((e) => e.toJson()).toList(),
-    };
-  }
-
   factory PantryStats.fromJson(Map<String, dynamic> json) {
     final cats = (json['by_category'] as List? ?? [])
         .map((c) => CategoryStat.fromJson(c))
@@ -119,13 +102,6 @@ class CategoryStat {
 
   CategoryStat({required this.category, required this.count});
 
-  Map<String, dynamic> toJson() {
-    return {
-      'category': category,
-      'count': count,
-    };
-  }
-
   factory CategoryStat.fromJson(Map<String, dynamic> json) {
     return CategoryStat(
       category: json['category'] ?? 'Khác',
@@ -135,85 +111,167 @@ class CategoryStat {
 }
 
 class PantryService {
-  static const String _statsKey = 'cached_pantry_stats';
-  static const String _expiringItemsKey = 'cached_expiring_items';
-  static const String _suggestionsKey = 'cached_ai_suggestions';
+  static const String _aiSuggestionsCachePrefix = 'pantry_ai_suggestions_v1_';
+  static List<PantryItem> _cachedExpiringItems = [];
+  static PantryStats? _cachedStats;
+  static List<RecipeSuggestion> _cachedAiSuggestions = [];
+
+  static Future<String> _getUserCacheSuffix() async {
+    final authService = AuthService();
+    final user = await authService.getUser();
+
+    if (user == null) return 'guest';
+
+    final raw =
+        user['id']?.toString() ??
+        user['email']?.toString() ??
+        user['display_name']?.toString() ??
+        'guest';
+
+    return raw
+        .toLowerCase()
+        .replaceAll(RegExp(r'[^a-z0-9@._-]+'), '_')
+        .replaceAll(RegExp(r'_+'), '_');
+  }
+
+  static Future<String> _getAiSuggestionsCacheKey() async {
+    final suffix = await _getUserCacheSuffix();
+    return '$_aiSuggestionsCachePrefix$suffix';
+  }
+
+  static Future<void> _persistAiSuggestions(
+    List<RecipeSuggestion> suggestions,
+  ) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = await _getAiSuggestionsCacheKey();
+      final payload = jsonEncode(suggestions.map((e) => e.toJson()).toList());
+      await prefs.setString(cacheKey, payload);
+    } catch (e) {
+      debugPrint('PantryService._persistAiSuggestions error: $e');
+    }
+  }
+
+  static Future<List<RecipeSuggestion>> _loadPersistedAiSuggestions() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final cacheKey = await _getAiSuggestionsCacheKey();
+      final raw = prefs.getString(cacheKey);
+      if (raw == null || raw.isEmpty) return [];
+
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return [];
+
+      return decoded
+          .whereType<Map>()
+          .map((e) => RecipeSuggestion.fromJson(Map<String, dynamic>.from(e)))
+          .toList();
+    } catch (e) {
+      debugPrint('PantryService._loadPersistedAiSuggestions error: $e');
+      return [];
+    }
+  }
+
+  static Future<List<PantryItem>> getCachedExpiringItems() async {
+    return _cachedExpiringItems;
+  }
+
+  static Future<PantryStats?> getCachedStats() async {
+    return _cachedStats;
+  }
+
+  static Future<List<RecipeSuggestion>> getCachedAiSuggestions() async {
+    if (_cachedAiSuggestions.isNotEmpty) {
+      return _cachedAiSuggestions;
+    }
+
+    final persisted = await _loadPersistedAiSuggestions();
+    if (persisted.isNotEmpty) {
+      _cachedAiSuggestions = persisted;
+    }
+
+    return _cachedAiSuggestions;
+  }
+
+  static Future<void> clearCache({bool clearPersistent = false}) async {
+    _cachedExpiringItems = [];
+    _cachedStats = null;
+    _cachedAiSuggestions = [];
+
+    if (!clearPersistent) return;
+
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final keysToRemove = prefs
+          .getKeys()
+          .where((k) => k.startsWith(_aiSuggestionsCachePrefix))
+          .toList();
+      for (final key in keysToRemove) {
+        await prefs.remove(key);
+      }
+    } catch (e) {
+      debugPrint('PantryService.clearCache persistent error: $e');
+    }
+  }
 
   /// Lấy tất cả sản phẩm active
   static Future<List<PantryItem>> getItems() async {
     try {
-      final resp = await ApiService.get('/api/pantry?status=active', withAuth: true);
+      final fridgeId = await FridgeService.getActiveFridgeId();
+      final queryParams = fridgeId != null ? '&fridgeId=$fridgeId' : '';
+      
+      final resp = await ApiService.get(
+        '/api/pantry?status=active$queryParams',
+        withAuth: true,
+      );
       if (resp.statusCode == 200) {
         final List list = jsonDecode(utf8.decode(resp.bodyBytes));
         return list.map((e) => PantryItem.fromJson(e)).toList();
       }
     } catch (e) {
-      print('PantryService.getItems error: $e');
+      debugPrint('PantryService.getItems error: $e');
     }
     return [];
   }
 
   /// Lấy sản phẩm sắp hết hạn
   static Future<List<PantryItem>> getExpiringItems({int days = 7}) async {
-    // Return cache first if needed by the UI, but here we always fetch to refresh
     try {
-      final resp = await ApiService.get('/api/pantry/expiring?days=$days', withAuth: true);
+      final fridgeId = await FridgeService.getActiveFridgeId();
+      final queryParams = fridgeId != null ? '&fridgeId=$fridgeId' : '';
+
+      final resp = await ApiService.get(
+        '/api/pantry/expiring?days=$days$queryParams',
+        withAuth: true,
+      );
       if (resp.statusCode == 200) {
         final List list = jsonDecode(utf8.decode(resp.bodyBytes));
         final items = list.map((e) => PantryItem.fromJson(e)).toList();
-        
-        // Save to cache
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_expiringItemsKey, jsonEncode(list));
-        
+        _cachedExpiringItems = items;
         return items;
       }
     } catch (e) {
-      print('PantryService.getExpiringItems error: $e');
+      debugPrint('PantryService.getExpiringItems error: $e');
     }
-    return getCachedExpiringItems();
-  }
-
-  static Future<List<PantryItem>> getCachedExpiringItems() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final data = prefs.getString(_expiringItemsKey);
-      if (data != null) {
-        final List list = jsonDecode(data);
-        return list.map((e) => PantryItem.fromJson(e)).toList();
-      }
-    } catch (_) {}
     return [];
   }
 
   /// Lấy stats cho dashboard
   static Future<PantryStats?> getStats() async {
     try {
-      final resp = await ApiService.get('/api/pantry/stats', withAuth: true);
+      final fridgeId = await FridgeService.getActiveFridgeId();
+      final queryParams = fridgeId != null ? '?fridgeId=$fridgeId' : '';
+      
+      final resp = await ApiService.get('/api/pantry/stats$queryParams', withAuth: true);
       if (resp.statusCode == 200) {
         final json = jsonDecode(utf8.decode(resp.bodyBytes));
         final stats = PantryStats.fromJson(json);
-        
-        // Save to cache
-        final prefs = await SharedPreferences.getInstance();
-        await prefs.setString(_statsKey, jsonEncode(json));
-        
+        _cachedStats = stats;
         return stats;
       }
     } catch (e) {
-      print('PantryService.getStats error: $e');
+      debugPrint('PantryService.getStats error: $e');
     }
-    return getCachedStats();
-  }
-
-  static Future<PantryStats?> getCachedStats() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final data = prefs.getString(_statsKey);
-      if (data != null) {
-        return PantryStats.fromJson(jsonDecode(data));
-      }
-    } catch (_) {}
     return null;
   }
 
@@ -228,20 +286,24 @@ class PantryService {
     String? notes,
   }) async {
     try {
+      final fridgeId = await FridgeService.getActiveFridgeId();
+      
       final body = {
         'name_vi': nameVi,
         'quantity': quantity,
         'unit': unit,
         if (categoryId != null) 'category_id': categoryId,
+        if (fridgeId != null) 'fridge_id': fridgeId,
         'location': location,
-        if (expiryDate != null) 'expiry_date': expiryDate.toIso8601String().split('T').first,
+        if (expiryDate != null)
+          'expiry_date': expiryDate.toIso8601String().split('T').first,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         'add_method': 'manual',
       };
       final resp = await ApiService.post('/api/pantry', body, withAuth: true);
       return resp.statusCode == 200;
     } catch (e) {
-      print('PantryService.addItem error: $e');
+      debugPrint('PantryService.addItem error: $e');
       return false;
     }
   }
@@ -252,51 +314,35 @@ class PantryService {
       final resp = await ApiService.delete('/api/pantry/$id');
       return resp.statusCode == 200;
     } catch (e) {
-      print('PantryService.deleteItem error: $e');
+      debugPrint('PantryService.deleteItem error: $e');
       return false;
     }
   }
 
   /// Lấy gợi ý món ăn từ AI
-  static Future<List<RecipeSuggestion>> getAiSuggestions({int limit = 10}) async {
+  static Future<List<RecipeSuggestion>> getAiSuggestions({
+    int limit = 15,
+  }) async {
     try {
-      final resp = await ApiService.post('/api/recipes/suggest-from-pantry', 
-        {'limit': limit}, withAuth: true);
+      final resp = await ApiService.get(
+        '/api/recipes/suggest-from-pantry?limit=$limit',
+        withAuth: true,
+      );
       if (resp.statusCode == 200) {
         final data = jsonDecode(utf8.decode(resp.bodyBytes));
         if (data['success'] == true && data['recipes'] != null) {
           final List list = data['recipes'];
-          
-          // Save to cache
-          final prefs = await SharedPreferences.getInstance();
-          await prefs.setString(_suggestionsKey, jsonEncode(list));
-          
-          return list.map((e) => RecipeSuggestion.fromJson(e)).toList();
+          final suggestions = list
+              .map((e) => RecipeSuggestion.fromJson(e))
+              .toList();
+          _cachedAiSuggestions = suggestions;
+          await _persistAiSuggestions(suggestions);
+          return suggestions;
         }
       }
     } catch (e) {
-      print('PantryService.getAiSuggestions error: $e');
+      debugPrint('PantryService.getAiSuggestions error: $e');
     }
     return getCachedAiSuggestions();
-  }
-
-  static Future<List<RecipeSuggestion>> getCachedAiSuggestions() async {
-    try {
-      final prefs = await SharedPreferences.getInstance();
-      final data = prefs.getString(_suggestionsKey);
-      if (data != null) {
-        final List list = jsonDecode(data);
-        return list.map((e) => RecipeSuggestion.fromJson(e)).toList();
-      }
-    } catch (_) {}
-    return [];
-  }
-
-  /// Xóa toàn bộ cache khi đăng xuất
-  static Future<void> clearCache() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_statsKey);
-    await prefs.remove(_expiringItemsKey);
-    await prefs.remove(_suggestionsKey);
   }
 }

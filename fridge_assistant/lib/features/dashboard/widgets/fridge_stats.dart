@@ -18,10 +18,7 @@ class FridgeCategory {
 class FridgeStats extends StatelessWidget {
   final List<FridgeCategory> categories;
 
-  const FridgeStats({
-    super.key,
-    required this.categories,
-  });
+  const FridgeStats({super.key, required this.categories});
 
   @override
   Widget build(BuildContext context) {
@@ -47,7 +44,7 @@ class FridgeStats extends StatelessWidget {
               crossAxisCount: 2,
               crossAxisSpacing: 12,
               mainAxisSpacing: 12,
-              childAspectRatio: 2.5,
+              childAspectRatio: 2.15,
             ),
             itemCount: categories.length,
             itemBuilder: (context, index) {
@@ -64,7 +61,7 @@ class FridgeStats extends StatelessWidget {
     final iconBgColor = category.color.withAlpha(38);
 
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: BoxDecoration(
         color: bgColor,
         borderRadius: BorderRadius.circular(14),
@@ -78,11 +75,7 @@ class FridgeStats extends StatelessWidget {
               color: iconBgColor,
               borderRadius: BorderRadius.circular(10),
             ),
-            child: Icon(
-              category.icon,
-              color: category.color,
-              size: 20,
-            ),
+            child: Icon(category.icon, color: category.color, size: 20),
           ),
           const SizedBox(width: 10),
           Expanded(
@@ -93,7 +86,7 @@ class FridgeStats extends StatelessWidget {
                 Text(
                   category.name,
                   style: TextStyle(
-                    fontSize: 12,
+                    fontSize: 11,
                     fontWeight: FontWeight.w600,
                     color: category.color,
                   ),
@@ -104,7 +97,7 @@ class FridgeStats extends StatelessWidget {
                 Text(
                   '${category.count} món',
                   style: const TextStyle(
-                    fontSize: 11,
+                    fontSize: 10,
                     color: AppColors.textSecondary,
                   ),
                 ),

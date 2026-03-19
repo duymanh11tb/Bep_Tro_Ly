@@ -32,13 +32,29 @@ class BottomNavBar extends StatelessWidget {
             children: [
               _buildNavItem(0, Icons.home_outlined, Icons.home, 'Tổng quan'),
               _buildNavItem(
-                  1, Icons.kitchen_outlined, Icons.kitchen, 'Tủ lạnh'),
+                1,
+                Icons.kitchen_outlined,
+                Icons.kitchen,
+                'Tủ lạnh',
+              ),
               _buildNavItem(
-                  2, Icons.menu_book_outlined, Icons.menu_book, 'Công thức'),
-              _buildNavItem(3, Icons.shopping_cart_outlined,
-                  Icons.shopping_cart, 'Đi chợ'),
+                2,
+                Icons.menu_book_outlined,
+                Icons.menu_book,
+                'Công thức',
+              ),
               _buildNavItem(
-                  4, Icons.settings_outlined, Icons.settings, 'Cài đặt'),
+                3,
+                Icons.shopping_cart_outlined,
+                Icons.shopping_cart,
+                'Đi chợ',
+              ),
+              _buildNavItem(
+                4,
+                Icons.settings_outlined,
+                Icons.settings,
+                'Cài đặt',
+              ),
             ],
           ),
         ),
@@ -47,7 +63,11 @@ class BottomNavBar extends StatelessWidget {
   }
 
   Widget _buildNavItem(
-      int index, IconData icon, IconData activeIcon, String label) {
+    int index,
+    IconData icon,
+    IconData activeIcon,
+    String label,
+  ) {
     final isActive = currentIndex == index;
 
     return GestureDetector(

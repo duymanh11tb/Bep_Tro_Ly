@@ -23,6 +23,8 @@ public class AppDbContext : DbContext
     public DbSet<UserFavorite> UserFavorites { get; set; }
     public DbSet<UserRating> UserRatings { get; set; }
     public DbSet<AICache> AICache { get; set; }
+    public DbSet<Fridge> Fridges { get; set; }
+    public DbSet<FridgeMember> FridgeMembers { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -37,5 +39,8 @@ public class AppDbContext : DbContext
         // modelBuilder.HasCharSet("utf8mb4");
 
         // Relationships are already defined via attributes
+        
+        modelBuilder.Entity<FridgeMember>()
+            .HasKey(fm => new { fm.FridgeId, fm.UserId });
     }
 }
