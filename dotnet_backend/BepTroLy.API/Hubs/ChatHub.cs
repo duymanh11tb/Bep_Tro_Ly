@@ -68,5 +68,35 @@ public class ChatHub : Hub
         var groupName = $"fridge_{fridgeId}";
         await Clients.Group(groupName).SendAsync("ReceiveMessage", broadcastData);
         Console.WriteLine($"[CHAT] Message {message.MessageId} broadcasted to {groupName}");
+
+        // Create in-app Notifications for all other members
+        try
+        {
+            var otherMembers = await _db.FridgeMembers
+                .Where(m => m.FridgeId == fridgeId && m.UserId != userId && m.Status == "accepted")
+                .Select(m => m.UserId)
+                .ToListAsync();
+
+            foreach (var memberId in otherMembers)
+            {
+                var notification = new Notification
+                {
+                    UserId = memberId,
+                    Type = "chat_message",
+                    Title = $"Tin nhắn mới từ {user?.DisplayName ?? "Thành viên"}",
+                    Body = content.Length > 100 ? content.Substring(0, 97) + "..." : content,
+                    RelatedItemId = fridgeId,
+                    CreatedAt = DateTime.UtcNow,
+                    IsRead = false
+                };
+                _db.Notifications.Add(notification);
+            }
+            await _db.SaveChangesAsync();
+            Console.WriteLine($"[CHAT] Created in-app notifications for {otherMembers.Count} members");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[CHAT] Error creating in-app notifications: {ex.Message}");
+        }
     }
 }
