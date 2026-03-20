@@ -39,7 +39,6 @@ class ChatService {
 
     final httpOptions = HttpConnectionOptions(
       accessTokenFactory: () async => token,
-      logging: (level, message) => debugPrint('SignalR [$level]: $message'),
     );
 
     _hubConnection = HubConnectionBuilder()

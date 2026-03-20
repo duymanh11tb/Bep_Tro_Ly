@@ -80,9 +80,9 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
 
   @override
   void dispose() {
+    _chatService.activeChatFridgeId = null;
     _messageController.dispose();
     _scrollController.dispose();
-    _chatService.stop();
     super.dispose();
   }
 
@@ -275,13 +275,5 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
         ],
       ),
     );
-  }
-
-  @override
-  void dispose() {
-    _chatService.activeChatFridgeId = null;
-    _messageController.dispose();
-    _scrollController.dispose();
-    super.dispose();
   }
 }
