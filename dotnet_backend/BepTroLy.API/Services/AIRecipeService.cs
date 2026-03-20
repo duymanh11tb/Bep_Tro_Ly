@@ -134,12 +134,19 @@ public class AIRecipeService
     /// </summary>
     public async Task<Dictionary<string, object>> SuggestFromPantryAsync(
         int userId,
+        int? fridgeId = null,
         Dictionary<string, object>? preferences = null,
         int limit = 5)
     {
-        var pantryItems = await _db.PantryItems
-            .Where(p => p.UserId == userId && p.Status == "active")
-            .ToListAsync();
+        var query = _db.PantryItems
+            .Where(p => p.UserId == userId && p.Status == "active");
+
+        if (fridgeId.HasValue)
+        {
+            query = query.Where(p => p.FridgeId == fridgeId.Value);
+        }
+
+        var pantryItems = await query.ToListAsync();
 
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
         return await SuggestRecipesAsync(ingredients, preferences, limit);

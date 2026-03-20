@@ -25,6 +25,7 @@ public class AppDbContext : DbContext
     public DbSet<AICache> AICache { get; set; }
     public DbSet<Fridge> Fridges { get; set; }
     public DbSet<FridgeMember> FridgeMembers { get; set; }
+    public DbSet<ChatMessage> ChatMessages { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {

@@ -47,6 +47,7 @@ public class RecipeController : ControllerBase
 
         var result = await _aiService.SuggestFromPantryAsync(
             userId.Value,
+            request.FridgeId,
             request.Preferences,
             request.Limit
         );
@@ -59,13 +60,14 @@ public class RecipeController : ControllerBase
     [HttpGet("suggest-from-pantry")]
     [Authorize]
     [EnableRateLimiting("ai-heavy")]
-    public async Task<IActionResult> SuggestFromPantryGet([FromQuery] int limit = 5)
+    public async Task<IActionResult> SuggestFromPantryGet([FromQuery] int? fridgeId, [FromQuery] int limit = 5)
     {
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
         var result = await _aiService.SuggestFromPantryAsync(
             userId.Value,
+            fridgeId,
             null,
             limit
         );

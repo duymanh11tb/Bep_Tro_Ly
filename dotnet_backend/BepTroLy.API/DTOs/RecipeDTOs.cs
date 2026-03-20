@@ -9,6 +9,7 @@ public class SuggestRecipesRequest
 
 public class SuggestFromPantryRequest
 {
+    public int? FridgeId { get; set; }
     public Dictionary<string, object>? Preferences { get; set; }
     public int Limit { get; set; } = 5;
 }
