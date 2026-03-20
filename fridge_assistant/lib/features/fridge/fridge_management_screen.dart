@@ -1,4 +1,6 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../services/chat_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/fridge_model.dart';
 import '../../services/fridge_service.dart';
@@ -6,6 +8,8 @@ import '../../services/auth_service.dart';
 import '../../services/pantry_service.dart';
 import '../pantry/pantry_overview_screen.dart';
 import 'activity_log_screen.dart';
+import 'fridge_members_screen.dart';
+import 'fridge_chat_screen.dart';
 
 class FridgeManagementScreen extends StatefulWidget {
   const FridgeManagementScreen({super.key});
@@ -21,6 +25,10 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
   int? _currentUserId;
   bool _isLoading = true;
 
+  Map<int, bool> _unreadStatuses = {};
+  StreamSubscription? _unreadSubscription;
+  final ChatService _chatService = ChatService();
+
   // Ingredient counts per fridge
   Map<int, int> _fridgeItemCounts = {};
   Map<int, int> _fridgeExpiringCounts = {};
@@ -29,11 +37,22 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
   void initState() {
     super.initState();
     _loadData();
+    _unreadSubscription = _chatService.unreadUpdateStream.listen((_) {
+      _loadUnreadStatuses();
+    });
+  }
+
+  @override
+  void dispose() {
+    _unreadSubscription?.cancel();
+    super.dispose();
   }
 
   Future<void> _loadData() async {
     if (!mounted) return;
-    setState(() => _isLoading = true);
+    if (_fridges.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     
     try {
       final results = await Future.wait([
@@ -62,6 +81,7 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
           }
           _isLoading = false;
         });
+        _loadUnreadStatuses();
       }
 
       // Load item counts in background
@@ -91,6 +111,20 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
         _fridgeItemCounts = counts;
         _fridgeExpiringCounts = expiringCounts;
       });
+    }
+  }
+
+  Future<void> _loadUnreadStatuses() async {
+    if (_fridges.isEmpty) return;
+    try {
+      final statuses = await _chatService.getUnreadStatuses(_fridges.map((f) => f.fridgeId).toList());
+      if (mounted) {
+        setState(() {
+          _unreadStatuses = statuses;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading unread statuses: $e');
     }
   }
 
@@ -159,6 +193,19 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.background,
+      appBar: AppBar(
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        centerTitle: true,
+        title: const Text(
+          'Tủ lạnh ảo',
+          style: TextStyle(
+            fontSize: 20,
+            fontWeight: FontWeight.bold,
+            color: Colors.black,
+          ),
+        ),
+      ),
       body: Material(
         color: AppColors.background,
         child: _isLoading
@@ -169,17 +216,6 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
               child: ListView(
                 padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
                 children: [
-                  const Center(
-                    child: Text(
-                      'Tủ lạnh ảo',
-                      style: TextStyle(
-                        fontSize: 24,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 8),
                   const Center(
                     child: Text(
                       'Chọn tủ lạnh để xem và quản lý nguyên liệu',
@@ -511,6 +547,47 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
                         builder: (context) => ActivityLogScreen(fridgeId: fridge.fridgeId),
                       ),
                     );
+                  },
+                ),
+                const SizedBox(width: 8),
+                Stack(
+                  children: [
+                    _buildIconAction(
+                      icon: Icons.chat_outlined,
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (context) => FridgeChatScreen(fridge: fridge),
+                          ),
+                        ).then((_) => _loadUnreadStatuses());
+                      },
+                    ),
+                    if (_unreadStatuses[fridge.fridgeId] ?? false)
+                      Positioned(
+                        right: 8,
+                        top: 8,
+                        child: Container(
+                          width: 8,
+                          height: 8,
+                          decoration: const BoxDecoration(
+                            color: Colors.red,
+                            shape: BoxShape.circle,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                const SizedBox(width: 8),
+                _buildIconAction(
+                  icon: Icons.people_alt_outlined,
+                  onTap: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => FridgeMembersScreen(fridge: fridge),
+                      ),
+                    ).then((_) => _loadData());
                   },
                 ),
                 if (fridge.ownerId == _currentUserId) ...[

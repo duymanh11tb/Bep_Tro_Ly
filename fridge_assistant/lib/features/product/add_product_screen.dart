@@ -21,6 +21,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   DateTime? _expiryDate;
   bool _isLoading = false;
   int? _selectedFridgeId;
+  FridgeModel? _selectedFridge;
 
   final List<String> _units = [
     'Gam',
@@ -92,6 +93,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
 
     setState(() => _isLoading = true);
+
+    if (_selectedFridge?.status == 'paused') {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tủ lạnh "${_selectedFridge?.name}" đang tạm ngưng. Không thể thêm nguyên liệu.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
 
     try {
       final success = await PantryService.addItem(
@@ -186,7 +199,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
                     FridgeSelector(
                       selectedFridgeId: _selectedFridgeId,
                       onSelected: (fridge) {
-                        setState(() => _selectedFridgeId = fridge.fridgeId);
+                        setState(() {
+                          _selectedFridgeId = fridge.fridgeId;
+                          _selectedFridge = fridge;
+                        });
                       },
                     ),
                     const SizedBox(height: 16),

@@ -42,6 +42,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   PantryStats? _stats;
   List<RecipeSuggestion> _suggestions = [];
   bool _showExpired = true;
+  bool _showAiSuggestions = false;
+
   List<String> _cleanedItems = [];
 
   @override
@@ -53,8 +55,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _initSequence() async {
     // 0. Load toggle preference
-    _showExpired = await PantryService.getShowExpiredPreference();
-
+    final showExpired = await PantryService.getShowExpiredPreference();
+    final showAi = await PantryService.getShowAiSuggestionsPreference();
+    debugPrint('[Dashboard] initSequence: showExpired = $showExpired, showAi = $showAi');
+    if (mounted) {
+      setState(() {
+        _showExpired = showExpired;
+        _showAiSuggestions = showAi;
+      });
+    }
     // 1. Tải thông tin user & dữ liệu cache ngay lập tức
     await Future.wait([_loadUserInfo(), _loadCachedData()]);
 
@@ -154,6 +163,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _loadAiSuggestions() async {
+    if (!_showAiSuggestions) return; // Skip if disabled
+    
     if (mounted && _suggestions.isEmpty) {
       setState(() => _isLoadingSuggestions = true);
     }
@@ -183,7 +194,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: SafeArea(child: _buildBody()),
       bottomNavigationBar: BottomNavBar(
         currentIndex: _currentNavIndex,
-        onTap: (index) => setState(() => _currentNavIndex = index),
+        onTap: (index) {
+          setState(() => _currentNavIndex = index);
+          if (index == 0) _reloadExpiredPreference();
+        },
       ),
     );
   }
@@ -288,25 +302,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 24),
 
             // AI Suggestions / Discovery
-            _isLoadingSuggestions && _suggestions.isEmpty
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
+            if (_showAiSuggestions) ...[
+              _isLoadingSuggestions && _suggestions.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
+                        ),
                       ),
+                    )
+                  : _suggestions.isEmpty
+                  ? _buildEmptySuggestions()
+                  : AiSuggestionCarousel(
+                      suggestions: _suggestions,
+                      autoScrollDuration: const Duration(seconds: 7),
+                      onViewRecipeTap: (recipe) {
+                        _openRecipeDetail(recipe);
+                      },
                     ),
-                  )
-                : _suggestions.isEmpty
-                ? _buildEmptySuggestions()
-                : AiSuggestionCarousel(
-                    suggestions: _suggestions,
-                    autoScrollDuration: const Duration(seconds: 7),
-                    onViewRecipeTap: (recipe) {
-                      _openRecipeDetail(recipe);
-                    },
-                  ),
-            const SizedBox(height: 24),
+              const SizedBox(height: 24),
+            ],
 
             // Expiring Items - real data
             if (!_isLoading && _expiringItems.isNotEmpty)
@@ -366,11 +382,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Future<void> _reloadExpiredPreference() async {
+    final val = await PantryService.getShowExpiredPreference();
+    final aiVal = await PantryService.getShowAiSuggestionsPreference();
+    debugPrint('[Dashboard] reloadExpiredPreference: val=$val, current=$_showExpired, aiVal=$aiVal, aiCurrent=$_showAiSuggestions');
+    if (mounted) {
+      bool needRefresh = false;
+      if (val != _showExpired) {
+        _showExpired = val;
+        needRefresh = true;
+      }
+      if (aiVal != _showAiSuggestions) {
+        _showAiSuggestions = aiVal;
+        needRefresh = true;
+        
+        // If it was just turned on, load the suggestions
+        if (_showAiSuggestions && _suggestions.isEmpty) {
+          _loadAiSuggestions();
+        }
+      }
+      if (needRefresh) setState(() {});
+    }
+  }
+
   Widget _buildExpiringSection() {
-    // Filter items based on toggle
     final displayItems = _showExpired
         ? _expiringItems
         : _expiringItems.where((item) => !item.isExpired).toList();
+    debugPrint('[Dashboard] _buildExpiringSection: showExpired=$_showExpired, total=${_expiringItems.length}, display=${displayItems.length}, expired=${_expiringItems.where((i) => i.isExpired).length}');
 
     return Column(
       children: [
@@ -455,39 +494,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 8),
-        // Toggle show expired items
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-          child: Row(
-            children: [
-              const Icon(Icons.visibility, size: 16, color: AppColors.textSecondary),
-              const SizedBox(width: 6),
-              const Text(
-                'Hiện SP đã hết hạn',
-                style: TextStyle(
-                  fontSize: 13,
-                  color: AppColors.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const Spacer(),
-              SizedBox(
-                height: 28,
-                child: Switch(
-                  value: _showExpired,
-                  onChanged: (val) {
-                    setState(() => _showExpired = val);
-                    PantryService.setShowExpiredPreference(val);
-                  },
-                  activeColor: AppColors.primary,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 12),
         if (displayItems.isEmpty)
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),

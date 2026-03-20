@@ -55,7 +55,9 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
   }
 
   Future<void> _loadItems() async {
-    setState(() => _isLoading = true);
+    if (_items.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     try {
       final items = await PantryService.getItems();
       if (!mounted) return;

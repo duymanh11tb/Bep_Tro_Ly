@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
 import '../../services/pantry_service.dart';
+import '../../widgets/fridge_selector.dart';
 import 'recipe_detail_screen.dart';
 
 class RecipeRecommendationsScreen extends StatefulWidget {
@@ -29,8 +30,7 @@ class _RecipeRecommendationsScreenState
   bool _isLoadingMore = false;
   String _selectedTab = _tabAll;
   String _searchQuery = '';
-  int _limit = _batchSize;
-  int _ingredientCount = 0;
+  int? _selectedFridgeId;
   late final AnimationController _shimmerController;
 
   @override
@@ -53,7 +53,10 @@ class _RecipeRecommendationsScreenState
   Future<void> _loadInitialData() async {
     setState(() => _isLoading = true);
 
-    final cached = await PantryService.getCachedAiSuggestions();
+    // Get active fridge ID as default
+    _selectedFridgeId = await FridgeService.getActiveFridgeId();
+
+    final cached = await PantryService.getCachedAiSuggestions(fridgeId: _selectedFridgeId);
     if (mounted && cached.isNotEmpty) {
       setState(() {
         _replaceSuggestions(cached);
@@ -69,13 +72,13 @@ class _RecipeRecommendationsScreenState
   }
 
   Future<void> _loadPantryIngredientCount() async {
-    final items = await PantryService.getItems();
+    final items = await PantryService.getItems(fridgeId: _selectedFridgeId);
     if (!mounted) return;
     setState(() => _ingredientCount = items.length);
   }
 
   Future<void> _refreshSuggestions({required int limit}) async {
-    final data = await PantryService.getAiSuggestions(limit: limit);
+    final data = await PantryService.getAiSuggestions(limit: limit, fridgeId: _selectedFridgeId);
     if (!mounted) return;
 
     if (data.isNotEmpty) {
@@ -90,7 +93,7 @@ class _RecipeRecommendationsScreenState
 
     setState(() => _isLoadingMore = true);
     final nextLimit = _limit + _batchSize;
-    final data = await PantryService.getAiSuggestions(limit: nextLimit);
+    final data = await PantryService.getAiSuggestions(limit: nextLimit, fridgeId: _selectedFridgeId);
     if (!mounted) return;
 
     int appended = 0;
@@ -258,6 +261,20 @@ class _RecipeRecommendationsScreenState
                 ],
               ),
               const SizedBox(height: 8),
+              FridgeSelector(
+                selectedFridgeId: _selectedFridgeId,
+                isCompact: true,
+                onSelected: (fridge) {
+                  setState(() {
+                    _selectedFridgeId = fridge.fridgeId;
+                    _isLoading = true;
+                  });
+                  _refresh().then((_) {
+                    if (mounted) setState(() => _isLoading = false);
+                  });
+                },
+              ),
+              const SizedBox(height: 12),
               TextField(
                 controller: _searchController,
                 onChanged: (value) => setState(() => _searchQuery = value),

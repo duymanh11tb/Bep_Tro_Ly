@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:camera/camera.dart';
+import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../core/theme/app_colors.dart';
@@ -33,6 +34,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
   bool _isScanningText = false;
   final List<XFile> _capturedImages = [];
   int? _selectedFridgeId;
+  FridgeModel? _selectedFridge;
 
   @override
   void initState() {
@@ -46,6 +48,34 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     _barcodeScanner.close();
     _textRecognizer.close();
     super.dispose();
+  }
+
+  Future<bool> _handleAddItem({
+    required String nameVi,
+    double quantity = 1,
+    String unit = 'cái',
+    DateTime? expiryDate,
+    String? notes,
+  }) async {
+    if (_selectedFridge?.status == 'paused') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tủ lạnh "${_selectedFridge?.name}" đang tạm ngưng. Không thể thêm nguyên liệu.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return false;
+    }
+
+    return await PantryService.addItem(
+      nameVi: nameVi,
+      quantity: quantity,
+      unit: unit,
+      expiryDate: expiryDate,
+      notes: notes,
+      fridgeId: _selectedFridgeId,
+    );
   }
 
   Future<void> _initializeCamera() async {
@@ -117,6 +147,18 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Thiết bị không hỗ trợ đèn flash.')),
       );
+    }
+  }
+
+  Future<void> _pickImageFromGallery() async {
+    final picker = ImagePicker();
+    final pickedFile = await picker.pickImage(source: ImageSource.gallery);
+    if (pickedFile != null) {
+      if (!mounted) return;
+      setState(() {
+        _capturedImages.insert(0, pickedFile);
+      });
+      await _scanCapturedImage(pickedFile);
     }
   }
 
@@ -324,13 +366,12 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     }
 
     final expiryDate = _suggestExpiryDateForName(productName);
-    final ok = await PantryService.addItem(
+    final ok = await _handleAddItem(
       nameVi: productName,
       quantity: 1,
       unit: 'cái',
       expiryDate: expiryDate,
       notes: 'Thêm từ mã vạch: $barcodeValue',
-      fridgeId: _selectedFridgeId,
     );
 
     if (!mounted) {
@@ -353,13 +394,12 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     required String productName,
   }) async {
     final expiryDate = _suggestExpiryDateForName(productName);
-    final ok = await PantryService.addItem(
+    final ok = await _handleAddItem(
       nameVi: productName,
       quantity: 1,
       unit: 'cái',
       expiryDate: expiryDate,
       notes: 'Thêm tự động từ mã vạch: $barcodeValue',
-      fridgeId: _selectedFridgeId,
     );
 
     if (!mounted) {
@@ -680,13 +720,12 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     var successCount = 0;
     for (final item in items) {
       final expiryDate = _suggestExpiryDateForName(item);
-      final ok = await PantryService.addItem(
+      final ok = await _handleAddItem(
         nameVi: item,
         quantity: 1,
         unit: 'cái',
         expiryDate: expiryDate,
         notes: 'Thêm từ quét camera',
-        fridgeId: _selectedFridgeId,
       );
       if (ok) {
         successCount++;
@@ -744,13 +783,12 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     }
 
     final expiryDate = _suggestExpiryDateForName(ingredientName);
-    final ok = await PantryService.addItem(
+    final ok = await _handleAddItem(
       nameVi: ingredientName,
       quantity: 1,
       unit: 'cái',
       expiryDate: expiryDate,
       notes: 'Thêm thủ công từ màn quét',
-      fridgeId: _selectedFridgeId,
     );
     if (!mounted) {
       return;
@@ -873,7 +911,10 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                     selectedFridgeId: _selectedFridgeId,
                     isCompact: true,
                     onSelected: (fridge) {
-                      setState(() => _selectedFridgeId = fridge.fridgeId);
+                      setState(() {
+                        _selectedFridgeId = fridge.fridgeId;
+                        _selectedFridge = fridge;
+                      });
                     },
                   ),
                   const SizedBox(height: 10),
@@ -1127,7 +1168,10 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          _buildRoundButton(Icons.photo_library_outlined),
+          _buildRoundButton(
+            Icons.photo_library_outlined,
+            onTap: _pickImageFromGallery,
+          ),
           GestureDetector(
             onTap: _captureImage,
             child: Container(

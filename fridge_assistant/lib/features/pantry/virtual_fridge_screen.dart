@@ -26,7 +26,9 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
   }
 
   Future<void> _loadItems() async {
-    setState(() => _isLoading = true);
+    if (_items.isEmpty) {
+      setState(() => _isLoading = true);
+    }
     final items = await PantryService.getExpiringItems(days: 7);
     // Also load all items to find expired ones
     final allItems = await PantryService.getItems();

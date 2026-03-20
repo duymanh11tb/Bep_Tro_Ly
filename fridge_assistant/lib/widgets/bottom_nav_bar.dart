@@ -39,9 +39,9 @@ class BottomNavBar extends StatelessWidget {
               ),
               _buildNavItem(
                 2,
-                Icons.menu_book_outlined,
-                Icons.menu_book,
-                'Công thức',
+                Icons.calendar_month_outlined,
+                Icons.calendar_month,
+                'Lịch ăn uống',
               ),
               _buildNavItem(
                 3,

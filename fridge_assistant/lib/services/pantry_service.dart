@@ -61,7 +61,7 @@ class PantryItem {
     return expiryDate!.difference(DateTime.now()).inDays;
   }
 
-  bool get isExpired => daysUntilExpiry < 0;
+  bool get isExpired => daysUntilExpiry <= 0;
   bool get isExpiringSoon => daysUntilExpiry >= 0 && daysUntilExpiry <= 3;
 
   String get expiryText {
@@ -134,17 +134,19 @@ class PantryService {
         .replaceAll(RegExp(r'_+'), '_');
   }
 
-  static Future<String> _getAiSuggestionsCacheKey() async {
+  static Future<String> _getAiSuggestionsCacheKey({int? fridgeId}) async {
     final suffix = await _getUserCacheSuffix();
-    return '$_aiSuggestionsCachePrefix$suffix';
+    final fridgeSuffix = fridgeId != null ? '_f$fridgeId' : '';
+    return '$_aiSuggestionsCachePrefix${suffix}$fridgeSuffix';
   }
 
   static Future<void> _persistAiSuggestions(
-    List<RecipeSuggestion> suggestions,
-  ) async {
+    List<RecipeSuggestion> suggestions, {
+    int? fridgeId,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheKey = await _getAiSuggestionsCacheKey();
+      final cacheKey = await _getAiSuggestionsCacheKey(fridgeId: fridgeId);
       final payload = jsonEncode(suggestions.map((e) => e.toJson()).toList());
       await prefs.setString(cacheKey, payload);
     } catch (e) {
@@ -152,10 +154,12 @@ class PantryService {
     }
   }
 
-  static Future<List<RecipeSuggestion>> _loadPersistedAiSuggestions() async {
+  static Future<List<RecipeSuggestion>> _loadPersistedAiSuggestions({
+    int? fridgeId,
+  }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheKey = await _getAiSuggestionsCacheKey();
+      final cacheKey = await _getAiSuggestionsCacheKey(fridgeId: fridgeId);
       final raw = prefs.getString(cacheKey);
       if (raw == null || raw.isEmpty) return [];
 
@@ -180,17 +184,15 @@ class PantryService {
     return _cachedStats;
   }
 
-  static Future<List<RecipeSuggestion>> getCachedAiSuggestions() async {
-    if (_cachedAiSuggestions.isNotEmpty) {
-      return _cachedAiSuggestions;
-    }
-
-    final persisted = await _loadPersistedAiSuggestions();
+  static Future<List<RecipeSuggestion>> getCachedAiSuggestions({
+    int? fridgeId,
+  }) async {
+    final persisted = await _loadPersistedAiSuggestions(fridgeId: fridgeId);
     if (persisted.isNotEmpty) {
       _cachedAiSuggestions = persisted;
     }
 
-    return _cachedAiSuggestions;
+    return persisted;
   }
 
   static Future<void> clearCache({bool clearPersistent = false}) async {
@@ -306,6 +308,20 @@ class PantryService {
     try {
       final effectiveFridgeId = fridgeId ?? await FridgeService.getActiveFridgeId();
       
+      // Check if fridge is paused
+      if (effectiveFridgeId != null) {
+        final fridges = await FridgeService().getFridges();
+        final targetFridge = fridges.firstWhere(
+          (f) => f.fridgeId == effectiveFridgeId,
+          orElse: () => throw Exception('Không tìm thấy tủ lạnh'),
+        );
+        
+        if (targetFridge.status == 'paused') {
+          debugPrint('Tủ lạnh ${targetFridge.name} đang tạm ngưng');
+          return false;
+        }
+      }
+      
       final body = {
         'name_vi': nameVi,
         'quantity': quantity,
@@ -339,11 +355,17 @@ class PantryService {
 
   /// Lấy gợi ý món ăn từ AI
   static Future<List<RecipeSuggestion>> getAiSuggestions({
+    int? fridgeId,
     int limit = 15,
   }) async {
     try {
+      String url = '/api/v1/recipes/suggest-from-pantry?limit=$limit';
+      if (fridgeId != null) {
+        url += '&fridgeId=$fridgeId';
+      }
+      
       final resp = await ApiService.get(
-        '/api/v1/recipes/suggest-from-pantry?limit=$limit',
+        url,
         withAuth: true,
       );
       if (resp.statusCode == 200) {
@@ -354,7 +376,7 @@ class PantryService {
               .map((e) => RecipeSuggestion.fromJson(e))
               .toList();
           _cachedAiSuggestions = suggestions;
-          await _persistAiSuggestions(suggestions);
+          await _persistAiSuggestions(suggestions, fridgeId: fridgeId);
           return suggestions;
         }
       }
@@ -397,5 +419,18 @@ class PantryService {
   static Future<void> setShowExpiredPreference(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_showExpiredKey, value);
+  }
+
+  /// Toggle preference key for showing/hiding AI suggestions
+  static const String _showAiSuggestionsKey = 'show_ai_suggestions';
+
+  static Future<bool> getShowAiSuggestionsPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_showAiSuggestionsKey) ?? true;
+  }
+
+  static Future<void> setShowAiSuggestionsPreference(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showAiSuggestionsKey, value);
   }
 }

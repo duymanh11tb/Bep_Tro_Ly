@@ -18,6 +18,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
   bool _dailyRecipeNotification = false;
 
   @override
+  void initState() {
+    super.initState();
+    _loadPreferences();
+  }
+
+  Future<void> _loadPreferences() async {
+    final showExpired = await PantryService.getShowExpiredPreference();
+    final showAi = await PantryService.getShowAiSuggestionsPreference();
+    if (mounted) {
+      setState(() {
+        _expiryNotification = showExpired;
+        _dailyRecipeNotification = showAi;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.backgroundSecondary,
@@ -95,19 +112,25 @@ class _SettingsScreenState extends State<SettingsScreen> {
             _buildSettingsGroup([
               _buildSwitchItem(
                 icon: Icons.hourglass_empty,
-                title: 'Nguyên liệu sắp hết hạn',
+                title: 'Hiện SP đã hết hạn',
+                subtitle: 'Hiển thị nguyên liệu đã hết hạn trên trang chủ',
                 value: _expiryNotification,
                 onChanged: (val) {
+                  debugPrint('[Settings] setShowExpiredPreference: $val');
                   setState(() => _expiryNotification = val);
+                  PantryService.setShowExpiredPreference(val);
                 },
               ),
               const Divider(height: 1, indent: 56),
               _buildSwitchItem(
                 icon: Icons.lightbulb_outline,
                 title: 'Gợi ý công thức hàng ngày',
+                subtitle: 'Hiển thị các công thức gợi ý bởi AI trên trang chủ',
                 value: _dailyRecipeNotification,
                 onChanged: (val) {
+                  debugPrint('[Settings] setShowAiSuggestionsPreference: $val');
                   setState(() => _dailyRecipeNotification = val);
+                  PantryService.setShowAiSuggestionsPreference(val);
                 },
               ),
             ]),
@@ -208,6 +231,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSwitchItem({
     required IconData icon,
     required String title,
+    String? subtitle,
     required bool value,
     required ValueChanged<bool> onChanged,
   }) {
@@ -227,6 +251,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
           color: AppColors.textPrimary,
         ),
       ),
+      subtitle: subtitle != null
+          ? Text(
+              subtitle,
+              style: const TextStyle(
+                fontSize: 12,
+                color: AppColors.textSecondary,
+              ),
+            )
+          : null,
       trailing: Switch(
         value: value,
         onChanged: onChanged,
