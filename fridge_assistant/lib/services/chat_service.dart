@@ -46,6 +46,13 @@ class ChatService {
         .withAutomaticReconnect()
         .build();
 
+    _hubConnection!.onreconnected(({connectionId}) async {
+      debugPrint('SignalR reconnected: $connectionId. Re-joining groups...');
+      for (var fridgeId in _joinedFridgeIds.toList()) {
+        await joinFridgeGroup(fridgeId);
+      }
+    });
+
     _hubConnection!.on('ReceiveMessage', (arguments) {
       if (arguments != null && arguments.isNotEmpty) {
         final data = Map<String, dynamic>.from(arguments[0] as Map);

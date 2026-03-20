@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
@@ -22,6 +23,7 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
   final List<ChatMessageModel> _messages = [];
   int? _currentUserId;
   bool _isLoading = true;
+  StreamSubscription? _messageSubscription;
 
   @override
   void initState() {
@@ -57,7 +59,7 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
     await _chatService.init(widget.fridge.fridgeId);
     
     // Listen for new messages
-    _chatService.messageStream.listen((message) {
+    _messageSubscription = _chatService.messageStream.listen((message) {
       if (mounted && message.fridgeId == widget.fridge.fridgeId) {
         setState(() {
           _messages.add(message);
@@ -81,6 +83,7 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
   @override
   void dispose() {
     _chatService.activeChatFridgeId = null;
+    _messageSubscription?.cancel();
     _messageController.dispose();
     _scrollController.dispose();
     super.dispose();
@@ -143,7 +146,7 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
                         itemCount: _messages.length,
                         itemBuilder: (context, index) {
                           final message = _messages[index];
-                          // Sử dụng toString() để tránh lỗi so sánh int vs String
+                          // Sử dụng .toString() để tránh lỗi so sánh int vs String
                           final isMe = message.userId.toString() == _currentUserId?.toString();
                           return _buildMessageBubble(message, isMe);
                         },
