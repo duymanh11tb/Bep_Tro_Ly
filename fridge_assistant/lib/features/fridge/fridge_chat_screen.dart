@@ -143,7 +143,8 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
                         itemCount: _messages.length,
                         itemBuilder: (context, index) {
                           final message = _messages[index];
-                          final isMe = message.userId == _currentUserId;
+                          // Sử dụng toString() để tránh lỗi so sánh int vs String
+                          final isMe = message.userId.toString() == _currentUserId?.toString();
                           return _buildMessageBubble(message, isMe);
                         },
                       ),
