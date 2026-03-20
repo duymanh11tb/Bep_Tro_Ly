@@ -26,6 +26,16 @@ class LocalNotificationService {
         priority: Priority.high,
       );
 
+  static const AndroidNotificationDetails _chatAndroidDetails =
+      AndroidNotificationDetails(
+        'chat_message_channel',
+        'Tin nhan chat',
+        channelDescription: 'Thong bao khi co tin nhan moi tu thanh vien',
+        importance: Importance.max,
+        priority: Priority.high,
+        showWhen: true,
+      );
+
   static Future<void> init() async {
     if (_initialized) return;
 
@@ -87,6 +97,22 @@ class LocalNotificationService {
           UILocalNotificationDateInterpretation.absoluteTime,
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
       payload: 'cooking_done',
+    );
+  }
+
+  static Future<void> showChatNotification({
+    required String senderName,
+    required String content,
+    required int fridgeId,
+  }) async {
+    if (!_initialized) return;
+
+    await _plugin.show(
+      30000 + (fridgeId % 10000),
+      senderName,
+      content,
+      const NotificationDetails(android: _chatAndroidDetails),
+      payload: 'chat_$fridgeId',
     );
   }
 

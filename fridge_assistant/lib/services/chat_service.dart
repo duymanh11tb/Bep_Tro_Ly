@@ -5,6 +5,8 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:signalr_netcore/signalr_client.dart';
 import '../models/chat_message_model.dart';
 import 'api_service.dart';
+import 'local_notification_service.dart';
+import 'auth_service.dart';
 
 class ChatService {
   static final ChatService _instance = ChatService._internal();
@@ -12,8 +14,13 @@ class ChatService {
   ChatService._internal();
 
   HubConnection? _hubConnection;
+  int? activeChatFridgeId;
+  int? _currentUserId;
+  final Set<int> _joinedFridgeIds = {};
+  
   final _messageController = StreamController<ChatMessageModel>.broadcast();
   final _unreadUpdateController = StreamController<void>.broadcast();
+  
   Stream<ChatMessageModel> get messageStream => _messageController.stream;
   Stream<void> get unreadUpdateStream => _unreadUpdateController.stream;
 
@@ -21,37 +28,78 @@ class ChatService {
 
   bool get isConnected => _hubConnection?.state == HubConnectionState.Connected;
 
-  Future<void> init(int fridgeId) async {
-    if (_hubConnection != null) {
-      await stop();
-    }
-
+  Future<void> initGlobal() async {
+    final user = await AuthService().getUser();
+    _currentUserId = user?['user_id'];
+    
     final baseUrl = ApiService.baseUrl;
     final token = await _getToken();
+    if (token == null) return;
 
     final httpOptions = HttpConnectionOptions(
-      accessTokenFactory: () async => token ?? '',
+      accessTokenFactory: () async => token,
+      logging: (level, message) => debugPrint('SignalR [$level]: $message'),
     );
 
     _hubConnection = HubConnectionBuilder()
         .withUrl('$baseUrl/chatHub', options: httpOptions)
+        .withAutomaticReconnect()
         .build();
 
     _hubConnection!.on('ReceiveMessage', (arguments) {
       if (arguments != null && arguments.isNotEmpty) {
         final data = Map<String, dynamic>.from(arguments[0] as Map);
         final message = ChatMessageModel.fromJson(data);
+        
+        // Cập nhật stream cho màn hình chat hiện tại
         _messageController.add(message);
+        
+        // Cập nhật chấm đỏ thông báo
         _unreadUpdateController.add(null);
+
+        // Hiển thị thông báo Local nếu:
+        // 1. Tin nhắn không phải của mình
+        // 2. Mình đang không ở trong màn hình chat của tủ lạnh đó
+        if (message.userId != _currentUserId && message.fridgeId != activeChatFridgeId) {
+          LocalNotificationService.showChatNotification(
+            senderName: message.displayName,
+            content: message.content,
+            fridgeId: message.fridgeId,
+          );
+        }
       }
     });
 
     try {
       await _hubConnection!.start();
-      debugPrint('SignalR connected');
-      await _hubConnection!.invoke('JoinFridgeGroup', args: [fridgeId]);
+      debugPrint('SignalR Global connected');
+      
+      // Tham gia tất cả các nhóm tủ lạnh mà người dùng thuộc về
+      final fridges = await FridgeService().getFridges();
+      for (var f in fridges) {
+        await joinFridgeGroup(f.fridgeId);
+      }
     } catch (e) {
-      debugPrint('SignalR connection error: $e');
+      debugPrint('SignalR initGlobal error: $e');
+    }
+  }
+
+  Future<void> joinFridgeGroup(int fridgeId) async {
+    if (!isConnected || _joinedFridgeIds.contains(fridgeId)) return;
+    try {
+      await _hubConnection!.invoke('JoinFridgeGroup', args: [fridgeId]);
+      _joinedFridgeIds.add(fridgeId);
+      debugPrint('Joined fridge group: $fridgeId');
+    } catch (e) {
+      debugPrint('Error joining fridge group $fridgeId: $e');
+    }
+  }
+
+  Future<void> init(int fridgeId) async {
+    if (!isConnected) {
+      await initGlobal();
+    } else {
+      await joinFridgeGroup(fridgeId);
     }
   }
 

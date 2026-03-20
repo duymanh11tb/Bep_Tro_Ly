@@ -8,6 +8,7 @@ import 'features/profile/profile_screen.dart';
 import 'services/auth_service.dart';
 import 'services/local_notification_service.dart';
 import 'features/auth/auth_screen.dart';
+import 'services/chat_service.dart';
 import 'features/product/add_product_screen.dart';
 import 'features/pantry/virtual_fridge_screen.dart';
 import 'features/settings/settings_screen.dart';
@@ -92,6 +93,7 @@ class _CheckAuthScreenState extends State<CheckAuthScreen> {
 
     if (mounted) {
       if (isLoggedIn) {
+        ChatService().initGlobal();
         Navigator.of(context).pushReplacementNamed('/home');
       } else {
         Navigator.of(context).pushReplacementNamed('/onboarding');

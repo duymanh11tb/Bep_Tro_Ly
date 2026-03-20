@@ -26,6 +26,7 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
   @override
   void initState() {
     super.initState();
+    _chatService.activeChatFridgeId = widget.fridge.fridgeId;
     _loadInitialData();
   }
 
@@ -274,5 +275,13 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
         ],
       ),
     );
+  }
+
+  @override
+  void dispose() {
+    _chatService.activeChatFridgeId = null;
+    _messageController.dispose();
+    _scrollController.dispose();
+    super.dispose();
   }
 }
