@@ -10,6 +10,7 @@ import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/fridge_selector.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../../services/barcode_lookup_service.dart';
+import '../../models/fridge_model.dart';
 import '../../services/pantry_service.dart';
 import '../../services/fridge_service.dart';
 

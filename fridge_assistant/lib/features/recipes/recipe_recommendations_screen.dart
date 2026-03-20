@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
 import '../../services/pantry_service.dart';
+import '../../services/fridge_service.dart';
 import '../../widgets/fridge_selector.dart';
 import 'recipe_detail_screen.dart';
 
@@ -31,6 +32,8 @@ class _RecipeRecommendationsScreenState
   String _selectedTab = _tabAll;
   String _searchQuery = '';
   int? _selectedFridgeId;
+  int _limit = _batchSize;
+  int _ingredientCount = 0;
   late final AnimationController _shimmerController;
 
   @override

@@ -217,10 +217,10 @@ class PantryService {
   }
 
   /// Lấy tất cả sản phẩm active
-  static Future<List<PantryItem>> getItems() async {
+  static Future<List<PantryItem>> getItems({int? fridgeId}) async {
     try {
-      final fridgeId = await FridgeService.getActiveFridgeId();
-      final queryParams = fridgeId != null ? '&fridgeId=$fridgeId' : '';
+      final effectiveFridgeId = fridgeId ?? await FridgeService.getActiveFridgeId();
+      final queryParams = effectiveFridgeId != null ? '&fridgeId=$effectiveFridgeId' : '';
       
       final resp = await ApiService.get(
         '/api/v1/pantry?status=active$queryParams',
