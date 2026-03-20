@@ -16,20 +16,29 @@ public class ChatHub : Hub
 
     public async Task JoinFridgeGroup(int fridgeId)
     {
-        await Groups.AddToGroupAsync(Context.ConnectionId, $"fridge_{fridgeId}");
+        var groupName = $"fridge_{fridgeId}";
+        await Groups.AddToGroupAsync(Context.ConnectionId, groupName);
+        Console.WriteLine($"[CHAT] Connection {Context.ConnectionId} joined group {groupName}");
     }
 
     public async Task LeaveFridgeGroup(int fridgeId)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"fridge_{fridgeId}");
+        var groupName = $"fridge_{fridgeId}";
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, groupName);
+        Console.WriteLine($"[CHAT] Connection {Context.ConnectionId} left group {groupName}");
     }
 
     public async Task SendMessage(int fridgeId, string content)
     {
         var userIdString = Context.User?.FindFirst("user_id")?.Value;
-        if (string.IsNullOrEmpty(userIdString)) return;
+        if (string.IsNullOrEmpty(userIdString))
+        {
+            Console.WriteLine($"[CHAT] SendMessage failed: User NOT authenticated for connection {Context.ConnectionId}");
+            return;
+        }
         
         int userId = int.Parse(userIdString);
+        Console.WriteLine($"[CHAT] User {userId} sending message to fridge {fridgeId}: {content}");
         
         // Save to DB
         var message = new ChatMessage
@@ -46,7 +55,7 @@ public class ChatHub : Hub
         // Fetch User for display info
         var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId);
         
-        await Clients.Group($"fridge_{fridgeId}").SendAsync("ReceiveMessage", new {
+        var broadcastData = new {
             message_id = message.MessageId,
             fridge_id = fridgeId,
             user_id = userId,
@@ -54,6 +63,10 @@ public class ChatHub : Hub
             photo_url = user?.PhotoUrl,
             content = content,
             created_at = message.CreatedAt
-        });
+        };
+
+        var groupName = $"fridge_{fridgeId}";
+        await Clients.Group(groupName).SendAsync("ReceiveMessage", broadcastData);
+        Console.WriteLine($"[CHAT] Message {message.MessageId} broadcasted to {groupName}");
     }
 }
