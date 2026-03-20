@@ -46,11 +46,17 @@ class FridgeService {
         }),
       );
 
-      final data = jsonDecode(response.body);
+      Map<String, dynamic> data = {};
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } catch (_) {}
+      }
+
       if (response.statusCode == 201) {
         return {'success': true, 'fridge': FridgeModel.fromJson(data)};
       }
-      return {'success': false, 'message': data['error'] ?? 'Lỗi khi tạo tủ lạnh'};
+      return {'success': false, 'message': data['error'] ?? 'Lỗi khi tạo tủ lạnh: ${response.statusCode}'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
     }
@@ -68,11 +74,21 @@ class FridgeService {
         }),
       );
 
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200) {
-        return {'success': true, 'message': data['message'], 'fridge': FridgeModel.fromJson(data['fridge'])};
+      Map<String, dynamic> data = {};
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } catch (_) {}
       }
-      return {'success': false, 'message': data['error'] ?? 'Lỗi khi cập nhật tủ lạnh'};
+
+      if (response.statusCode == 200) {
+        return {
+          'success': true, 
+          'message': data['message'] ?? 'Cập nhật thành công', 
+          'fridge': FridgeModel.fromJson(data['fridge'] ?? data)
+        };
+      }
+      return {'success': false, 'message': data['error'] ?? 'Lỗi khi cập nhật tủ lạnh: ${response.statusCode}'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
     }
@@ -85,11 +101,17 @@ class FridgeService {
         headers: await _getHeaders(),
       );
 
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200) {
-        return {'success': true, 'message': data['message']};
+      Map<String, dynamic> data = {};
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } catch (_) {}
       }
-      return {'success': false, 'message': data['error'] ?? 'Lỗi khi xóa tủ lạnh'};
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Đã xóa tủ lạnh'};
+      }
+      return {'success': false, 'message': data['error'] ?? 'Lỗi khi xóa tủ lạnh: ${response.statusCode}'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
     }
@@ -103,11 +125,17 @@ class FridgeService {
         body: jsonEncode({'identifier': identifier}),
       );
 
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200) {
-        return {'success': true, 'message': data['message']};
+      Map<String, dynamic> data = {};
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } catch (_) {}
       }
-      return {'success': false, 'message': data['error'] ?? 'Lỗi khi mời thành viên'};
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Đã gửi lời mời thành công'};
+      }
+      return {'success': false, 'message': data['error'] ?? 'Lỗi khi mời thành viên: ${response.statusCode}'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
     }
@@ -120,11 +148,17 @@ class FridgeService {
         headers: await _getHeaders(),
       );
 
-      final data = jsonDecode(response.body);
-      if (response.statusCode == 200) {
-        return {'success': true, 'message': data['message']};
+      Map<String, dynamic> data = {};
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } catch (_) {}
       }
-      return {'success': false, 'message': data['error'] ?? 'Lỗi khi xóa thành viên'};
+
+      if (response.statusCode == 200) {
+        return {'success': true, 'message': data['message'] ?? 'Đã xóa thành viên'};
+      }
+      return {'success': false, 'message': data['error'] ?? 'Lỗi khi xóa thành viên: ${response.statusCode}'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
     }
@@ -175,9 +209,15 @@ class FridgeService {
         headers: await _getHeaders(),
       );
 
-      final data = jsonDecode(response.body);
+      Map<String, dynamic> data = {};
+      if (response.body.isNotEmpty) {
+        try {
+          data = jsonDecode(response.body);
+        } catch (_) {}
+      }
+
       if (response.statusCode == 200) {
-        final user = Map<String, dynamic>.from(data['user']);
+        final user = Map<String, dynamic>.from(data['user'] ?? data);
         if (user.containsKey('photo_url') && user['photo_url'] != null) {
           String url = user['photo_url'];
           if (url.startsWith('/')) {
@@ -186,7 +226,7 @@ class FridgeService {
         }
         return user;
       } else {
-        throw data['error'] ?? 'Không tìm thấy người dùng';
+        throw data['error'] ?? 'Không tìm thấy người dùng (Mã: ${response.statusCode})';
       }
     } catch (e) {
       rethrow;
