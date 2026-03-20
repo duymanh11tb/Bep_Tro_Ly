@@ -7,6 +7,7 @@ import '../models/chat_message_model.dart';
 import 'api_service.dart';
 import 'local_notification_service.dart';
 import 'auth_service.dart';
+import 'fridge_service.dart';
 
 class ChatService {
   static final ChatService _instance = ChatService._internal();
