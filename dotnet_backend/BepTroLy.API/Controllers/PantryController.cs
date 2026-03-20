@@ -8,7 +8,7 @@ using System.Security.Claims;
 namespace BepTroLy.API.Controllers;
 
 [ApiController]
-[Route("api/pantry")]
+[Route("api/v1/pantry")]
 [Authorize]
 public class PantryController : ControllerBase
 {
@@ -344,6 +344,61 @@ public class PantryController : ControllerBase
         }
 
         return Ok(new { message = "Cập nhật thành công" });
+    }
+
+    // POST /api/pantry/cleanup-expired - Tự động chuyển SP hết hạn sang trạng thái "expired"
+    [HttpPost("cleanup-expired")]
+    public async Task<IActionResult> CleanupExpired([FromQuery] int? fridgeId = null)
+    {
+        var userId = GetUserId();
+        if (userId == 0) return Unauthorized();
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+
+        var query = _db.PantryItems.AsQueryable();
+
+        if (fridgeId.HasValue)
+        {
+            if (!await UserHasAccessToFridge(userId, fridgeId.Value)) return Forbid();
+            query = query.Where(p => p.FridgeId == fridgeId.Value);
+        }
+        else
+        {
+            // Cleanup across all fridges the user has access to
+            var userFridgeIds = await _db.FridgeMembers
+                .Where(fm => fm.UserId == userId && fm.Status == "accepted")
+                .Select(fm => fm.FridgeId)
+                .ToListAsync();
+
+            query = query.Where(p => p.UserId == userId || (p.FridgeId.HasValue && userFridgeIds.Contains(p.FridgeId.Value)));
+        }
+
+        var expiredItems = await query
+            .Where(p => p.Status == "active"
+                     && p.ExpiryDate.HasValue
+                     && p.ExpiryDate.Value < today)
+            .ToListAsync();
+
+        if (!expiredItems.Any())
+        {
+            return Ok(new { cleaned_count = 0, items = new List<object>() });
+        }
+
+        var cleanedNames = new List<string>();
+        foreach (var item in expiredItems)
+        {
+            item.Status = "expired";
+            item.UpdatedAt = DateTime.UtcNow;
+            cleanedNames.Add(item.NameVi);
+        }
+
+        await _db.SaveChangesAsync();
+
+        return Ok(new
+        {
+            cleaned_count = expiredItems.Count,
+            items = cleanedNames,
+        });
     }
 
     // DELETE /api/pantry/{id} - Xóa sản phẩm

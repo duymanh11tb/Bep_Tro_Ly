@@ -224,7 +224,8 @@ class _RecipeRecommendationsScreenState
   Widget build(BuildContext context) {
     final items = _filteredSuggestions;
 
-    return Stack(
+    return Scaffold(
+      body: Stack(
       children: [
         RefreshIndicator(
           onRefresh: _refresh,
@@ -345,6 +346,7 @@ class _RecipeRecommendationsScreenState
           ),
         ),
       ],
+      ),
     );
   }
 

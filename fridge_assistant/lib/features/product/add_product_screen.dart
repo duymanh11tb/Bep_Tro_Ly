@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/pantry_service.dart';
+import '../../widgets/fridge_selector.dart';
+import '../../models/fridge_model.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -18,6 +20,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   DateTime? _purchaseDate;
   DateTime? _expiryDate;
   bool _isLoading = false;
+  int? _selectedFridgeId;
 
   final List<String> _units = [
     'Gam',
@@ -96,6 +99,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         quantity: double.tryParse(_quantityController.text) ?? 1,
         unit: _selectedUnit.toLowerCase(),
         expiryDate: _expiryDate,
+        fridgeId: _selectedFridgeId,
       );
 
       if (!mounted) return;
@@ -178,6 +182,15 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ──── Chọn tủ lạnh ────
+                    FridgeSelector(
+                      selectedFridgeId: _selectedFridgeId,
+                      onSelected: (fridge) {
+                        setState(() => _selectedFridgeId = fridge.fridgeId);
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
                     // ──── Search Bar ────
                     _buildSearchBar(),
                     const SizedBox(height: 16),

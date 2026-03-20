@@ -19,7 +19,7 @@ class NotificationService {
   Future<List<NotificationModel>> getNotifications() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/notifications'),
+        Uri.parse('$_baseUrl/api/v1/notifications'),
         headers: await _getHeaders(),
       );
 
@@ -36,7 +36,7 @@ class NotificationService {
   Future<bool> markAsRead(int id) async {
     try {
       final response = await http.put(
-        Uri.parse('$_baseUrl/api/notifications/$id/read'),
+        Uri.parse('$_baseUrl/api/v1/notifications/$id/read'),
         headers: await _getHeaders(),
       );
       return response.statusCode == 200;
@@ -48,7 +48,7 @@ class NotificationService {
   Future<Map<String, dynamic>> respondToInvitation(int notificationId, bool accept) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/notifications/$notificationId/respond'),
+        Uri.parse('$_baseUrl/api/v1/notifications/$notificationId/respond'),
         headers: await _getHeaders(),
         body: jsonEncode({'accept': accept}),
       );

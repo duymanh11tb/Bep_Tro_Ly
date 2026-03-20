@@ -12,7 +12,7 @@ using Microsoft.AspNetCore.Hosting;
 namespace BepTroLy.API.Controllers;
 
 [ApiController]
-[Route("api/auth")]
+[Route("api/v1/auth")]
 public class AuthController : ControllerBase
 {
     private readonly AppDbContext _db;

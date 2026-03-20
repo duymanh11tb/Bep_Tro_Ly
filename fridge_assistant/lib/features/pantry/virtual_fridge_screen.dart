@@ -13,6 +13,7 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
   static const String _filterUrgent = 'Khẩn cấp';
   static const String _filterAll = 'Tất cả';
   static const String _filterVegetable = 'Rau củ';
+  static const String _filterExpired = 'Đã hết hạn';
 
   List<PantryItem> _items = [];
   bool _isLoading = true;
@@ -27,13 +28,19 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
   Future<void> _loadItems() async {
     setState(() => _isLoading = true);
     final items = await PantryService.getExpiringItems(days: 7);
+    // Also load all items to find expired ones
+    final allItems = await PantryService.getItems();
+    final expiredOnly = allItems.where((item) => item.isExpired).toList();
     if (!mounted) return;
 
     setState(() {
       _items = items;
+      _expiredItems = expiredOnly;
       _isLoading = false;
     });
   }
+
+  List<PantryItem> _expiredItems = [];
 
   Future<void> _deleteItem(PantryItem item) async {
     final confirmed = await showDialog<bool>(
@@ -80,6 +87,9 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
   }
 
   List<PantryItem> get _filteredItems {
+    if (_selectedFilter == _filterExpired) {
+      return _expiredItems;
+    }
     return _items.where((item) {
       switch (_selectedFilter) {
         case _filterUrgent:
@@ -208,6 +218,8 @@ class _VirtualFridgeScreenState extends State<VirtualFridgeScreen> {
                 _buildFilterChip(_filterAll, _items.length),
                 const SizedBox(width: 8),
                 _buildFilterChip(_filterVegetable, _vegetableCount),
+                const SizedBox(width: 8),
+                _buildFilterChip(_filterExpired, _expiredItems.length),
               ],
             ),
           ),

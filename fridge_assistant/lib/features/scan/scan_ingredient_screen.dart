@@ -6,9 +6,11 @@ import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart
 import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
+import '../../widgets/fridge_selector.dart';
 import '../dashboard/dashboard_screen.dart';
 import '../../services/barcode_lookup_service.dart';
 import '../../services/pantry_service.dart';
+import '../../services/fridge_service.dart';
 
 class ScanIngredientScreen extends StatefulWidget {
   const ScanIngredientScreen({super.key});
@@ -30,6 +32,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
   bool _isCapturing = false;
   bool _isScanningText = false;
   final List<XFile> _capturedImages = [];
+  int? _selectedFridgeId;
 
   @override
   void initState() {
@@ -327,6 +330,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
       unit: 'cái',
       expiryDate: expiryDate,
       notes: 'Thêm từ mã vạch: $barcodeValue',
+      fridgeId: _selectedFridgeId,
     );
 
     if (!mounted) {
@@ -355,6 +359,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
       unit: 'cái',
       expiryDate: expiryDate,
       notes: 'Thêm tự động từ mã vạch: $barcodeValue',
+      fridgeId: _selectedFridgeId,
     );
 
     if (!mounted) {
@@ -681,6 +686,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
         unit: 'cái',
         expiryDate: expiryDate,
         notes: 'Thêm từ quét camera',
+        fridgeId: _selectedFridgeId,
       );
       if (ok) {
         successCount++;
@@ -744,6 +750,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
       unit: 'cái',
       expiryDate: expiryDate,
       notes: 'Thêm thủ công từ màn quét',
+      fridgeId: _selectedFridgeId,
     );
     if (!mounted) {
       return;
@@ -861,6 +868,15 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // ──── Chọn tủ lạnh ────
+                  FridgeSelector(
+                    selectedFridgeId: _selectedFridgeId,
+                    isCompact: true,
+                    onSelected: (fridge) {
+                      setState(() => _selectedFridgeId = fridge.fridgeId);
+                    },
+                  ),
+                  const SizedBox(height: 10),
                   _buildCameraPreview(),
                   const SizedBox(height: 12),
                   Row(

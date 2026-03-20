@@ -1050,6 +1050,119 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
           backgroundColor: AppColors.error,
         ),
       );
+      return;
+    }
+
+    // Auto-remove after checking (mark as purchased)
+    if (!originalChecked && mounted) {
+      _autoRemoveItem(item);
+    }
+  }
+
+  void _autoRemoveItem(ShoppingListItem item) {
+    Future.delayed(const Duration(seconds: 2), () async {
+      if (!mounted) return;
+
+      // Check if the item is still checked (user may have unchecked it)
+      final currentItem = _allItems.firstWhere(
+        (i) => i.id == item.id,
+        orElse: () => item,
+      );
+      if (!currentItem.isChecked) return;
+
+      // Remove from UI
+      setState(() {
+        _allItems.removeWhere((i) => i.id == item.id);
+        _sections = _sections.map((section) {
+          return ShoppingListSection(
+            title: section.title,
+            recipeInfo: section.recipeInfo,
+            items: section.items.where((i) => i.id != item.id).toList(),
+          );
+        }).toList();
+        // Remove empty sections
+        _sections = _sections.where((s) => s.items.isNotEmpty).toList();
+      });
+
+      // Delete from backend
+      await ShoppingService.deleteItem(item.id);
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).clearSnackBars();
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã xóa "${item.name}" khỏi danh sách'),
+          backgroundColor: AppColors.primary,
+          behavior: SnackBarBehavior.floating,
+          action: SnackBarAction(
+            label: 'Hoàn tác',
+            textColor: Colors.white,
+            onPressed: () async {
+              // Re-add item
+              final ok = await ShoppingService.addItem(
+                name: item.name,
+                quantity: item.quantity,
+                unit: item.unit,
+                notes: item.notes,
+              );
+              if (ok && mounted) {
+                await _loadData();
+              }
+            },
+          ),
+        ),
+      );
+    });
+  }
+
+  Future<void> _deleteShoppingItem(ShoppingListItem item) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Xóa khỏi danh sách?'),
+        content: Text('Bạn có chắc muốn xóa "${item.name}"?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Hủy'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Xóa', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+
+    final ok = await ShoppingService.deleteItem(item.id);
+    if (!mounted) return;
+
+    if (ok) {
+      setState(() {
+        _allItems.removeWhere((i) => i.id == item.id);
+        _sections = _sections.map((section) {
+          return ShoppingListSection(
+            title: section.title,
+            recipeInfo: section.recipeInfo,
+            items: section.items.where((i) => i.id != item.id).toList(),
+          );
+        }).toList();
+        _sections = _sections.where((s) => s.items.isNotEmpty).toList();
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Đã xóa "${item.name}"'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+    } else {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Không thể xóa. Vui lòng thử lại.'),
+          backgroundColor: AppColors.error,
+        ),
+      );
     }
   }
 

@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BepTroLy.API.Controllers;
 
 [ApiController]
-[Route("api/meal-plan")]
+[Route("api/v1/meal-plan")]
 [Authorize]
 public class MealPlanController : ControllerBase
 {

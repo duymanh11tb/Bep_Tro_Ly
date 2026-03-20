@@ -9,7 +9,7 @@ class AuthService {
   static const String _userKey = 'user_data';
 
   Future<Map<String, dynamic>> login(String email, String password) async {
-    final response = await ApiService.post('/api/auth/login', {
+    final response = await ApiService.post('/api/v1/auth/login', {
       'email': email,
       'password': password,
     });
@@ -32,7 +32,7 @@ class AuthService {
     String password, {
     String? displayName,
   }) async {
-    final response = await ApiService.post('/api/auth/register', {
+    final response = await ApiService.post('/api/v1/auth/register', {
       'email': email,
       'password': password,
       'display_name': displayName ?? email.split('@')[0],
@@ -83,7 +83,7 @@ class AuthService {
     }
 
     try {
-      final response = await ApiService.get('/api/auth/me', withAuth: true);
+      final response = await ApiService.get('/api/v1/auth/me', withAuth: true);
       if (response.statusCode == 200) {
         return true;
       }
@@ -128,7 +128,7 @@ class AuthService {
         if (data.containsKey('allergies')) 'allergies': data['allergies'],
       };
 
-      final response = await ApiService.put('/api/auth/profile', payload, withAuth: true);
+      final response = await ApiService.put('/api/v1/auth/profile', payload, withAuth: true);
       
       if (response.body.isEmpty) {
         if (response.statusCode == 200 || response.statusCode == 201) {
@@ -169,7 +169,7 @@ class AuthService {
 
   Future<Map<String, dynamic>> updateAvatar(String filePath) async {
     try {
-      final url = Uri.parse('${ApiService.baseUrl}/api/auth/avatar');
+      final url = Uri.parse('${ApiService.baseUrl}/api/v1/auth/avatar');
       final token = await getToken();
       
       debugPrint('AuthService: Uploading avatar to $url');
@@ -231,7 +231,7 @@ class AuthService {
 
   Future<Map<String, dynamic>> changePassword(String currentPassword, String newPassword) async {
     try {
-      final response = await ApiService.post('/api/auth/change-password', {
+      final response = await ApiService.post('/api/v1/auth/change-password', {
         'current_password': currentPassword,
         'new_password': newPassword,
       }, withAuth: true);

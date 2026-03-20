@@ -221,7 +221,7 @@ class PantryService {
       final queryParams = fridgeId != null ? '&fridgeId=$fridgeId' : '';
       
       final resp = await ApiService.get(
-        '/api/pantry?status=active$queryParams',
+        '/api/v1/pantry?status=active$queryParams',
         withAuth: true,
       );
       if (resp.statusCode == 200) {
@@ -234,6 +234,23 @@ class PantryService {
     return [];
   }
 
+  /// Lấy sản phẩm theo fridge ID cụ thể
+  static Future<List<PantryItem>> getItemsForFridge(int fridgeId) async {
+    try {
+      final resp = await ApiService.get(
+        '/api/v1/pantry?status=active&fridgeId=$fridgeId',
+        withAuth: true,
+      );
+      if (resp.statusCode == 200) {
+        final List list = jsonDecode(utf8.decode(resp.bodyBytes));
+        return list.map((e) => PantryItem.fromJson(e)).toList();
+      }
+    } catch (e) {
+      debugPrint('PantryService.getItemsForFridge error: $e');
+    }
+    return [];
+  }
+
   /// Lấy sản phẩm sắp hết hạn
   static Future<List<PantryItem>> getExpiringItems({int days = 7}) async {
     try {
@@ -241,7 +258,7 @@ class PantryService {
       final queryParams = fridgeId != null ? '&fridgeId=$fridgeId' : '';
 
       final resp = await ApiService.get(
-        '/api/pantry/expiring?days=$days$queryParams',
+        '/api/v1/pantry/expiring?days=$days$queryParams',
         withAuth: true,
       );
       if (resp.statusCode == 200) {
@@ -262,7 +279,7 @@ class PantryService {
       final fridgeId = await FridgeService.getActiveFridgeId();
       final queryParams = fridgeId != null ? '?fridgeId=$fridgeId' : '';
       
-      final resp = await ApiService.get('/api/pantry/stats$queryParams', withAuth: true);
+      final resp = await ApiService.get('/api/v1/pantry/stats$queryParams', withAuth: true);
       if (resp.statusCode == 200) {
         final json = jsonDecode(utf8.decode(resp.bodyBytes));
         final stats = PantryStats.fromJson(json);
@@ -284,23 +301,24 @@ class PantryService {
     String location = 'fridge',
     DateTime? expiryDate,
     String? notes,
+    int? fridgeId, // Optional: override active fridge
   }) async {
     try {
-      final fridgeId = await FridgeService.getActiveFridgeId();
+      final effectiveFridgeId = fridgeId ?? await FridgeService.getActiveFridgeId();
       
       final body = {
         'name_vi': nameVi,
         'quantity': quantity,
         'unit': unit,
         if (categoryId != null) 'category_id': categoryId,
-        if (fridgeId != null) 'fridge_id': fridgeId,
+        if (effectiveFridgeId != null) 'fridge_id': effectiveFridgeId,
         'location': location,
         if (expiryDate != null)
           'expiry_date': expiryDate.toIso8601String().split('T').first,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
         'add_method': 'manual',
       };
-      final resp = await ApiService.post('/api/pantry', body, withAuth: true);
+      final resp = await ApiService.post('/api/v1/pantry', body, withAuth: true);
       return resp.statusCode == 200;
     } catch (e) {
       debugPrint('PantryService.addItem error: $e');
@@ -311,7 +329,7 @@ class PantryService {
   /// Xóa sản phẩm (soft delete)
   static Future<bool> deleteItem(int id) async {
     try {
-      final resp = await ApiService.delete('/api/pantry/$id');
+      final resp = await ApiService.delete('/api/v1/pantry/$id');
       return resp.statusCode == 200;
     } catch (e) {
       debugPrint('PantryService.deleteItem error: $e');
@@ -325,7 +343,7 @@ class PantryService {
   }) async {
     try {
       final resp = await ApiService.get(
-        '/api/recipes/suggest-from-pantry?limit=$limit',
+        '/api/v1/recipes/suggest-from-pantry?limit=$limit',
         withAuth: true,
       );
       if (resp.statusCode == 200) {
@@ -344,5 +362,40 @@ class PantryService {
       debugPrint('PantryService.getAiSuggestions error: $e');
     }
     return getCachedAiSuggestions();
+  }
+
+  /// Tự động cleanup sản phẩm hết hạn
+  static Future<List<String>> cleanupExpiredItems() async {
+    try {
+      final resp = await ApiService.post(
+        '/api/v1/pantry/cleanup-expired',
+        {},
+        withAuth: true,
+      );
+      if (resp.statusCode == 200) {
+        final data = jsonDecode(utf8.decode(resp.bodyBytes));
+        final int count = data['cleaned_count'] ?? 0;
+        if (count > 0) {
+          final List items = data['items'] ?? [];
+          return items.map((e) => e.toString()).toList();
+        }
+      }
+    } catch (e) {
+      debugPrint('PantryService.cleanupExpiredItems error: $e');
+    }
+    return [];
+  }
+
+  /// Toggle preference key for showing/hiding expired items
+  static const String _showExpiredKey = 'show_expired_items';
+
+  static Future<bool> getShowExpiredPreference() async {
+    final prefs = await SharedPreferences.getInstance();
+    return prefs.getBool(_showExpiredKey) ?? true;
+  }
+
+  static Future<void> setShowExpiredPreference(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setBool(_showExpiredKey, value);
   }
 }

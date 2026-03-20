@@ -37,9 +37,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   // Real data from API
   bool _isLoading = true;
+  bool _isLoadingSuggestions = true;
   List<PantryItem> _expiringItems = [];
   PantryStats? _stats;
   List<RecipeSuggestion> _suggestions = [];
+  bool _showExpired = true;
+  List<String> _cleanedItems = [];
 
   @override
   void initState() {
@@ -49,11 +52,36 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Future<void> _initSequence() async {
+    // 0. Load toggle preference
+    _showExpired = await PantryService.getShowExpiredPreference();
+
     // 1. Tải thông tin user & dữ liệu cache ngay lập tức
     await Future.wait([_loadUserInfo(), _loadCachedData()]);
 
     // 2. Refresh dữ liệu từ server trong nền
     _loadPantryData(isBackground: true);
+
+    // 3. Auto-cleanup expired items trong nền
+    _runExpiredCleanup();
+  }
+
+  Future<void> _runExpiredCleanup() async {
+    try {
+      final cleaned = await PantryService.cleanupExpiredItems();
+      if (cleaned.isNotEmpty && mounted) {
+        setState(() => _cleanedItems = cleaned);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã tự động xóa ${cleaned.length} sản phẩm hết hạn: ${cleaned.take(3).join(", ")}${cleaned.length > 3 ? "..." : ""}'),
+            backgroundColor: AppColors.warning,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        // Refresh data since items were cleaned
+        _loadPantryData(isBackground: true);
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadUserInfo() async {
@@ -100,11 +128,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
+      // Load stats + expiring items + notifications first (fast)
       final results = await Future.wait([
         PantryService.getExpiringItems(days: 7),
         PantryService.getStats(),
-        // Lấy nhiều gợi ý để người dùng vuốt xem đa dạng hơn.
-        PantryService.getAiSuggestions(limit: 10),
         NotificationService.getUnreadCount(),
       ]);
 
@@ -112,14 +139,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
         setState(() {
           _expiringItems = results[0] as List<PantryItem>;
           _stats = results[1] as PantryStats?;
-          _suggestions = results[2] as List<RecipeSuggestion>;
-          _unreadCount = results[3] as int;
+          _unreadCount = results[2] as int;
           _isLoading = false;
+        });
+      }
+
+      // Load AI suggestions independently (slow, don't block UI)
+      _loadAiSuggestions();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadAiSuggestions() async {
+    if (mounted && _suggestions.isEmpty) {
+      setState(() => _isLoadingSuggestions = true);
+    }
+    try {
+      final suggestions = await PantryService.getAiSuggestions(limit: 10);
+      if (mounted) {
+        setState(() {
+          _suggestions = suggestions;
+          _isLoadingSuggestions = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isLoadingSuggestions = false);
       }
     }
   }
@@ -240,7 +288,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const SizedBox(height: 24),
 
             // AI Suggestions / Discovery
-            _isLoading
+            _isLoadingSuggestions && _suggestions.isEmpty
                 ? const Padding(
                     padding: EdgeInsets.symmetric(vertical: 20),
                     child: Center(
@@ -319,7 +367,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   Widget _buildExpiringSection() {
-    // Convert PantryService PantryItem to the widget's FridgeItem-like data
+    // Filter items based on toggle
+    final displayItems = _showExpired
+        ? _expiringItems
+        : _expiringItems.where((item) => !item.isExpired).toList();
+
     return Column(
       children: [
         Padding(
@@ -403,20 +455,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 14),
-        SizedBox(
-          height: 150,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _expiringItems.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final item = _expiringItems[index];
-              return _buildExpiringCard(item);
-            },
+        const SizedBox(height: 8),
+        // Toggle show expired items
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 20),
+          child: Row(
+            children: [
+              const Icon(Icons.visibility, size: 16, color: AppColors.textSecondary),
+              const SizedBox(width: 6),
+              const Text(
+                'Hiện SP đã hết hạn',
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const Spacer(),
+              SizedBox(
+                height: 28,
+                child: Switch(
+                  value: _showExpired,
+                  onChanged: (val) {
+                    setState(() => _showExpired = val);
+                    PantryService.setShowExpiredPreference(val);
+                  },
+                  activeColor: AppColors.primary,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+            ],
           ),
         ),
+        const SizedBox(height: 8),
+        if (displayItems.isEmpty)
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Không có sản phẩm phù hợp với bộ lọc.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 150,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: displayItems.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final item = displayItems[index];
+                return _buildExpiringCard(item);
+              },
+            ),
+          ),
       ],
     );
   }

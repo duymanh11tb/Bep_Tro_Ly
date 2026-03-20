@@ -20,7 +20,7 @@ class FridgeService {
   Future<List<FridgeModel>> getFridges() async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/fridges'),
+        Uri.parse('$_baseUrl/api/v1/fridges'),
         headers: await _getHeaders(),
       );
 
@@ -38,7 +38,7 @@ class FridgeService {
   Future<Map<String, dynamic>> createFridge(String name, String? location) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/fridges'),
+        Uri.parse('$_baseUrl/api/v1/fridges'),
         headers: await _getHeaders(),
         body: jsonEncode({
           'name': name,
@@ -59,7 +59,7 @@ class FridgeService {
   Future<Map<String, dynamic>> updateFridge(int id, String name, String? location, {String? status}) async {
     try {
       final response = await http.put(
-        Uri.parse('$_baseUrl/api/fridges/$id'),
+        Uri.parse('$_baseUrl/api/v1/fridges/$id'),
         headers: await _getHeaders(),
         body: jsonEncode({
           'name': name,
@@ -81,7 +81,7 @@ class FridgeService {
   Future<Map<String, dynamic>> deleteFridge(int id) async {
     try {
       final response = await http.delete(
-        Uri.parse('$_baseUrl/api/fridges/$id'),
+        Uri.parse('$_baseUrl/api/v1/fridges/$id'),
         headers: await _getHeaders(),
       );
 
@@ -98,7 +98,7 @@ class FridgeService {
   Future<Map<String, dynamic>> inviteMember(int fridgeId, String identifier) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/fridges/$fridgeId/members'),
+        Uri.parse('$_baseUrl/api/v1/fridges/$fridgeId/members'),
         headers: await _getHeaders(),
         body: jsonEncode({'identifier': identifier}),
       );
@@ -116,7 +116,7 @@ class FridgeService {
   Future<Map<String, dynamic>> removeMember(int fridgeId, int userId) async {
     try {
       final response = await http.delete(
-        Uri.parse('$_baseUrl/api/fridges/$fridgeId/members/$userId'),
+        Uri.parse('$_baseUrl/api/v1/fridges/$fridgeId/members/$userId'),
         headers: await _getHeaders(),
       );
 
@@ -133,7 +133,7 @@ class FridgeService {
   Future<bool> acceptInvitation(int fridgeId) async {
     try {
       final response = await http.post(
-        Uri.parse('$_baseUrl/api/fridges/$fridgeId/members/accept'),
+        Uri.parse('$_baseUrl/api/v1/fridges/$fridgeId/members/accept'),
         headers: await _getHeaders(),
         body: jsonEncode({}),
       );
@@ -171,7 +171,7 @@ class FridgeService {
   Future<Map<String, dynamic>> searchUser(String query) async {
     try {
       final response = await http.get(
-        Uri.parse('$_baseUrl/api/auth/search?query=$query'),
+        Uri.parse('$_baseUrl/api/v1/auth/search?query=$query'),
         headers: await _getHeaders(),
       );
 

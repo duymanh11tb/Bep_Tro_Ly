@@ -8,7 +8,7 @@ using System.Security.Claims;
 namespace BepTroLy.API.Controllers;
 
 [ApiController]
-[Route("api/activity")]
+[Route("api/v1/activity")]
 [Authorize]
 public class ActivityLogController : ControllerBase
 {

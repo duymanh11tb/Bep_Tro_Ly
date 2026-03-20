@@ -10,7 +10,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BepTroLy.API.Controllers;
 
 [ApiController]
-[Route("api/recipes")]
+[Route("api/v1/recipes")]
 public class RecipeController : ControllerBase
 {
     private readonly AIRecipeService _aiService;

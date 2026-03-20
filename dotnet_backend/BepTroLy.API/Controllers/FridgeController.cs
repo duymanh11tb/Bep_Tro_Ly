@@ -9,7 +9,7 @@ using System.Security.Claims;
 namespace BepTroLy.API.Controllers;
 
 [ApiController]
-[Route("api/fridges")]
+[Route("api/v1/fridges")]
 [Authorize]
 public class FridgeController : ControllerBase
 {

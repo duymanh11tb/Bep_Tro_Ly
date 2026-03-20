@@ -9,7 +9,7 @@ using System.Security.Claims;
 namespace BepTroLy.API.Controllers;
 
 [ApiController]
-[Route("api/notifications")]
+[Route("api/v1/notifications")]
 [Authorize]
 public class NotificationController : ControllerBase
 {

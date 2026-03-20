@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BepTroLy.API.Controllers;
 
 [ApiController]
-[Route("api/shopping")]
+[Route("api/v1/shopping")]
 [Authorize]
 public class ShoppingController : ControllerBase
 {

@@ -34,7 +34,7 @@ class MealPlanService {
     required int limit,
   }) async {
     try {
-      final resp = await ApiService.post('/api/recipes/suggest', {
+      final resp = await ApiService.post('/api/v1/recipes/suggest', {
         'ingredients': ingredients,
         'limit': limit,
       }, withAuth: true);
@@ -219,7 +219,7 @@ class MealPlanService {
   static Future<Map<String, dynamic>> _loadRemotePlan() async {
     try {
       final resp = await ApiService.get(
-        '/api/meal-plan/current',
+        '/api/v1/meal-plan/current',
         withAuth: true,
       );
       if (resp.statusCode != 200) return <String, dynamic>{};
@@ -243,7 +243,7 @@ class MealPlanService {
 
   static Future<void> _saveRemotePlan(Map<String, dynamic> plan) async {
     try {
-      await ApiService.put('/api/meal-plan/current', {
+      await ApiService.put('/api/v1/meal-plan/current', {
         'plan_data': plan,
       }, withAuth: true);
     } catch (e) {

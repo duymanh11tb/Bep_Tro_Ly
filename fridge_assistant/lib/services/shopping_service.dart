@@ -17,7 +17,7 @@ class ShoppingService {
   static Future<List<ShoppingListSection>> getCurrentSections() async {
     try {
       final resp = await ApiService.get(
-        '/api/shopping/current',
+        '/api/v1/shopping/current',
         withAuth: true,
       );
       if (resp.statusCode != 200) return [];
@@ -97,13 +97,13 @@ class ShoppingService {
     if (parsed == null) return false;
 
     try {
-      var resp = await ApiService.put('/api/shopping/items/$parsed/purchase', {
+      var resp = await ApiService.put('/api/v1/shopping/items/$parsed/purchase', {
         'is_purchased': isPurchased,
       }, withAuth: true);
 
       // Backward compatibility with older backends using /toggle.
       if (resp.statusCode == 404) {
-        resp = await ApiService.put('/api/shopping/items/$parsed/toggle', {
+        resp = await ApiService.put('/api/v1/shopping/items/$parsed/toggle', {
           'is_purchased': isPurchased,
         }, withAuth: true);
       }
@@ -134,8 +134,24 @@ class ShoppingService {
 
     try {
       final resp = await ApiService.post(
-        '/api/shopping/items',
+        '/api/v1/shopping/items',
         payload,
+        withAuth: true,
+      );
+      return resp.statusCode == 200;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /// Xóa một mục khỏi danh sách mua sắm
+  static Future<bool> deleteItem(String itemId) async {
+    final parsed = int.tryParse(itemId);
+    if (parsed == null) return false;
+
+    try {
+      final resp = await ApiService.delete(
+        '/api/v1/shopping/items/$parsed',
         withAuth: true,
       );
       return resp.statusCode == 200;

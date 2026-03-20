@@ -45,7 +45,7 @@ class GoogleAuthService {
       final payload = <String, dynamic>{};
       if (idToken != null) payload['idToken'] = idToken;
       if (accessToken != null) payload['accessToken'] = accessToken;
-      final response = await ApiService.post('/api/auth/google-login', payload);
+      final response = await ApiService.post('/api/v1/auth/google-login', payload);
 
       final data = jsonDecode(response.body);
 
