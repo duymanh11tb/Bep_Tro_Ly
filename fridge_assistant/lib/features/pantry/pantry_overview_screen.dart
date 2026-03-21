@@ -30,6 +30,7 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
   String _searchQuery = '';
   String _fridgeName = 'Tủ lạnh';
   FridgeModel? _activeFridge;
+  bool _showExpiredItems = true;
 
   @override
   void initState() {
@@ -133,6 +134,9 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
 
       if (!categoryMatched) return false;
 
+      // Filter expired items based on toggle
+      if (!_showExpiredItems && item.isExpired) return false;
+
       if (q.isEmpty) return true;
 
       final name = item.name.toLowerCase();
@@ -216,9 +220,14 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
                         ),
                       ),
                       IconButton(
-                        onPressed: () => Navigator.pushNamed(context, '/fridge-management')
-                            .then((_) => _loadItems()),
-                        icon: const Icon(Icons.settings_outlined, color: AppColors.primary),
+                        onPressed: () => Navigator.pushNamed(
+                          context,
+                          '/fridge-management',
+                        ).then((_) => _loadItems()),
+                        icon: const Icon(
+                          Icons.settings_outlined,
+                          color: AppColors.primary,
+                        ),
                       ),
                     ],
                   ),
@@ -233,12 +242,18 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
                     ),
                     child: Row(
                       children: [
-                        const Icon(Icons.pause_circle_filled, color: Colors.red),
+                        const Icon(
+                          Icons.pause_circle_filled,
+                          color: Colors.red,
+                        ),
                         const SizedBox(width: 12),
                         const Expanded(
                           child: Text(
                             'Tủ lạnh này đang tạm ngưng. Bạn không thể thực hiện thay đổi.',
-                            style: TextStyle(color: Colors.red, fontWeight: FontWeight.w600),
+                            style: TextStyle(
+                              color: Colors.red,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
                         ),
                       ],
@@ -263,6 +278,39 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                // Toggle to show/hide expired items
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppColors.divider),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const Text(
+                        'Hiển thị sản phẩm hết hạn',
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: AppColors.textPrimary,
+                        ),
+                      ),
+                      Switch(
+                        value: _showExpiredItems,
+                        onChanged: (value) {
+                          setState(() => _showExpiredItems = value);
+                        },
+                        activeColor: AppColors.primary,
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
                 SizedBox(
                   height: 34,
                   child: ListView.separated(
@@ -281,7 +329,9 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
                         selectedColor: AppColors.primary,
                         backgroundColor: const Color(0xFFF1F3F5),
                         labelStyle: TextStyle(
-                          color: selected ? Colors.white : AppColors.textSecondary,
+                          color: selected
+                              ? Colors.white
+                              : AppColors.textSecondary,
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
                         ),
@@ -299,7 +349,9 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
                   const Padding(
                     padding: EdgeInsets.only(top: 40),
                     child: Center(
-                      child: CircularProgressIndicator(color: AppColors.primary),
+                      child: CircularProgressIndicator(
+                        color: AppColors.primary,
+                      ),
                     ),
                   )
                 else if (items.isEmpty)
@@ -349,8 +401,12 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
             right: 18,
             bottom: 16,
             child: FloatingActionButton(
-              onPressed: _activeFridge?.status == 'paused' ? null : _openAddProduct,
-              backgroundColor: _activeFridge?.status == 'paused' ? Colors.grey : AppColors.primary,
+              onPressed: _activeFridge?.status == 'paused'
+                  ? null
+                  : _openAddProduct,
+              backgroundColor: _activeFridge?.status == 'paused'
+                  ? Colors.grey
+                  : AppColors.primary,
               shape: const CircleBorder(),
               child: const Icon(Icons.add, color: Colors.white),
             ),
@@ -446,12 +502,16 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
             ],
           ),
           IconButton(
-            onPressed: _activeFridge?.status == 'paused' ? null : () => _deleteItem(item),
+            onPressed: _activeFridge?.status == 'paused'
+                ? null
+                : () => _deleteItem(item),
             visualDensity: VisualDensity.compact,
             icon: Icon(
               Icons.delete,
               size: 18,
-              color: _activeFridge?.status == 'paused' ? Colors.grey : AppColors.error,
+              color: _activeFridge?.status == 'paused'
+                  ? Colors.grey
+                  : AppColors.error,
             ),
           ),
         ],
