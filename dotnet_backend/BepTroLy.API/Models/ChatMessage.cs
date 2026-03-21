@@ -22,6 +22,9 @@ public class ChatMessage
     [Column("content")]
     public string Content { get; set; } = string.Empty;
 
+    [Column("status")]
+    public string Status { get; set; } = "sent"; // "pending" | "sent" | "delivered"
+
     [Column("created_at")]
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 

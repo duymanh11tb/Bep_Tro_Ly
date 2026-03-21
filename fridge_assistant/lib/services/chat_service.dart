@@ -18,21 +18,21 @@ class ChatService {
   int? activeChatFridgeId;
   int? _currentUserId;
   final Set<int> _joinedFridgeIds = {};
-  
+
   final _messageController = StreamController<ChatMessageModel>.broadcast();
   final _unreadUpdateController = StreamController<void>.broadcast();
-  
+  final _typingController = StreamController<Map<String, dynamic>>.broadcast();
+  final _stoppedTypingController = StreamController<int>.broadcast();
+
   Stream<ChatMessageModel> get messageStream => _messageController.stream;
   Stream<void> get unreadUpdateStream => _unreadUpdateController.stream;
-
-  static const String _lastSeenKeyPrefix = 'chat_last_seen_';
-
-  bool get isConnected => _hubConnection?.state == HubConnectionState.Connected;
+  Stream<Map<String, dynamic>> get typingStream => _typingController.stream;
+  Stream<int> get stoppedTypingStream => _stoppedTypingController.stream;
 
   Future<void> initGlobal() async {
     final user = await AuthService().getUser();
     _currentUserId = user?['user_id'];
-    
+
     final baseUrl = ApiService.baseUrl;
     final token = await _getToken();
     if (token == null) return;
@@ -57,17 +57,18 @@ class ChatService {
       if (arguments != null && arguments.isNotEmpty) {
         final data = Map<String, dynamic>.from(arguments[0] as Map);
         final message = ChatMessageModel.fromJson(data);
-        
+
         // Cập nhật stream cho màn hình chat hiện tại
         _messageController.add(message);
-        
+
         // Cập nhật chấm đỏ thông báo
         _unreadUpdateController.add(null);
 
         // Hiển thị thông báo Local nếu:
         // 1. Tin nhắn không phải của mình
         // 2. Mình đang không ở trong màn hình chat của tủ lạnh đó
-        if (message.userId != _currentUserId && message.fridgeId != activeChatFridgeId) {
+        if (message.userId != _currentUserId &&
+            message.fridgeId != activeChatFridgeId) {
           LocalNotificationService.showChatNotification(
             senderName: message.displayName,
             content: message.content,
@@ -77,10 +78,25 @@ class ChatService {
       }
     });
 
+    _hubConnection!.on('UserTyping', (arguments) {
+      if (arguments != null && arguments.isNotEmpty) {
+        final data = Map<String, dynamic>.from(arguments[0] as Map);
+        _typingController.add(data);
+      }
+    });
+
+    _hubConnection!.on('UserStoppedTyping', (arguments) {
+      if (arguments != null && arguments.isNotEmpty) {
+        final data = Map<String, dynamic>.from(arguments[0] as Map);
+        final userId = data['user_id'] as int;
+        _stoppedTypingController.add(userId);
+      }
+    });
+
     try {
       await _hubConnection!.start();
       debugPrint('SignalR Global connected');
-      
+
       // Tham gia tất cả các nhóm tủ lạnh mà người dùng thuộc về
       final fridges = await FridgeService().getFridges();
       for (var f in fridges) {
@@ -124,12 +140,35 @@ class ChatService {
     }
   }
 
+  Future<void> sendTyping(int fridgeId) async {
+    if (_hubConnection == null || !isConnected) return;
+    try {
+      await _hubConnection!.invoke('SendTyping', args: [fridgeId]);
+    } catch (e) {
+      debugPrint('SignalR sendTyping error: $e');
+    }
+  }
+
+  Future<void> stopTyping(int fridgeId) async {
+    if (_hubConnection == null || !isConnected) return;
+    try {
+      await _hubConnection!.invoke('StopTyping', args: [fridgeId]);
+    } catch (e) {
+      debugPrint('SignalR stopTyping error: $e');
+    }
+  }
+
   Future<List<ChatMessageModel>> getHistory(int fridgeId) async {
     try {
-      final resp = await ApiService.get('/api/v1/chat/$fridgeId', withAuth: true);
+      final resp = await ApiService.get(
+        '/api/v1/chat/$fridgeId',
+        withAuth: true,
+      );
       if (resp.statusCode == 200) {
         final List list = jsonDecode(utf8.decode(resp.bodyBytes));
-        return list.map((e) => ChatMessageModel.fromJson(Map<String, dynamic>.from(e))).toList();
+        return list
+            .map((e) => ChatMessageModel.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
       }
     } catch (e) {
       debugPrint('ChatService.getHistory error: $e');
@@ -150,27 +189,38 @@ class ChatService {
 
   Future<void> markAsRead(int fridgeId, int? latestMessageId) async {
     if (latestMessageId == null) return;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setInt('$_lastSeenKeyPrefix$fridgeId', latestMessageId);
-    _unreadUpdateController.add(null);
+    try {
+      // Mark all as read on server
+      await ApiService.post(
+        '/api/v1/chat/$fridgeId/mark-all-as-read',
+        body: {'last_message_id': latestMessageId},
+        withAuth: true,
+      );
+      _unreadUpdateController.add(null);
+    } catch (e) {
+      debugPrint('ChatService.markAsRead error: $e');
+    }
   }
 
   Future<Map<int, bool>> getUnreadStatuses(List<int> fridgeIds) async {
     if (fridgeIds.isEmpty) return {};
     try {
       final idsParam = fridgeIds.join(',');
-      final resp = await ApiService.get('/api/v1/chat/latest?fridgeIds=$idsParam', withAuth: true);
-      
+      final resp = await ApiService.get(
+        '/api/v1/chat/latest?fridgeIds=$idsParam',
+        withAuth: true,
+      );
+
       if (resp.statusCode == 200) {
         final List list = jsonDecode(utf8.decode(resp.bodyBytes));
-        final prefs = await SharedPreferences.getInstance();
         final Map<int, bool> unreadMap = {};
 
         for (var item in list) {
           final fid = item['fridge_id'] as int;
           final latestId = item['latest_message_id'] as int;
-          final lastSeen = prefs.getInt('$_lastSeenKeyPrefix$fid') ?? 0;
-          unreadMap[fid] = latestId > lastSeen;
+          // NOTE: Server-side read tracking will be implemented in a future update
+          // For now, this provides message ID information
+          unreadMap[fid] = latestId > 0;
         }
         return unreadMap;
       }
@@ -178,6 +228,33 @@ class ChatService {
       debugPrint('ChatService.getUnreadStatuses error: $e');
     }
     return {};
+  }
+
+  Future<bool> editMessage(int messageId, String newContent) async {
+    try {
+      final resp = await ApiService.patch(
+        '/api/v1/chat/messages/$messageId',
+        body: {'content': newContent},
+        withAuth: true,
+      );
+      return resp.statusCode == 200;
+    } catch (e) {
+      debugPrint('ChatService.editMessage error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> deleteMessage(int messageId) async {
+    try {
+      final resp = await ApiService.delete(
+        '/api/v1/chat/messages/$messageId',
+        withAuth: true,
+      );
+      return resp.statusCode == 200;
+    } catch (e) {
+      debugPrint('ChatService.deleteMessage error: $e');
+      return false;
+    }
   }
 
   Future<String?> _getToken() async {

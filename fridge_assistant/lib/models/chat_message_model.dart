@@ -5,6 +5,7 @@ class ChatMessageModel {
   final String displayName;
   final String? photoUrl;
   final String content;
+  final String status; // "pending" | "sent" | "delivered"
   final DateTime createdAt;
 
   ChatMessageModel({
@@ -14,6 +15,7 @@ class ChatMessageModel {
     required this.displayName,
     this.photoUrl,
     required this.content,
+    this.status = "sent",
     required this.createdAt,
   });
 
@@ -25,10 +27,11 @@ class ChatMessageModel {
       displayName: json['display_name'] ?? 'Unknown',
       photoUrl: json['photo_url'],
       content: json['content'] ?? '',
-      createdAt: json['created_at'] != null 
-          ? (json['created_at'] is String 
-              ? DateTime.parse(json['created_at']) 
-              : DateTime.now())
+      status: json['status'] ?? 'sent',
+      createdAt: json['created_at'] != null
+          ? (json['created_at'] is String
+                ? DateTime.parse(json['created_at'])
+                : DateTime.now())
           : DateTime.now(),
     );
   }
@@ -41,6 +44,7 @@ class ChatMessageModel {
       'display_name': displayName,
       'photo_url': photoUrl,
       'content': content,
+      'status': status,
       'created_at': createdAt.toIso8601String(),
     };
   }

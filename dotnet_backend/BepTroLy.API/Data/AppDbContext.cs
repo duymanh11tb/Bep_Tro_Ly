@@ -26,13 +26,14 @@ public class AppDbContext : DbContext
     public DbSet<Fridge> Fridges { get; set; }
     public DbSet<FridgeMember> FridgeMembers { get; set; }
     public DbSet<ChatMessage> ChatMessages { get; set; }
+    public DbSet<ChatMessageRead> ChatMessageReads { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         base.OnModelCreating(modelBuilder);
 
         // Additional configuration if needed (e.g. composite keys, indexes)
-        
+
         // Example: JSON column mapping for User.DietaryRestrictions if we used List<string>
         // Use standard conversion or rely on "json" column type + string property
 
@@ -40,8 +41,11 @@ public class AppDbContext : DbContext
         // modelBuilder.HasCharSet("utf8mb4");
 
         // Relationships are already defined via attributes
-        
+
         modelBuilder.Entity<FridgeMember>()
             .HasKey(fm => new { fm.FridgeId, fm.UserId });
+
+        modelBuilder.Entity<ChatMessageRead>()
+            .HasKey(cmr => new { cmr.MessageId, cmr.UserId });
     }
 }

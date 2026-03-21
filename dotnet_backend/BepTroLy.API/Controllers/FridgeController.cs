@@ -128,52 +128,60 @@ public class FridgeController : ControllerBase
     [HttpPost("{id}/members")]
     public async Task<IActionResult> InviteMember(int id, [FromBody] InviteMemberRequest request)
     {
-        var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
-
-        // Check if user is owner of fridge
-        var isOwner = await _db.FridgeMembers.AnyAsync(fm => fm.FridgeId == id && fm.UserId == userId && fm.Role == "owner");
-        if (!isOwner) return Forbid();
-
-        var targetUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Identifier || u.PhoneNumber == request.Identifier);
-        if (targetUser == null) return NotFound(new { error = "Không tìm thấy người dùng" });
-
-        // Check if already a member
-        if (await _db.FridgeMembers.AnyAsync(fm => fm.FridgeId == id && fm.UserId == targetUser.UserId))
+        try 
         {
-            return BadRequest(new { error = "Người dùng đã là thành viên của tủ lạnh này" });
+            var userId = GetUserId();
+            if (userId == 0) return Unauthorized();
+
+            // Check if user is owner of fridge
+            var isOwner = await _db.FridgeMembers.AnyAsync(fm => fm.FridgeId == id && fm.UserId == userId && fm.Role == "owner");
+            if (!isOwner) return Forbid();
+
+            var targetUser = await _db.Users.FirstOrDefaultAsync(u => u.Email == request.Identifier || u.PhoneNumber == request.Identifier);
+            if (targetUser == null) return NotFound(new { error = "Không tìm thấy người dùng" });
+
+            // Check if already a member
+            if (await _db.FridgeMembers.AnyAsync(fm => fm.FridgeId == id && fm.UserId == targetUser.UserId))
+            {
+                return BadRequest(new { error = "Người dùng đã là thành viên của tủ lạnh này" });
+            }
+
+            var fridge = await _db.Fridges.FindAsync(id);
+            var inviter = await _db.Users.FindAsync(userId);
+
+            var member = new FridgeMember
+            {
+                FridgeId = id,
+                UserId = targetUser.UserId,
+                Role = "member",
+                Status = "pending",
+                InvitedAt = DateTime.UtcNow
+            };
+
+            _db.FridgeMembers.Add(member);
+
+            // Create notification for target user
+            var notification = new Notification
+            {
+                UserId = targetUser.UserId,
+                Type = "fridge_invitation",
+                Title = "Lời mời tham gia tủ lạnh",
+                Body = $"{inviter?.DisplayName ?? "Ai đó"} đã mời bạn tham gia tủ lạnh \"{fridge?.Name ?? "bí ẩn"}\"",
+                RelatedItemId = id,
+                CreatedAt = DateTime.UtcNow
+            };
+            _db.Notifications.Add(notification);
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new { message = "Đã gửi lời mời thành công" });
         }
-
-        var fridge = await _db.Fridges.FindAsync(id);
-        var inviter = await _db.Users.FindAsync(userId);
-
-        var member = new FridgeMember
+        catch (Exception ex)
         {
-            FridgeId = id,
-            UserId = targetUser.UserId,
-            Role = "member",
-            Status = "pending",
-            InvitedAt = DateTime.UtcNow
-        };
-
-        _db.FridgeMembers.Add(member);
-
-        // Create notification for target user
-        var notification = new Notification
-        {
-            UserId = targetUser.UserId,
-            Type = "fridge_invitation",
-            Title = "Lời mời tham gia tủ lạnh",
-            Body = $"{inviter?.DisplayName ?? "Ai đó"} đã mời bạn tham gia tủ lạnh \"{fridge?.Name ?? "bí ẩn"}\"",
-            RelatedItemId = id,
-            CreatedAt = DateTime.UtcNow
-        };
-        _db.Notifications.Add(notification);
-
-        await _db.SaveChangesAsync();
- 
-         return Ok(new { message = "Đã gửi lời mời thành công" });
-     }
+            _logger.LogError(ex, "Error inviting member to fridge {FridgeId}", id);
+            return StatusCode(500, new { error = $"Lỗi khi mời thành viên: {ex.Message}" });
+        }
+    }
  
      [HttpPost("{id}/members/accept")]
      public async Task<IActionResult> AcceptInvitation(int id)

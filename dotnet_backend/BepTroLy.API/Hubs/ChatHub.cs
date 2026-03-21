@@ -36,10 +36,10 @@ public class ChatHub : Hub
             Console.WriteLine($"[CHAT] SendMessage failed: User NOT authenticated for connection {Context.ConnectionId}");
             return;
         }
-        
+
         int userId = int.Parse(userIdString);
         Console.WriteLine($"[CHAT] User {userId} sending message to fridge {fridgeId}: {content}");
-        
+
         // Save to DB
         var message = new ChatMessage
         {
@@ -48,20 +48,22 @@ public class ChatHub : Hub
             Content = content,
             CreatedAt = DateTime.UtcNow
         };
-        
+
         _db.ChatMessages.Add(message);
         await _db.SaveChangesAsync();
-        
+
         // Fetch User for display info
         var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId);
-        
-        var broadcastData = new {
+
+        var broadcastData = new
+        {
             message_id = message.MessageId,
             fridge_id = fridgeId,
             user_id = userId,
             display_name = user?.DisplayName ?? "Unknown",
             photo_url = user?.PhotoUrl,
             content = content,
+            status = message.Status,
             created_at = message.CreatedAt
         };
 
@@ -98,5 +100,43 @@ public class ChatHub : Hub
         {
             Console.WriteLine($"[CHAT] Error creating in-app notifications: {ex.Message}");
         }
+    }
+
+    public async Task SendTyping(int fridgeId)
+    {
+        var userIdString = Context.User?.FindFirst("user_id")?.Value;
+        if (string.IsNullOrEmpty(userIdString))
+        {
+            return;
+        }
+
+        int userId = int.Parse(userIdString);
+
+        // Fetch user for display info
+        var user = await _db.Users.AsNoTracking().FirstOrDefaultAsync(u => u.UserId == userId);
+
+        var typingData = new
+        {
+            user_id = userId,
+            display_name = user?.DisplayName ?? "Unknown",
+            timestamp = DateTime.UtcNow
+        };
+
+        var groupName = $"fridge_{fridgeId}";
+        // Broadcast to all except sender
+        await Clients.GroupExcept(groupName, Context.ConnectionId).SendAsync("UserTyping", typingData);
+    }
+
+    public async Task StopTyping(int fridgeId)
+    {
+        var userIdString = Context.User?.FindFirst("user_id")?.Value;
+        if (string.IsNullOrEmpty(userIdString))
+        {
+            return;
+        }
+
+        int userId = int.Parse(userIdString);
+        var groupName = $"fridge_{fridgeId}";
+        await Clients.GroupExcept(groupName, Context.ConnectionId).SendAsync("UserStoppedTyping", new { user_id = userId });
     }
 }

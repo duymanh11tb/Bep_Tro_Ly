@@ -95,7 +95,7 @@ APP_DIR=~/Bep_Tro_Ly BRANCH=dev HEALTH_URL=http://127.0.0.1:5001/health ./deploy
 
 ## Rollback Nhanh Tren VPS Linux
 
-Neu ban deploy xong ma API loi, rollback ve commit truoc do:
+Neu deploy xong ma API loi, rollback ve commit truoc do:
 
 ```bash
 cd /root/bep-tro-ly
