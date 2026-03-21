@@ -357,15 +357,47 @@ public class FridgeController : ControllerBase
             if (fridge == null)
                 return NotFound(new { error = "Không tìm thấy tủ lạnh hoặc bạn không có quyền xóa" });
 
-            _db.Fridges.Remove(fridge);
-            await _db.SaveChangesAsync();
+            // Sử dụng Raw SQL Transaction để ép xóa toàn bộ dính dáng đến khóa ngoại (Cascade Delete)
+            var strategy = _db.Database.CreateExecutionStrategy();
+            await strategy.ExecuteAsync(async () =>
+            {
+                using var transaction = await _db.Database.BeginTransactionAsync();
+                try
+                {
+                    // 1. Xóa tất cả các lượt đọc tin nhắn thuộc về các tin nhắn trong tủ lạnh này
+                    await _db.Database.ExecuteSqlRawAsync(@"
+                        DELETE cmr FROM chat_message_reads cmr
+                        INNER JOIN chat_messages cm ON cmr.message_id = cm.message_id
+                        WHERE cm.fridge_id = {0}", id);
+
+                    // 2. Xóa tất cả tin nhắn chat của tủ lạnh
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM chat_messages WHERE fridge_id = {0}", id);
+
+                    // 3. Xóa tất cả nguyên liệu trong tủ lạnh
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM pantry_items WHERE fridge_id = {0}", id);
+
+                    // 4. Xóa tất cả thành viên trong tủ lạnh
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM fridge_members WHERE fridge_id = {0}", id);
+
+                    // 5. Cuối cùng mới xóa tủ lạnh
+                    await _db.Database.ExecuteSqlRawAsync("DELETE FROM fridges WHERE fridge_id = {0}", id);
+
+                    await transaction.CommitAsync();
+                }
+                catch (Exception)
+                {
+                    await transaction.RollbackAsync();
+                    throw; // Ném lại lỗi ra ngoài block catch bên dưới
+                }
+            });
 
             return Ok(new { message = "Đã xóa tủ lạnh thành công" });
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error deleting fridge {FridgeId}", id);
-            return StatusCode(500, new { error = $"Lỗi khi xóa tủ lạnh: {ex.Message}" });
+            var innerMessage = ex.InnerException != null ? ex.InnerException.Message : "";
+            return StatusCode(500, new { error = $"Lỗi khi xóa tủ lạnh: {ex.Message} {innerMessage}" });
         }
     }
 }
