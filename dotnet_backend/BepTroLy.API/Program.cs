@@ -181,6 +181,42 @@ using (var scope = app.Services.CreateScope())
         var context = services.GetRequiredService<AppDbContext>();
         context.Database.Migrate();
 
+        // [HOTFIX] Bắt buộc chạy sửa lỗi bảng do Migration trước đó bị đánh dấu là "đã chạy" nhưng chưa được thực thi trên VPS.
+        try
+        {
+            var sql1 = @"
+                CREATE TABLE IF NOT EXISTS `chat_message_reads` (
+                    `message_id` int NOT NULL,
+                    `user_id` int NOT NULL,
+                    `read_at` datetime(6) NOT NULL,
+                    PRIMARY KEY (`message_id`, `user_id`),
+                    KEY `IX_chat_message_reads_user_id` (`user_id`),
+                    CONSTRAINT `FK_chat_message_reads_chat_messages_message_id_fixed` FOREIGN KEY (`message_id`) REFERENCES `chat_messages` (`message_id`) ON DELETE CASCADE,
+                    CONSTRAINT `FK_chat_message_reads_users_user_id_fixed` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ";
+            context.Database.ExecuteSqlRaw(sql1);
+
+            var sql2 = @"
+                DROP PROCEDURE IF EXISTS AddStatusColumnFixed;
+                CREATE PROCEDURE AddStatusColumnFixed()
+                BEGIN
+                    IF NOT EXISTS(SELECT 1 FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'chat_messages' AND COLUMN_NAME = 'status') THEN
+                        ALTER TABLE `chat_messages` ADD COLUMN `status` varchar(50) NOT NULL DEFAULT 'sent';
+                    END IF;
+                END;
+            ";
+            context.Database.ExecuteSqlRaw(sql2);
+            context.Database.ExecuteSqlRaw("CALL AddStatusColumnFixed();");
+            context.Database.ExecuteSqlRaw("DROP PROCEDURE AddStatusColumnFixed;");
+            
+            Console.WriteLine("[HOTFIX] Xử lý CSDL thành công cho `chat_messages` và `chat_message_reads`!");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"[HOTFIX ERROR] {ex.Message}");
+        }
+
         // Add a simple connection test
         if (context.Database.CanConnect())
         {
