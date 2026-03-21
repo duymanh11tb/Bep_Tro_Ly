@@ -32,20 +32,28 @@ public class AppDbContext : DbContext
     {
         base.OnModelCreating(modelBuilder);
 
-        // Additional configuration if needed (e.g. composite keys, indexes)
-
-        // Example: JSON column mapping for User.DietaryRestrictions if we used List<string>
-        // Use standard conversion or rely on "json" column type + string property
-
-        // Ensure proper charset/collation for TiDB/MySQL if needed
-        // modelBuilder.HasCharSet("utf8mb4");
-
-        // Relationships are already defined via attributes
-
+        // Composite Keys
         modelBuilder.Entity<FridgeMember>()
             .HasKey(fm => new { fm.FridgeId, fm.UserId });
 
         modelBuilder.Entity<ChatMessageRead>()
             .HasKey(cmr => new { cmr.MessageId, cmr.UserId });
+
+        // Cascade Delete for Fridge
+        // When a fridge is deleted, all related members, pantry items, and chat messages are also deleted
+        modelBuilder.Entity<FridgeMember>()
+            .HasOne(fm => fm.Fridge)
+            .WithMany(f => f.Members)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<PantryItem>()
+            .HasOne(pi => pi.Fridge)
+            .WithMany(f => f.PantryItems)
+            .OnDelete(DeleteBehavior.Cascade);
+
+        modelBuilder.Entity<ChatMessage>()
+            .HasOne(cm => cm.Fridge)
+            .WithMany()
+            .OnDelete(DeleteBehavior.Cascade);
     }
 }

@@ -128,7 +128,7 @@ public class FridgeController : ControllerBase
     [HttpPost("{id}/members")]
     public async Task<IActionResult> InviteMember(int id, [FromBody] InviteMemberRequest request)
     {
-        try 
+        try
         {
             var userId = GetUserId();
             if (userId == 0) return Unauthorized();
@@ -182,25 +182,25 @@ public class FridgeController : ControllerBase
             return StatusCode(500, new { error = $"Lỗi khi mời thành viên: {ex.Message}" });
         }
     }
- 
-     [HttpPost("{id}/members/accept")]
-     public async Task<IActionResult> AcceptInvitation(int id)
-     {
-         var userId = GetUserId();
-         if (userId == 0) return Unauthorized();
- 
-         var member = await _db.FridgeMembers.FirstOrDefaultAsync(fm => fm.FridgeId == id && fm.UserId == userId && fm.Status == "pending");
-         if (member == null) return NotFound(new { error = "Không tìm thấy lời mời hoặc lời mời đã được xử lý" });
- 
-         member.Status = "accepted";
-         member.JoinedAt = DateTime.UtcNow;
- 
-         await _db.SaveChangesAsync();
- 
-         return Ok(new { message = "Đã tham gia tủ lạnh thành công" });
-     }
- 
-     [HttpGet("{id}/members")]
+
+    [HttpPost("{id}/members/accept")]
+    public async Task<IActionResult> AcceptInvitation(int id)
+    {
+        var userId = GetUserId();
+        if (userId == 0) return Unauthorized();
+
+        var member = await _db.FridgeMembers.FirstOrDefaultAsync(fm => fm.FridgeId == id && fm.UserId == userId && fm.Status == "pending");
+        if (member == null) return NotFound(new { error = "Không tìm thấy lời mời hoặc lời mời đã được xử lý" });
+
+        member.Status = "accepted";
+        member.JoinedAt = DateTime.UtcNow;
+
+        await _db.SaveChangesAsync();
+
+        return Ok(new { message = "Đã tham gia tủ lạnh thành công" });
+    }
+
+    [HttpGet("{id}/members")]
     public async Task<IActionResult> GetMembers(int id)
     {
         var userId = GetUserId();
@@ -249,8 +249,8 @@ public class FridgeController : ControllerBase
 
         if (targetMember.Role == "owner" && userId == targetUserId)
         {
-             // Owner cannot remove themselves unless they transfer ownership (not implemented yet)
-             return BadRequest(new { error = "Chủ tủ không thể tự rời khỏi tủ. Hãy chuyển quyền sở hữu trước." });
+            // Owner cannot remove themselves unless they transfer ownership (not implemented yet)
+            return BadRequest(new { error = "Chủ tủ không thể tự rời khỏi tủ. Hãy chuyển quyền sở hữu trước." });
         }
 
         _db.FridgeMembers.Remove(targetMember);
@@ -290,17 +290,27 @@ public class FridgeController : ControllerBase
     }
 
     [HttpDelete("{id}")]
+    [Authorize]
     public async Task<IActionResult> DeleteFridge(int id)
     {
-        var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
+        try
+        {
+            var userId = GetUserId();
+            if (userId == 0) return Unauthorized();
 
-        var fridge = await _db.Fridges.FirstOrDefaultAsync(f => f.FridgeId == id && f.OwnerId == userId);
-        if (fridge == null) return NotFound(new { error = "Không tìm thấy tủ lạnh hoặc bạn không có quyền xóa" });
+            var fridge = await _db.Fridges.FirstOrDefaultAsync(f => f.FridgeId == id && f.OwnerId == userId);
+            if (fridge == null)
+                return NotFound(new { error = "Không tìm thấy tủ lạnh hoặc bạn không có quyền xóa" });
 
-        _db.Fridges.Remove(fridge);
-        await _db.SaveChangesAsync();
+            _db.Fridges.Remove(fridge);
+            await _db.SaveChangesAsync();
 
-        return Ok(new { message = "Đã xóa tủ lạnh thành công" });
+            return Ok(new { message = "Đã xóa tủ lạnh thành công" });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error deleting fridge {FridgeId}", id);
+            return StatusCode(500, new { error = $"Lỗi khi xóa tủ lạnh: {ex.Message}" });
+        }
     }
 }
