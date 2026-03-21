@@ -12,36 +12,18 @@ namespace BepTroLy.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.CreateTable(
-                name: "chat_message_reads",
-                columns: table => new
-                {
-                    message_id = table.Column<int>(type: "int", nullable: false),
-                    user_id = table.Column<int>(type: "int", nullable: false),
-                    read_at = table.Column<DateTime>(type: "datetime(6)", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_chat_message_reads", x => new { x.message_id, x.user_id });
-                    table.ForeignKey(
-                        name: "FK_chat_message_reads_chat_messages_message_id",
-                        column: x => x.message_id,
-                        principalTable: "chat_messages",
-                        principalColumn: "message_id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_chat_message_reads_users_user_id",
-                        column: x => x.user_id,
-                        principalTable: "users",
-                        principalColumn: "user_id",
-                        onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySql:CharSet", "utf8mb4");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_chat_message_reads_user_id",
-                table: "chat_message_reads",
-                column: "user_id");
+            // Use raw SQL with IF NOT EXISTS for MySQL compatibility
+            migrationBuilder.Sql(@"
+                CREATE TABLE IF NOT EXISTS `chat_message_reads` (
+                    `message_id` int NOT NULL,
+                    `user_id` int NOT NULL,
+                    `read_at` datetime(6) NOT NULL,
+                    PRIMARY KEY (`message_id`, `user_id`),
+                    KEY `IX_chat_message_reads_user_id` (`user_id`),
+                    CONSTRAINT `FK_chat_message_reads_chat_messages_message_id` FOREIGN KEY (`message_id`) REFERENCES `chat_messages` (`message_id`) ON DELETE CASCADE,
+                    CONSTRAINT `FK_chat_message_reads_users_user_id` FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
         }
 
         /// <inheritdoc />
