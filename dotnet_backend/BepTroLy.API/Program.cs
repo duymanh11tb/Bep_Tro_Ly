@@ -263,7 +263,7 @@ app.MapGet("/debug/jwt", (JwtService jwt) =>
     try
     {
         var token = jwt.GenerateToken(99999);
-        return Results.Ok(new { success = true, token = token.Substring(0, 20) + "..." });
+        return Results.Ok(new { success = true, token = token });
     }
     catch (Exception ex)
     {
