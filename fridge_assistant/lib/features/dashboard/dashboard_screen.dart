@@ -7,41 +7,90 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/greeting_section.dart';
 import 'widgets/stat_cards.dart';
 import 'widgets/quick_actions.dart';
-import 'widgets/expiring_items.dart';
 import 'widgets/ai_suggestion_carousel.dart';
 import 'widgets/fridge_stats.dart';
+import '../shopping/shopping_list_screen.dart';
 import '../../models/recipe_suggestion.dart';
+import '../../services/notification_service.dart';
+import '../meal_plan/meal_plan_screen.dart';
+import '../pantry/virtual_fridge_screen.dart';
+import '../fridge/fridge_management_screen.dart';
+import '../recipes/recipe_detail_screen.dart';
+import '../recipes/recipe_recommendations_screen.dart';
+import '../scan/scan_ingredient_screen.dart';
+import '../settings/settings_screen.dart';
 
 class DashboardScreen extends StatefulWidget {
-  const DashboardScreen({super.key});
+  final int initialTabIndex;
+
+  const DashboardScreen({super.key, this.initialTabIndex = 0});
 
   @override
   State<DashboardScreen> createState() => _DashboardScreenState();
 }
 
 class _DashboardScreenState extends State<DashboardScreen> {
-  int _currentNavIndex = 0;
+  late int _currentNavIndex;
   String _userName = 'User';
   String? _avatarUrl;
+  int _unreadCount = 0;
 
   // Real data from API
   bool _isLoading = true;
+  bool _isLoadingSuggestions = true;
   List<PantryItem> _expiringItems = [];
   PantryStats? _stats;
   List<RecipeSuggestion> _suggestions = [];
+  bool _showExpired = true;
+  bool _showAiSuggestions = false;
+
+  List<String> _cleanedItems = [];
 
   @override
   void initState() {
     super.initState();
+    _currentNavIndex = widget.initialTabIndex.clamp(0, 4);
     _initSequence();
   }
 
   Future<void> _initSequence() async {
+    // 0. Load toggle preference
+    final showExpired = await PantryService.getShowExpiredPreference();
+    final showAi = await PantryService.getShowAiSuggestionsPreference();
+    debugPrint('[Dashboard] initSequence: showExpired = $showExpired, showAi = $showAi');
+    if (mounted) {
+      setState(() {
+        _showExpired = showExpired;
+        _showAiSuggestions = showAi;
+      });
+    }
     // 1. Tải thông tin user & dữ liệu cache ngay lập tức
     await Future.wait([_loadUserInfo(), _loadCachedData()]);
 
     // 2. Refresh dữ liệu từ server trong nền
     _loadPantryData(isBackground: true);
+
+    // 3. Auto-cleanup expired items trong nền
+    _runExpiredCleanup();
+  }
+
+  Future<void> _runExpiredCleanup() async {
+    try {
+      final cleaned = await PantryService.cleanupExpiredItems();
+      if (cleaned.isNotEmpty && mounted) {
+        setState(() => _cleanedItems = cleaned);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Đã tự động xóa ${cleaned.length} sản phẩm hết hạn: ${cleaned.take(3).join(", ")}${cleaned.length > 3 ? "..." : ""}'),
+            backgroundColor: AppColors.warning,
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+        // Refresh data since items were cleaned
+        _loadPantryData(isBackground: true);
+      }
+    } catch (_) {}
   }
 
   Future<void> _loadUserInfo() async {
@@ -78,7 +127,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
     } catch (e) {
-      print('Error loading cached data: $e');
+      debugPrint('Error loading cached data: $e');
     }
   }
 
@@ -88,24 +137,48 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
 
     try {
+      // Load stats + expiring items + notifications first (fast)
       final results = await Future.wait([
         PantryService.getExpiringItems(days: 7),
         PantryService.getStats(),
-        // Lấy nhiều gợi ý để người dùng vuốt xem đa dạng hơn.
-        PantryService.getAiSuggestions(limit: 10),
+        NotificationService.getUnreadCount(),
       ]);
 
       if (mounted) {
         setState(() {
           _expiringItems = results[0] as List<PantryItem>;
           _stats = results[1] as PantryStats?;
-          _suggestions = results[2] as List<RecipeSuggestion>;
+          _unreadCount = results[2] as int;
           _isLoading = false;
+        });
+      }
+
+      // Load AI suggestions independently (slow, don't block UI)
+      _loadAiSuggestions();
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
+    }
+  }
+
+  Future<void> _loadAiSuggestions() async {
+    if (!_showAiSuggestions) return; // Skip if disabled
+    
+    if (mounted && _suggestions.isEmpty) {
+      setState(() => _isLoadingSuggestions = true);
+    }
+    try {
+      final suggestions = await PantryService.getAiSuggestions(limit: 10);
+      if (mounted) {
+        setState(() {
+          _suggestions = suggestions;
+          _isLoadingSuggestions = false;
         });
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _isLoading = false);
+        setState(() => _isLoadingSuggestions = false);
       }
     }
   }
@@ -121,7 +194,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
       body: SafeArea(child: _buildBody()),
       bottomNavigationBar: BottomNavBar(
         currentIndex: _currentNavIndex,
-        onTap: (index) => setState(() => _currentNavIndex = index),
+        onTap: (index) {
+          setState(() => _currentNavIndex = index);
+          if (index == 0) _reloadExpiredPreference();
+        },
       ),
     );
   }
@@ -131,13 +207,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
       case 0:
         return _buildDashboard();
       case 1:
-        return _buildPlaceholder('Tủ lạnh');
+        return const FridgeManagementScreen();
       case 2:
-        return _buildPlaceholder('Công thức');
+        return const MealPlanScreen();
       case 3:
-        return _buildPlaceholder('Đi chợ');
+        return ShoppingListScreen(
+          onGoToFridge: (checkedCount) {
+            setState(() => _currentNavIndex = 1);
+            ScaffoldMessenger.of(context)
+              ..hideCurrentSnackBar()
+              ..showSnackBar(
+                SnackBar(
+                  content: Text('Đã thêm $checkedCount mục vào tủ lạnh.'),
+                  backgroundColor: AppColors.primary,
+                  behavior: SnackBarBehavior.floating,
+                ),
+              );
+          },
+        );
       case 4:
-        return _buildSettingsPage();
+        return const SettingsScreen(isTab: true);
       default:
         return _buildDashboard();
     }
@@ -153,7 +242,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             // Header
-            DashboardHeader(onNotificationTap: () {}),
+            DashboardHeader(
+              unreadCount: _unreadCount,
+              onNotificationTap: () {
+                Navigator.pushNamed(context, '/notifications').then((_) => _refresh());
+              },
+            ),
             const SizedBox(height: 8),
 
             // Greeting with avatar
@@ -179,7 +273,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
             // Quick Actions
             QuickActions(
-              onScanTap: () {},
+              onScanTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const ScanIngredientScreen(),
+                  ),
+                );
+              },
               onAddTap: () async {
                 final result = await Navigator.pushNamed(
                   context,
@@ -187,36 +287,42 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 );
                 if (result == true) _refresh();
               },
-              onSearchTap: () {},
+              onFridgeTap: () async {
+                await Navigator.pushNamed(context, '/fridge-management');
+                _refresh(); // Refresh when back from fridge management
+              },
+              onSearchTap: () {
+                Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => const RecipeRecommendationsScreen(),
+                  ),
+                );
+              },
             ),
             const SizedBox(height: 24),
 
             // AI Suggestions / Discovery
-            _isLoading
-                ? const Padding(
-                    padding: EdgeInsets.symmetric(vertical: 20),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.primary,
-                      ),
-                    ),
-                  )
-                : _suggestions.isEmpty
-                ? _buildEmptySuggestions()
-                : AiSuggestionCarousel(
-                    suggestions: _suggestions,
-                    autoScrollDuration: const Duration(seconds: 7),
-                    onViewRecipeTap: (recipe) {
-                      // TODO: Navigate to recipe detail
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('Xem công thức: ${recipe.name}'),
-                          backgroundColor: AppColors.primary,
+            if (_showAiSuggestions) ...[
+              _isLoadingSuggestions && _suggestions.isEmpty
+                  ? const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 20),
+                      child: Center(
+                        child: CircularProgressIndicator(
+                          color: AppColors.primary,
                         ),
-                      );
-                    },
-                  ),
-            const SizedBox(height: 24),
+                      ),
+                    )
+                  : _suggestions.isEmpty
+                  ? _buildEmptySuggestions()
+                  : AiSuggestionCarousel(
+                      suggestions: _suggestions,
+                      autoScrollDuration: const Duration(seconds: 7),
+                      onViewRecipeTap: (recipe) {
+                        _openRecipeDetail(recipe);
+                      },
+                    ),
+              const SizedBox(height: 24),
+            ],
 
             // Expiring Items - real data
             if (!_isLoading && _expiringItems.isNotEmpty)
@@ -247,7 +353,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         decoration: BoxDecoration(
           color: AppColors.primarySurface,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: AppColors.primary.withOpacity(0.2)),
+          border: Border.all(color: AppColors.primary.withValues(alpha: 0.2)),
         ),
         child: Column(
           children: [
@@ -276,8 +382,35 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
+  Future<void> _reloadExpiredPreference() async {
+    final val = await PantryService.getShowExpiredPreference();
+    final aiVal = await PantryService.getShowAiSuggestionsPreference();
+    debugPrint('[Dashboard] reloadExpiredPreference: val=$val, current=$_showExpired, aiVal=$aiVal, aiCurrent=$_showAiSuggestions');
+    if (mounted) {
+      bool needRefresh = false;
+      if (val != _showExpired) {
+        _showExpired = val;
+        needRefresh = true;
+      }
+      if (aiVal != _showAiSuggestions) {
+        _showAiSuggestions = aiVal;
+        needRefresh = true;
+        
+        // If it was just turned on, load the suggestions
+        if (_showAiSuggestions && _suggestions.isEmpty) {
+          _loadAiSuggestions();
+        }
+      }
+      if (needRefresh) setState(() {});
+    }
+  }
+
   Widget _buildExpiringSection() {
-    // Convert PantryService PantryItem to the widget's FridgeItem-like data
+    final displayItems = _showExpired
+        ? _expiringItems
+        : _expiringItems.where((item) => !item.isExpired).toList();
+    debugPrint('[Dashboard] _buildExpiringSection: showExpired=$_showExpired, total=${_expiringItems.length}, display=${displayItems.length}, expired=${_expiringItems.where((i) => i.isExpired).length}');
+
     return Column(
       children: [
         Padding(
@@ -308,7 +441,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
               const Spacer(),
               GestureDetector(
                 onTap: () {
-                  setState(() => _currentNavIndex = 1);
+                  Navigator.of(context).push(
+                    PageRouteBuilder(
+                      transitionDuration: const Duration(milliseconds: 260),
+                      reverseTransitionDuration: const Duration(
+                        milliseconds: 220,
+                      ),
+                      pageBuilder: (_, __, ___) => const Scaffold(
+                        backgroundColor: AppColors.background,
+                        body: SafeArea(child: VirtualFridgeScreen()),
+                      ),
+                      transitionsBuilder:
+                          (_, animation, secondaryAnimation, child) {
+                            final slide =
+                                Tween<Offset>(
+                                  begin: const Offset(0.15, 0),
+                                  end: Offset.zero,
+                                ).animate(
+                                  CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOutCubic,
+                                  ),
+                                );
+                            final fade = Tween<double>(begin: 0.0, end: 1.0)
+                                .animate(
+                                  CurvedAnimation(
+                                    parent: animation,
+                                    curve: Curves.easeOut,
+                                  ),
+                                );
+
+                            return FadeTransition(
+                              opacity: fade,
+                              child: SlideTransition(
+                                position: slide,
+                                child: child,
+                              ),
+                            );
+                          },
+                    ),
+                  );
                 },
                 child: const Text(
                   'Xem tất cả',
@@ -322,32 +494,54 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ],
           ),
         ),
-        const SizedBox(height: 14),
-        SizedBox(
-          height: 150,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
+        const SizedBox(height: 12),
+        if (displayItems.isEmpty)
+          Padding(
             padding: const EdgeInsets.symmetric(horizontal: 20),
-            itemCount: _expiringItems.length,
-            separatorBuilder: (_, __) => const SizedBox(width: 12),
-            itemBuilder: (context, index) {
-              final item = _expiringItems[index];
-              return _buildExpiringCard(item);
-            },
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: AppColors.primaryLight,
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: const Text(
+                'Không có sản phẩm phù hợp với bộ lọc.',
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 13,
+                  color: AppColors.textSecondary,
+                ),
+              ),
+            ),
+          )
+        else
+          SizedBox(
+            height: 150,
+            child: ListView.separated(
+              scrollDirection: Axis.horizontal,
+              padding: const EdgeInsets.symmetric(horizontal: 20),
+              itemCount: displayItems.length,
+              separatorBuilder: (_, __) => const SizedBox(width: 12),
+              itemBuilder: (context, index) {
+                final item = displayItems[index];
+                return _buildExpiringCard(item);
+              },
+            ),
           ),
-        ),
       ],
     );
   }
 
   Widget _buildExpiringCard(PantryItem item) {
     Color expiryColor = AppColors.textSecondary;
-    if (item.isExpired)
+    if (item.isExpired) {
       expiryColor = AppColors.error;
-    else if (item.daysUntilExpiry <= 1)
+    } else if (item.daysUntilExpiry <= 1) {
       expiryColor = AppColors.error;
-    else if (item.daysUntilExpiry <= 3)
+    } else if (item.daysUntilExpiry <= 3) {
       expiryColor = AppColors.warning;
+    }
 
     return GestureDetector(
       onTap: () => _openRecipesForIngredient(item),
@@ -525,14 +719,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ),
         trailing: const Icon(Icons.chevron_right),
         onTap: () {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text('Xem công thức: ${recipe.name}'),
-              backgroundColor: AppColors.primary,
-            ),
-          );
+          Navigator.of(context).pop();
+          _openRecipeDetail(recipe);
         },
       ),
+    );
+  }
+
+  void _openRecipeDetail(RecipeSuggestion recipe) {
+    Navigator.of(context).push(
+      MaterialPageRoute(builder: (_) => RecipeDetailScreen(recipe: recipe)),
     );
   }
 
@@ -703,300 +899,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
   }
 
-  void _showAddItemDialog() {
-    final nameCtrl = TextEditingController();
-    final quantityCtrl = TextEditingController(text: '1');
-    final unitCtrl = TextEditingController(text: 'cái');
-    DateTime? selectedExpiry;
+  // _showAddItemDialog was removed as it is not used in the final implementation.
 
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.white,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
-      ),
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setModal) => Padding(
-          padding: EdgeInsets.only(
-            left: 20,
-            right: 20,
-            top: 20,
-            bottom: MediaQuery.of(ctx).viewInsets.bottom + 20,
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppColors.divider,
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              const Text(
-                'Thêm sản phẩm vào tủ lạnh',
-                style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.bold,
-                  color: AppColors.textPrimary,
-                ),
-              ),
-              const SizedBox(height: 20),
-              // Name field
-              TextField(
-                controller: nameCtrl,
-                decoration: InputDecoration(
-                  labelText: 'Tên sản phẩm *',
-                  hintText: 'VD: Cà chua, Sữa tươi...',
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  focusedBorder: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: const BorderSide(
-                      color: AppColors.primary,
-                      width: 2,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
-              // Quantity + Unit row
-              Row(
-                children: [
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: quantityCtrl,
-                      keyboardType: TextInputType.number,
-                      decoration: InputDecoration(
-                        labelText: 'Số lượng',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppColors.primary,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    flex: 2,
-                    child: TextField(
-                      controller: unitCtrl,
-                      decoration: InputDecoration(
-                        labelText: 'Đơn vị',
-                        hintText: 'cái, kg, lít...',
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        focusedBorder: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: const BorderSide(
-                            color: AppColors.primary,
-                            width: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Expiry date picker
-              GestureDetector(
-                onTap: () async {
-                  final picked = await showDatePicker(
-                    context: ctx,
-                    initialDate: DateTime.now().add(const Duration(days: 3)),
-                    firstDate: DateTime.now(),
-                    lastDate: DateTime.now().add(const Duration(days: 365 * 5)),
-                    builder: (context, child) => Theme(
-                      data: Theme.of(context).copyWith(
-                        colorScheme: const ColorScheme.light(
-                          primary: AppColors.primary,
-                        ),
-                      ),
-                      child: child!,
-                    ),
-                  );
-                  if (picked != null) {
-                    setModal(() => selectedExpiry = picked);
-                  }
-                },
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 14,
-                  ),
-                  decoration: BoxDecoration(
-                    border: Border.all(color: AppColors.inputBorder),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(
-                        Icons.calendar_today_outlined,
-                        color: AppColors.primary,
-                        size: 20,
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        selectedExpiry != null
-                            ? 'Hết hạn: ${selectedExpiry!.day}/${selectedExpiry!.month}/${selectedExpiry!.year}'
-                            : 'Chọn ngày hết hạn (tùy chọn)',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: selectedExpiry != null
-                              ? AppColors.textPrimary
-                              : AppColors.textHint,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-              // Submit button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () async {
-                    final name = nameCtrl.text.trim();
-                    if (name.isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Vui lòng nhập tên sản phẩm'),
-                        ),
-                      );
-                      return;
-                    }
-                    Navigator.pop(ctx);
-                    final success = await PantryService.addItem(
-                      nameVi: name,
-                      quantity: double.tryParse(quantityCtrl.text) ?? 1,
-                      unit: unitCtrl.text.isEmpty ? 'cái' : unitCtrl.text,
-                      expiryDate: selectedExpiry,
-                    );
-                    if (success && mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('✅ Đã thêm sản phẩm!'),
-                          backgroundColor: AppColors.primary,
-                        ),
-                      );
-                      _refresh();
-                    } else if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Lỗi thêm sản phẩm. Vui lòng thử lại.'),
-                          backgroundColor: AppColors.error,
-                        ),
-                      );
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.primary,
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                  ),
-                  child: const Text(
-                    'Thêm vào tủ lạnh',
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
+  // _buildPlaceholder was removed as it is not used.
 
-  Widget _buildPlaceholder(String title) {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          Icon(Icons.construction, size: 64, color: AppColors.textHint),
-          const SizedBox(height: 16),
-          Text(
-            title,
-            style: const TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          const Text(
-            'Đang phát triển...',
-            style: TextStyle(color: AppColors.textSecondary),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildSettingsPage() {
-    return Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          const Icon(Icons.settings, size: 64, color: AppColors.textHint),
-          const SizedBox(height: 16),
-          const Text(
-            'Cài đặt',
-            style: TextStyle(
-              fontSize: 20,
-              fontWeight: FontWeight.bold,
-              color: AppColors.textPrimary,
-            ),
-          ),
-          const SizedBox(height: 8),
-          Text(
-            'Đang đăng nhập: $_userName',
-            style: const TextStyle(color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 24),
-          ElevatedButton.icon(
-            onPressed: _handleLogout,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.error,
-              foregroundColor: Colors.white,
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-            ),
-            icon: const Icon(Icons.logout),
-            label: const Text('Đăng xuất'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Future<void> _handleLogout() async {
-    final authService = AuthService();
-    await authService.logout();
-    await PantryService.clearCache();
-    if (mounted) {
-      Navigator.of(
-        context,
-      ).pushNamedAndRemoveUntil('/onboarding', (route) => false);
-    }
-  }
+  // _buildSettingsPage was removed in favor of ProfileScreen tab.
 }

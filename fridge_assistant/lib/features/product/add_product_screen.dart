@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/pantry_service.dart';
+import '../../widgets/fridge_selector.dart';
+import '../../models/fridge_model.dart';
 
 class AddProductScreen extends StatefulWidget {
   const AddProductScreen({super.key});
@@ -18,6 +20,8 @@ class _AddProductScreenState extends State<AddProductScreen> {
   DateTime? _purchaseDate;
   DateTime? _expiryDate;
   bool _isLoading = false;
+  int? _selectedFridgeId;
+  FridgeModel? _selectedFridge;
 
   final List<String> _units = [
     'Gam',
@@ -90,12 +94,25 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
     setState(() => _isLoading = true);
 
+    if (_selectedFridge?.status == 'paused') {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Tủ lạnh "${_selectedFridge?.name}" đang tạm ngưng. Không thể thêm nguyên liệu.'),
+          backgroundColor: AppColors.error,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
     try {
       final success = await PantryService.addItem(
         nameVi: name,
         quantity: double.tryParse(_quantityController.text) ?? 1,
         unit: _selectedUnit.toLowerCase(),
         expiryDate: _expiryDate,
+        fridgeId: _selectedFridgeId,
       );
 
       if (!mounted) return;
@@ -178,6 +195,18 @@ class _AddProductScreenState extends State<AddProductScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    // ──── Chọn tủ lạnh ────
+                    FridgeSelector(
+                      selectedFridgeId: _selectedFridgeId,
+                      onSelected: (fridge) {
+                        setState(() {
+                          _selectedFridgeId = fridge.fridgeId;
+                          _selectedFridge = fridge;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+
                     // ──── Search Bar ────
                     _buildSearchBar(),
                     const SizedBox(height: 16),
@@ -480,7 +509,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withValues(alpha: 0.05),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 10,
             offset: const Offset(0, -4),
           ),
@@ -491,7 +520,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
           foregroundColor: Colors.white,
-          disabledBackgroundColor: AppColors.primary.withValues(alpha: 0.5),
+          disabledBackgroundColor: AppColors.primary.withOpacity(0.5),
           padding: const EdgeInsets.symmetric(vertical: 16),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),

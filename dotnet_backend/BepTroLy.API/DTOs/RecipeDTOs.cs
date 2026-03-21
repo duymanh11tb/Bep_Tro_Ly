@@ -9,6 +9,7 @@ public class SuggestRecipesRequest
 
 public class SuggestFromPantryRequest
 {
+    public int? FridgeId { get; set; }
     public Dictionary<string, object>? Preferences { get; set; }
     public int Limit { get; set; } = 5;
 }
@@ -19,4 +20,11 @@ public class RecipeSuggestionResponse
     public string? Source { get; set; }
     public string? Error { get; set; }
     public List<object> Recipes { get; set; } = new();
+}
+
+public class CookRecipeRequest
+{
+    public int? FridgeId { get; set; }
+    public int? RecipeId { get; set; }
+    public string RecipeName { get; set; } = string.Empty;
 }

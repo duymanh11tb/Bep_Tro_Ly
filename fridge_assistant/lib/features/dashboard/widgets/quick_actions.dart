@@ -5,12 +5,14 @@ class QuickActions extends StatelessWidget {
   final VoidCallback? onScanTap;
   final VoidCallback? onAddTap;
   final VoidCallback? onSearchTap;
+  final VoidCallback? onFridgeTap;
 
   const QuickActions({
     super.key,
     this.onScanTap,
     this.onAddTap,
     this.onSearchTap,
+    this.onFridgeTap,
   });
 
   @override
@@ -25,13 +27,16 @@ class QuickActions extends StatelessWidget {
             label: 'Quét HD',
             onTap: onScanTap,
           ),
-          const SizedBox(width: 20),
           _buildActionButton(
             icon: Icons.add_circle_outline,
             label: 'Thêm món',
             onTap: onAddTap,
           ),
-          const SizedBox(width: 20),
+          _buildActionButton(
+            icon: Icons.kitchen_outlined,
+            label: 'Quản lý tủ',
+            onTap: onFridgeTap,
+          ),
           _buildActionButton(
             icon: Icons.search_rounded,
             label: 'Tìm kiếm',

@@ -19,6 +19,9 @@ public class ActivityLog
     [Column("activity_type")]
     public string ActivityType { get; set; } = string.Empty;
 
+    [Column("fridge_id")]
+    public int? FridgeId { get; set; }
+
     [Column("related_recipe_id")]
     public int? RelatedRecipeId { get; set; }
 
