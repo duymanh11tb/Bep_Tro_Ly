@@ -117,7 +117,7 @@ public class ChatHub : Hub
         catch (Exception ex)
         {
             Console.WriteLine($"[CHAT] SendMessage error: {ex}");
-            throw;
+            throw new HubException(ex.Message);
         }
     }
 
