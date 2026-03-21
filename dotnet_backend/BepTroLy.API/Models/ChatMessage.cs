@@ -26,7 +26,7 @@ public class ChatMessage
     public string Status { get; set; } = "sent"; // "pending" | "sent" | "delivered"
 
     [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
     // Navigation properties
     [ForeignKey("FridgeId")]
@@ -34,4 +34,9 @@ public class ChatMessage
 
     [ForeignKey("UserId")]
     public virtual User? User { get; set; }
+
+    public ChatMessage()
+    {
+        CreatedAt = DateTime.UtcNow;
+    }
 }

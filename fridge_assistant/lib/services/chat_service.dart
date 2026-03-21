@@ -29,6 +29,8 @@ class ChatService {
   Stream<Map<String, dynamic>> get typingStream => _typingController.stream;
   Stream<int> get stoppedTypingStream => _stoppedTypingController.stream;
 
+  bool get isConnected => _hubConnection?.state == HubConnectionState.Connected;
+
   Future<void> initGlobal() async {
     final user = await AuthService().getUser();
     _currentUserId = user?['user_id'];
@@ -191,11 +193,9 @@ class ChatService {
     if (latestMessageId == null) return;
     try {
       // Mark all as read on server
-      await ApiService.post(
-        '/api/v1/chat/$fridgeId/mark-all-as-read',
-        body: {'last_message_id': latestMessageId},
-        withAuth: true,
-      );
+      await ApiService.post('/api/v1/chat/$fridgeId/mark-all-as-read', {
+        'last_message_id': latestMessageId,
+      }, withAuth: true);
       _unreadUpdateController.add(null);
     } catch (e) {
       debugPrint('ChatService.markAsRead error: $e');
@@ -232,11 +232,9 @@ class ChatService {
 
   Future<bool> editMessage(int messageId, String newContent) async {
     try {
-      final resp = await ApiService.patch(
-        '/api/v1/chat/messages/$messageId',
-        body: {'content': newContent},
-        withAuth: true,
-      );
+      final resp = await ApiService.patch('/api/v1/chat/messages/$messageId', {
+        'content': newContent,
+      }, withAuth: true);
       return resp.statusCode == 200;
     } catch (e) {
       debugPrint('ChatService.editMessage error: $e');

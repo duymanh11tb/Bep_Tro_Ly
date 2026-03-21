@@ -46,8 +46,13 @@ public class Notification
     public DateTime? ReadAt { get; set; }
 
     [Column("created_at")]
-    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    public DateTime CreatedAt { get; set; }
 
     [ForeignKey("UserId")]
     public User? User { get; set; }
+
+    public Notification()
+    {
+        CreatedAt = DateTime.UtcNow;
+    }
 }
