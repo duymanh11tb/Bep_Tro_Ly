@@ -66,6 +66,53 @@ public class FridgeController : ControllerBase
         return Ok(fridges);
     }
 
+    [HttpGet("{id}")]
+    public async Task<IActionResult> GetFridge(int id)
+    {
+        try
+        {
+            var userId = GetUserId();
+            if (userId == 0) return Unauthorized();
+
+            // Check if user has access
+            var hasAccess = await _db.FridgeMembers.AnyAsync(fm => fm.FridgeId == id && fm.UserId == userId);
+            if (!hasAccess) return Forbid();
+
+            var fridge = await _db.Fridges
+                .Include(f => f.Members)
+                    .ThenInclude(m => m.User)
+                .FirstOrDefaultAsync(f => f.FridgeId == id);
+
+            if (fridge == null) return NotFound(new { error = "Không tìm thấy tủ lạnh" });
+
+            return Ok(new FridgeDto
+            {
+                FridgeId = fridge.FridgeId,
+                Name = fridge.Name,
+                Location = fridge.Location,
+                OwnerId = fridge.OwnerId,
+                Status = fridge.Status,
+                CreatedAt = fridge.CreatedAt,
+                Members = fridge.Members.Select(m => new FridgeMemberDto
+                {
+                    UserId = m.UserId,
+                    DisplayName = m.User!.DisplayName,
+                    Email = m.User.Email,
+                    PhotoUrl = m.User.PhotoUrl,
+                    Role = m.Role,
+                    Status = m.Status,
+                    InvitedAt = m.InvitedAt,
+                    JoinedAt = m.JoinedAt
+                }).ToList()
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting fridge {FridgeId}", id);
+            return StatusCode(500, new { error = $"Lỗi khi lấy thông tin tủ lạnh: {ex.Message}" });
+        }
+    }
+
     [HttpPost]
     public async Task<IActionResult> CreateFridge([FromBody] CreateFridgeRequest request)
     {
@@ -261,32 +308,40 @@ public class FridgeController : ControllerBase
     [HttpPut("{id}")]
     public async Task<IActionResult> UpdateFridge(int id, [FromBody] UpdateFridgeRequest request)
     {
-        var userId = GetUserId();
-        if (userId == 0) return Unauthorized();
-
-        var fridge = await _db.Fridges.FirstOrDefaultAsync(f => f.FridgeId == id && f.OwnerId == userId);
-        if (fridge == null) return NotFound(new { error = "Không tìm thấy tủ lạnh hoặc bạn không có quyền chỉnh sửa" });
-
-        fridge.Name = request.Name;
-        fridge.Location = request.Location;
-        if (!string.IsNullOrEmpty(request.Status)) fridge.Status = request.Status;
-        fridge.UpdatedAt = DateTime.UtcNow;
-
-        await _db.SaveChangesAsync();
-
-        return Ok(new
+        try
         {
-            message = "Cập nhật tủ lạnh thành công",
-            fridge = new FridgeDto
+            var userId = GetUserId();
+            if (userId == 0) return Unauthorized();
+
+            var fridge = await _db.Fridges.FirstOrDefaultAsync(f => f.FridgeId == id && f.OwnerId == userId);
+            if (fridge == null) return NotFound(new { error = "Không tìm thấy tủ lạnh hoặc bạn không có quyền chỉnh sửa" });
+
+            fridge.Name = request.Name;
+            fridge.Location = request.Location;
+            if (!string.IsNullOrEmpty(request.Status)) fridge.Status = request.Status;
+            fridge.UpdatedAt = DateTime.UtcNow;
+
+            await _db.SaveChangesAsync();
+
+            return Ok(new
             {
-                FridgeId = fridge.FridgeId,
-                Name = fridge.Name,
-                Location = fridge.Location,
-                OwnerId = fridge.OwnerId,
-                Status = fridge.Status,
-                CreatedAt = fridge.CreatedAt
-            }
-        });
+                message = "Cập nhật tủ lạnh thành công",
+                fridge = new FridgeDto
+                {
+                    FridgeId = fridge.FridgeId,
+                    Name = fridge.Name,
+                    Location = fridge.Location,
+                    OwnerId = fridge.OwnerId,
+                    Status = fridge.Status,
+                    CreatedAt = fridge.CreatedAt
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error updating fridge {FridgeId}", id);
+            return StatusCode(500, new { error = $"Lỗi khi cập nhật tủ lạnh: {ex.Message}" });
+        }
     }
 
     [HttpDelete("{id}")]
