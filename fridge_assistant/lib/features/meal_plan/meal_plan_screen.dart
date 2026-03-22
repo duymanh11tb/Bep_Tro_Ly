@@ -26,6 +26,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
 
   int _selectedDayOffset = 0;
   bool _isLoading = true;
+  bool _isRefreshingDiscovery = false;
   bool _isGeneratingByIngredients = false;
 
   List<RecipeSuggestion> _discoverySuggestions = [];
@@ -42,6 +43,8 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
     _initData();
   }
 
+  String _newRefreshToken() => DateTime.now().microsecondsSinceEpoch.toString();
+
   Future<void> _initData() async {
     setState(() => _isLoading = true);
 
@@ -50,6 +53,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
       MealPlanService.getDiscoverySuggestions(
         limit: 12,
         dietaryPreference: _effectiveDietaryPreference,
+        refreshToken: _newRefreshToken(),
       ),
       PantryService.getItems(),
     ]);
@@ -75,12 +79,18 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
   }
 
   Future<void> _refreshDiscovery() async {
+    setState(() => _isRefreshingDiscovery = true);
     final data = await MealPlanService.getDiscoverySuggestions(
       limit: 12,
       dietaryPreference: _effectiveDietaryPreference,
+      refreshToken: _newRefreshToken(),
     );
     if (!mounted) return;
-    setState(() => _discoverySuggestions = data);
+    setState(() {
+      _discoverySuggestions = data;
+      _isRefreshingDiscovery = false;
+      _ingredientSuggestions = [];
+    });
   }
 
   Future<void> _generateByIngredients() async {
@@ -99,6 +109,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
       _selectedIngredients.toList(),
       limit: 8,
       dietaryPreference: _effectiveDietaryPreference,
+      refreshToken: _newRefreshToken(),
     );
 
     if (!mounted) return;
@@ -339,7 +350,15 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
                             if (!mounted) return;
                             setModalState(() {});
                           },
-                          icon: const Icon(Icons.auto_awesome),
+                          icon: _isRefreshingDiscovery
+                              ? const SizedBox(
+                                  width: 14,
+                                  height: 14,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const Icon(Icons.auto_awesome),
                           label: const Text('Gợi ý luôn'),
                         ),
                         const SizedBox(width: 10),

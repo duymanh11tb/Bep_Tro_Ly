@@ -13,11 +13,13 @@ class MealPlanService {
   static Future<List<RecipeSuggestion>> getDiscoverySuggestions({
     int limit = 12,
     String? dietaryPreference,
+    String? refreshToken,
   }) async {
     return _suggestByIngredients(
       const [],
       limit: limit,
       dietaryPreference: dietaryPreference,
+      refreshToken: refreshToken,
     );
   }
 
@@ -25,6 +27,7 @@ class MealPlanService {
     List<String> ingredients, {
     int limit = 8,
     String? dietaryPreference,
+    String? refreshToken,
   }) async {
     final filtered = ingredients
         .map((e) => e.trim())
@@ -36,6 +39,7 @@ class MealPlanService {
       filtered,
       limit: limit,
       dietaryPreference: dietaryPreference,
+      refreshToken: refreshToken,
     );
   }
 
@@ -43,9 +47,13 @@ class MealPlanService {
     List<String> ingredients, {
     required int limit,
     String? dietaryPreference,
+    String? refreshToken,
   }) async {
     try {
       final preferences = await _buildPreferences(dietaryPreference);
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        preferences['refresh_token'] = refreshToken;
+      }
       final resp = await ApiService.post('/api/v1/recipes/suggest', {
         'ingredients': ingredients,
         'limit': limit,
@@ -57,6 +65,7 @@ class MealPlanService {
           ingredients,
           limit: limit,
           dietaryPreference: dietaryPreference,
+          refreshToken: refreshToken,
         );
       }
 
@@ -66,6 +75,7 @@ class MealPlanService {
           ingredients,
           limit: limit,
           dietaryPreference: dietaryPreference,
+          refreshToken: refreshToken,
         );
       }
 
@@ -76,6 +86,7 @@ class MealPlanService {
           ingredients,
           limit: limit,
           dietaryPreference: dietaryPreference,
+          refreshToken: refreshToken,
         );
       }
       return parsed;
@@ -85,6 +96,7 @@ class MealPlanService {
         ingredients,
         limit: limit,
         dietaryPreference: dietaryPreference,
+        refreshToken: refreshToken,
       );
     }
   }
@@ -93,6 +105,7 @@ class MealPlanService {
     List<String> ingredients, {
     required int limit,
     String? dietaryPreference,
+    String? refreshToken,
   }) {
     final normalized = ingredients
         .map((e) => e.trim().toLowerCase())
@@ -123,11 +136,22 @@ class MealPlanService {
             'ingredients_missing': missing,
             'match_score': score,
           };
-        }).toList()..sort(
-          (a, b) => (b['match_score'] as double).compareTo(
-            a['match_score'] as double,
-          ),
-        );
+        }).toList();
+
+    ranked.sort((a, b) {
+      final scoreCompare = (b['match_score'] as double).compareTo(
+        a['match_score'] as double,
+      );
+      if (scoreCompare != 0) return scoreCompare;
+      return (a['name'] as String).compareTo(b['name'] as String);
+    });
+
+    _shuffleRankedRecipes(
+      ranked,
+      ingredients: normalized.toList(),
+      dietaryPreference: dietaryPreference,
+      refreshToken: refreshToken,
+    );
 
     return ranked.take(limit).map((item) {
       return RecipeSuggestion.fromJson({
@@ -182,6 +206,34 @@ class MealPlanService {
           ],
           'tips': 'Giữ vị ngọt rau củ bằng cách không nêm quá tay.',
         },
+        {
+          'name': 'Bún chay nấm rau',
+          'description': 'Tô bún thanh nhẹ, phù hợp ngày muốn ăn nhẹ bụng.',
+          'difficulty': 'easy',
+          'prep_time': 10,
+          'cook_time': 15,
+          'ingredients': ['bún', 'nấm', 'rau cải'],
+          'instructions': [
+            'Trụng bún và rau cải vừa chín.',
+            'Nấu nước dùng nấm thanh nhẹ.',
+            'Xếp bún, rau rồi chan nước dùng lên trên.',
+          ],
+          'tips': 'Thêm đậu hũ chiên để món đầy đặn hơn.',
+        },
+        {
+          'name': 'Miến xào rau củ chay',
+          'description': 'Nhanh gọn, ít dầu và rất hợp bữa sáng.',
+          'difficulty': 'easy',
+          'prep_time': 8,
+          'cook_time': 10,
+          'ingredients': ['miến', 'cà rốt', 'nấm', 'bắp cải'],
+          'instructions': [
+            'Ngâm miến cho mềm rồi để ráo.',
+            'Xào rau củ và nấm trên lửa lớn.',
+            'Cho miến vào đảo nhanh, nêm nhẹ rồi tắt bếp.',
+          ],
+          'tips': 'Không xào quá lâu để miến không bị dính.',
+        },
       ];
     }
 
@@ -214,6 +266,34 @@ class MealPlanService {
             'Nêm nhạt và tắt bếp khi rau vừa chín.',
           ],
           'tips': 'Canh này rất hợp cho bữa tối nhẹ.',
+        },
+        {
+          'name': 'Tôm hấp bí ngòi',
+          'description': 'Giàu đạm, thanh nhẹ và rất ít dầu mỡ.',
+          'difficulty': 'easy',
+          'prep_time': 8,
+          'cook_time': 10,
+          'ingredients': ['tôm', 'bí ngòi', 'gừng'],
+          'instructions': [
+            'Sơ chế tôm và bí ngòi.',
+            'Xếp vào xửng hấp cùng vài lát gừng.',
+            'Hấp chín rồi dùng ngay khi còn nóng.',
+          ],
+          'tips': 'Có thể ăn kèm salad để đủ chất hơn.',
+        },
+        {
+          'name': 'Salad ức gà dưa leo',
+          'description': 'Bữa nhẹ nhanh gọn, phù hợp cho ngày cần kiểm soát calo.',
+          'difficulty': 'easy',
+          'prep_time': 10,
+          'cook_time': 12,
+          'ingredients': ['ức gà', 'dưa leo', 'xà lách'],
+          'instructions': [
+            'Luộc hoặc áp chảo ức gà đến khi chín.',
+            'Cắt dưa leo và rau vừa ăn.',
+            'Trộn nhẹ với sốt chanh dầu oliu.',
+          ],
+          'tips': 'Ưu tiên sốt nhạt để giữ đúng mục tiêu giảm cân.',
         },
       ];
     }
@@ -248,6 +328,34 @@ class MealPlanService {
           ],
           'tips': 'Có thể thêm gừng để khử mùi tanh và tăng hương vị.',
         },
+        {
+          'name': 'Yến mạch trái cây sữa chua',
+          'description': 'Bữa sáng Eat Clean nhẹ bụng và giàu chất xơ.',
+          'difficulty': 'easy',
+          'prep_time': 6,
+          'cook_time': 4,
+          'ingredients': ['yến mạch', 'sữa chua', 'chuối'],
+          'instructions': [
+            'Ngâm hoặc nấu yến mạch cho mềm.',
+            'Thêm sữa chua và trái cây cắt nhỏ.',
+            'Dùng ngay cho bữa sáng nhanh gọn.',
+          ],
+          'tips': 'Có thể rắc thêm hạt chia để tăng độ no lâu.',
+        },
+        {
+          'name': 'Gà áp chảo khoai lang',
+          'description': 'Cân bằng tinh bột tốt và đạm nạc cho bữa trưa.',
+          'difficulty': 'easy',
+          'prep_time': 10,
+          'cook_time': 18,
+          'ingredients': ['ức gà', 'khoai lang', 'rau xà lách'],
+          'instructions': [
+            'Luộc hoặc nướng khoai lang đến khi chín.',
+            'Áp chảo ức gà với ít gia vị.',
+            'Ăn cùng rau xà lách và khoai lang.',
+          ],
+          'tips': 'Nên áp chảo ít dầu để giữ đúng tinh thần Eat Clean.',
+        },
       ];
     }
 
@@ -265,6 +373,20 @@ class MealPlanService {
           'Cho mì vào xào nhanh, nêm nếm vừa ăn rồi tắt bếp.',
         ],
         'tips': 'Không luộc mì quá lâu để sợi mì không bị nát.',
+      },
+      {
+        'name': 'Cơm chiên rau củ trứng',
+        'description': 'Dễ làm, tận dụng cơm nguội và hợp bữa nhanh.',
+        'difficulty': 'easy',
+        'prep_time': 8,
+        'cook_time': 10,
+        'ingredients': ['cơm nguội', 'trứng', 'cà rốt', 'đậu que'],
+        'instructions': [
+          'Đánh trứng rồi xào sơ với rau củ.',
+          'Cho cơm vào đảo đều trên lửa lớn.',
+          'Nêm vừa ăn rồi dùng nóng.',
+        ],
+        'tips': 'Dùng cơm nguội sẽ giúp hạt cơm tơi hơn.',
       },
       {
         'name': 'Cà tím áp chảo sốt mắm',
@@ -295,6 +417,20 @@ class MealPlanService {
         'tips': 'Chiên lửa vừa để trứng mềm và không bị khô.',
       },
       {
+        'name': 'Canh cải thịt bằm',
+        'description': 'Thanh nhẹ, nấu nhanh và rất hợp bữa tối gia đình.',
+        'difficulty': 'easy',
+        'prep_time': 7,
+        'cook_time': 12,
+        'ingredients': ['rau cải', 'thịt bằm', 'gừng'],
+        'instructions': [
+          'Ướp nhẹ thịt bằm rồi vo nhỏ.',
+          'Đun sôi nước, cho thịt vào trước.',
+          'Thêm rau cải, nêm vừa rồi tắt bếp.',
+        ],
+        'tips': 'Nấu rau vừa chín để giữ màu xanh đẹp.',
+      },
+      {
         'name': 'Mì nước trứng hành',
         'description': 'Ấm bụng, nấu nhanh trong 10 phút.',
         'difficulty': 'easy',
@@ -308,7 +444,90 @@ class MealPlanService {
         ],
         'tips': 'Có thể thêm rau xanh để cân bằng dinh dưỡng.',
       },
+      {
+        'name': 'Gà xào sả ớt',
+        'description': 'Đậm đà, thơm mùi sả và rất đưa cơm.',
+        'difficulty': 'medium',
+        'prep_time': 10,
+        'cook_time': 15,
+        'ingredients': ['thịt gà', 'sả', 'ớt', 'hành tím'],
+        'instructions': [
+          'Ướp gà với sả băm và gia vị.',
+          'Phi thơm hành rồi xào gà trên lửa lớn.',
+          'Đảo đến khi thịt chín săn và thơm.',
+        ],
+        'tips': 'Có thể giảm ớt nếu muốn vị dịu hơn.',
+      },
+      {
+        'name': 'Đậu hũ sốt cà chua',
+        'description': 'Món quen thuộc, nhẹ bụng mà vẫn đậm vị.',
+        'difficulty': 'easy',
+        'prep_time': 8,
+        'cook_time': 12,
+        'ingredients': ['đậu hũ', 'cà chua', 'hành lá'],
+        'instructions': [
+          'Chiên sơ đậu hũ cho vàng mặt.',
+          'Nấu sốt cà chua rồi cho đậu vào rim nhẹ.',
+          'Rắc hành lá trước khi tắt bếp.',
+        ],
+        'tips': 'Nếu thích mềm hơn, không cần chiên đậu quá lâu.',
+      },
+      {
+        'name': 'Bò xào bông cải',
+        'description': 'Món xào nhanh, giàu đạm và dễ ăn.',
+        'difficulty': 'easy',
+        'prep_time': 10,
+        'cook_time': 12,
+        'ingredients': ['thịt bò', 'bông cải', 'tỏi'],
+        'instructions': [
+          'Ướp bò nhẹ với tiêu và tỏi.',
+          'Trụng bông cải sơ để giữ độ giòn.',
+          'Xào bò nhanh rồi cho bông cải vào đảo đều.',
+        ],
+        'tips': 'Không xào bò quá chín để giữ độ mềm.',
+      },
+      {
+        'name': 'Cá sốt cà chua',
+        'description': 'Món mặn dễ ăn, hợp cơm gia đình hằng ngày.',
+        'difficulty': 'medium',
+        'prep_time': 12,
+        'cook_time': 18,
+        'ingredients': ['cá', 'cà chua', 'hành tím'],
+        'instructions': [
+          'Chiên sơ cá cho săn mặt.',
+          'Làm sốt cà chua riêng đến khi sệt.',
+          'Cho cá vào om nhẹ để thấm sốt.',
+        ],
+        'tips': 'Dùng ít đường để sốt dịu và tròn vị hơn.',
+      },
     ];
+  }
+
+  static void _shuffleRankedRecipes(
+    List<Map<String, dynamic>> ranked, {
+    required List<String> ingredients,
+    String? dietaryPreference,
+    String? refreshToken,
+  }) {
+    final sortedIngredients = [...ingredients]..sort();
+    final seedSource = [
+      refreshToken ?? DateTime.now().millisecondsSinceEpoch.toString(),
+      dietaryPreference ?? '',
+      ...sortedIngredients,
+    ].join('|');
+
+    ranked.sort((a, b) {
+      final aScore = a['match_score'] as double;
+      final bScore = b['match_score'] as double;
+      final scoreDiff = (bScore - aScore).abs();
+      if (scoreDiff > 0.08) {
+        return bScore.compareTo(aScore);
+      }
+
+      final aKey = '${a['name']}|$seedSource'.hashCode;
+      final bKey = '${b['name']}|$seedSource'.hashCode;
+      return aKey.compareTo(bKey);
+    });
   }
 
   static Future<Map<String, dynamic>> _buildPreferences(
