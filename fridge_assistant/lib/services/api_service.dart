@@ -15,7 +15,12 @@ class ApiService {
           : configured;
     }
 
-    return _resolveWebBaseUrl(configured);
+    final configuredWeb = dotenv.env['API_URL_WEB']?.trim();
+    return _resolveWebBaseUrl(
+      configuredWeb == null || configuredWeb.isEmpty || configuredWeb == 'auto'
+          ? null
+          : configuredWeb,
+    );
   }
 
   static const Duration _requestTimeout = Duration(seconds: 15);
