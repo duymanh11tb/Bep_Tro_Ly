@@ -26,6 +26,26 @@ class ApiService {
   static final Map<String, Future<http.Response>> _inFlightRequests = {};
   static final Map<String, _RecentResponse> _recentResponses = {};
 
+  static Uri buildUri(String endpoint) {
+    return Uri.parse('$baseUrl$endpoint');
+  }
+
+  static String absoluteUrl(String pathOrUrl) {
+    final raw = pathOrUrl.trim();
+    if (raw.isEmpty) return raw;
+
+    final parsed = Uri.tryParse(raw);
+    if (parsed != null && parsed.hasScheme && parsed.host.isNotEmpty) {
+      return raw;
+    }
+
+    if (raw.startsWith('/')) {
+      return '$baseUrl$raw';
+    }
+
+    return '$baseUrl/$raw';
+  }
+
   static String _resolveWebBaseUrl(String? configured) {
     final page = Uri.base;
     final pageOrigin = page.origin;
@@ -77,7 +97,7 @@ class ApiService {
     Map<String, dynamic> body, {
     bool withAuth = false,
   }) async {
-    final url = Uri.parse('$baseUrl$endpoint');
+    final url = buildUri(endpoint);
     final headers = await getHeaders(withAuth: withAuth);
     final requestKey = _buildRequestKey(
       method: 'POST',
@@ -101,7 +121,7 @@ class ApiService {
     String endpoint, {
     bool withAuth = false,
   }) async {
-    final url = Uri.parse('$baseUrl$endpoint');
+    final url = buildUri(endpoint);
     final headers = await getHeaders(withAuth: withAuth);
     final requestKey = _buildRequestKey(
       method: 'GET',
@@ -120,7 +140,7 @@ class ApiService {
     Map<String, dynamic> body, {
     bool withAuth = true,
   }) async {
-    final url = Uri.parse('$baseUrl$endpoint');
+    final url = buildUri(endpoint);
     final headers = await getHeaders(withAuth: withAuth);
     final requestKey = _buildRequestKey(
       method: 'PUT',
@@ -142,7 +162,7 @@ class ApiService {
     Map<String, dynamic> body, {
     bool withAuth = true,
   }) async {
-    final url = Uri.parse('$baseUrl$endpoint');
+    final url = buildUri(endpoint);
     final headers = await getHeaders(withAuth: withAuth);
     final requestKey = _buildRequestKey(
       method: 'PATCH',
@@ -163,7 +183,7 @@ class ApiService {
     String endpoint, {
     bool withAuth = true,
   }) async {
-    final url = Uri.parse('$baseUrl$endpoint');
+    final url = buildUri(endpoint);
     final headers = await getHeaders(withAuth: withAuth);
     final requestKey = _buildRequestKey(
       method: 'DELETE',

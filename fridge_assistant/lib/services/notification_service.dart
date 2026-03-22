@@ -1,30 +1,17 @@
 import 'dart:convert';
-import 'package:http/http.dart' as http;
-import 'package:shared_preferences/shared_preferences.dart';
 import '../models/notification_model.dart';
 import 'api_service.dart';
 
 class NotificationService {
-  final String _baseUrl = ApiService.baseUrl;
-
-  Future<Map<String, String>> _getHeaders() async {
-    final prefs = await SharedPreferences.getInstance();
-    final token = prefs.getString('auth_token');
-    return {
-      'Content-Type': 'application/json',
-      'Authorization': 'Bearer $token',
-    };
-  }
-
   Future<List<NotificationModel>> getNotifications() async {
     try {
-      final response = await http.get(
-        Uri.parse('$_baseUrl/api/v1/notifications'),
-        headers: await _getHeaders(),
+      final response = await ApiService.get(
+        '/api/v1/notifications',
+        withAuth: true,
       );
 
       if (response.statusCode == 200) {
-        final List<dynamic> data = jsonDecode(response.body);
+        final List<dynamic> data = jsonDecode(utf8.decode(response.bodyBytes));
         return data.map((n) => NotificationModel.fromJson(n)).toList();
       }
       return [];
@@ -35,9 +22,10 @@ class NotificationService {
 
   Future<bool> markAsRead(int id) async {
     try {
-      final response = await http.put(
-        Uri.parse('$_baseUrl/api/v1/notifications/$id/read'),
-        headers: await _getHeaders(),
+      final response = await ApiService.put(
+        '/api/v1/notifications/$id/read',
+        const {},
+        withAuth: true,
       );
       return response.statusCode == 200;
     } catch (e) {
@@ -47,13 +35,13 @@ class NotificationService {
 
   Future<Map<String, dynamic>> respondToInvitation(int notificationId, bool accept) async {
     try {
-      final response = await http.post(
-        Uri.parse('$_baseUrl/api/v1/notifications/$notificationId/respond'),
-        headers: await _getHeaders(),
-        body: jsonEncode({'accept': accept}),
+      final response = await ApiService.post(
+        '/api/v1/notifications/$notificationId/respond',
+        {'accept': accept},
+        withAuth: true,
       );
 
-      final data = jsonDecode(response.body);
+      final data = jsonDecode(utf8.decode(response.bodyBytes));
       if (response.statusCode == 200) {
         return {'success': true, 'message': data['message']};
       }
