@@ -309,68 +309,128 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     final defaultName = suggestedName?.trim().isNotEmpty == true
         ? suggestedName!.trim()
         : 'Sản phẩm mã $barcodeValue';
-    final controller = TextEditingController(text: defaultName);
+    final nameController = TextEditingController(text: defaultName);
+    final quantityController = TextEditingController(text: '1');
+    String selectedUnit = 'Gam';
+    
+    final units = ['Gam', 'Kg', 'Lít', 'Ml', 'Cái', 'Quả', 'Bó', 'Hộp', 'Gói', 'Chai', 'Lon', 'Bịch'];
 
-    final value = await showDialog<String>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Đã nhận diện mã vạch'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                barcodeValue,
-                style: const TextStyle(fontWeight: FontWeight.w700),
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Đã nhận diện mã vạch'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      barcodeValue,
+                      style: const TextStyle(fontWeight: FontWeight.w700),
+                    ),
+                    if (suggestedName != null && suggestedName.trim().isNotEmpty) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'Gợi ý: $suggestedName',
+                        style: const TextStyle(
+                          color: AppColors.textSecondary,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: nameController,
+                      decoration: const InputDecoration(
+                        labelText: 'Tên sản phẩm',
+                        hintText: 'Nhập tên để lưu vào tủ lạnh',
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 1,
+                          child: TextField(
+                            controller: quantityController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Số lượng',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 1,
+                          child: DropdownButtonFormField<String>(
+                            value: selectedUnit,
+                            decoration: const InputDecoration(labelText: 'Đơn vị'),
+                            items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => selectedUnit = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-              if (suggestedName != null && suggestedName.trim().isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Text(
-                  'Gợi ý: $suggestedName',
-                  style: const TextStyle(
-                    color: AppColors.textSecondary,
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Bỏ qua'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final name = nameController.text.trim();
+                    final qtyText = quantityController.text.trim();
+                    final qty = double.tryParse(qtyText);
+
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vui lòng nhập tên sản phẩm')));
+                      return;
+                    }
+                    if (qty == null || qty <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Số lượng phải lớn hơn 0')));
+                      return;
+                    }
+                    Navigator.of(context).pop({
+                      'name': name,
+                      'quantity': qty,
+                      'unit': selectedUnit,
+                    });
+                  },
+                  child: const Text('Lưu vào tủ lạnh'),
                 ),
               ],
-              const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                decoration: const InputDecoration(
-                  labelText: 'Tên sản phẩm',
-                  hintText: 'Nhập tên để lưu vào tủ lạnh',
-                ),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Bỏ qua'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('Lưu vào tủ lạnh'),
-            ),
-          ],
+            );
+          }
         );
       },
     );
 
-    controller.dispose();
+    nameController.dispose();
+    quantityController.dispose();
 
-    final productName = value?.trim() ?? '';
-    if (productName.isEmpty || !mounted) {
-      return;
-    }
+    if (result == null || !mounted) return;
+
+    final productName = result['name'] as String;
+    final quantity = result['quantity'] as double;
+    final unit = (result['unit'] as String).toLowerCase();
 
     final expiryDate = _suggestExpiryDateForName(productName);
     final ok = await _handleAddItem(
       nameVi: productName,
-      quantity: 1,
-      unit: 'cái',
+      quantity: quantity,
+      unit: unit,
       expiryDate: expiryDate,
       notes: 'Thêm từ mã vạch: $barcodeValue',
     );
@@ -383,7 +443,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
       SnackBar(
         content: Text(
           ok
-              ? 'Đã thêm "$productName" vào tủ lạnh.'
+              ? 'Đã thêm "$productName" ($quantity $unit) vào tủ lạnh.'
               : 'Lưu sản phẩm từ mã vạch thất bại.',
         ),
       ),
@@ -750,44 +810,112 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
   }
 
   Future<void> _showManualInputDialog() async {
-    final controller = TextEditingController();
+    final nameController = TextEditingController();
+    final quantityController = TextEditingController(text: '1');
+    String selectedUnit = 'Gam';
+    
+    final units = ['Gam', 'Kg', 'Lít', 'Ml', 'Cái', 'Quả', 'Bó', 'Hộp', 'Gói', 'Chai', 'Lon', 'Bịch'];
 
-    final value = await showDialog<String>(
+    final result = await showDialog<Map<String, dynamic>>(
       context: context,
+      barrierDismissible: false,
       builder: (context) {
-        return AlertDialog(
-          title: const Text('Nhập nguyên liệu'),
-          content: TextField(
-            controller: controller,
-            autofocus: true,
-            decoration: const InputDecoration(hintText: 'Ví dụ: Cà chua'),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.of(context).pop(),
-              child: const Text('Hủy'),
-            ),
-            ElevatedButton(
-              onPressed: () => Navigator.of(context).pop(controller.text),
-              child: const Text('Thêm'),
-            ),
-          ],
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Nhập nguyên liệu'),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: nameController,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        labelText: 'Tên nguyên liệu',
+                        hintText: 'Ví dụ: Cà chua'
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          flex: 1,
+                          child: TextField(
+                            controller: quantityController,
+                            keyboardType: TextInputType.number,
+                            decoration: const InputDecoration(
+                              labelText: 'Số lượng',
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          flex: 1,
+                          child: DropdownButtonFormField<String>(
+                            value: selectedUnit,
+                            decoration: const InputDecoration(labelText: 'Đơn vị'),
+                            items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
+                            onChanged: (val) {
+                              if (val != null) {
+                                setDialogState(() => selectedUnit = val);
+                              }
+                            },
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('Hủy'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final name = nameController.text.trim();
+                    final qtyText = quantityController.text.trim();
+                    final qty = double.tryParse(qtyText);
+
+                    if (name.isEmpty) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vui lòng nhập tên sản phẩm')));
+                      return;
+                    }
+                    if (qty == null || qty <= 0) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Số lượng phải lớn hơn 0')));
+                      return;
+                    }
+                    Navigator.of(context).pop({
+                      'name': name,
+                      'quantity': qty,
+                      'unit': selectedUnit,
+                    });
+                  },
+                  child: const Text('Thêm'),
+                ),
+              ],
+            );
+          }
         );
       },
     );
 
-    controller.dispose();
+    nameController.dispose();
+    quantityController.dispose();
 
-    final ingredientName = value?.trim() ?? '';
-    if (ingredientName.isEmpty) {
-      return;
-    }
+    if (result == null || !mounted) return;
+
+    final ingredientName = result['name'] as String;
+    final quantity = result['quantity'] as double;
+    final unit = (result['unit'] as String).toLowerCase();
 
     final expiryDate = _suggestExpiryDateForName(ingredientName);
     final ok = await _handleAddItem(
       nameVi: ingredientName,
-      quantity: 1,
-      unit: 'cái',
+      quantity: quantity,
+      unit: unit,
       expiryDate: expiryDate,
       notes: 'Thêm thủ công từ màn quét',
     );
@@ -798,7 +926,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
       SnackBar(
         content: Text(
           ok
-              ? 'Đã thêm "$ingredientName" vào tủ lạnh.'
+              ? 'Đã thêm "$ingredientName" ($quantity $unit) vào tủ lạnh.'
               : 'Thêm nguyên liệu thất bại, vui lòng thử lại.',
         ),
       ),

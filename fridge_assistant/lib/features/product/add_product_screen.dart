@@ -82,10 +82,61 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Future<void> _submit() async {
     final name = _nameController.text.trim();
+    if (_selectedFridgeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng chọn tủ lạnh để thêm'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
     if (name.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
-          content: Text('Vui lòng nhập tên nguyên liệu'),
+          content: Text('Vui lòng nhập đầy đủ tên nguyên liệu'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    final quantityText = _quantityController.text.trim();
+    if (quantityText.isEmpty || double.tryParse(quantityText) == null || double.parse(quantityText) <= 0) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng nhập số lượng hợp lệ lớn hơn 0'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    if (_selectedUnit.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng chọn đơn vị đo lường (Gam, Kg, Hộp, Gói...)'),
+          backgroundColor: AppColors.error,
+        ),
+      );
+      return;
+    }
+
+    // if (_purchaseDate == null) {
+    //   ScaffoldMessenger.of(context).showSnackBar(
+    //     const SnackBar(
+    //       content: Text('Vui lòng nhập ngày mua'),
+    //       backgroundColor: AppColors.error,
+    //     ),
+    //   );
+    //   return;
+    // }
+
+    if (_expiryDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng chọn Hạn sử dụng của nguyên liệu'),
           backgroundColor: AppColors.error,
         ),
       );
@@ -109,7 +160,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
     try {
       final success = await PantryService.addItem(
         nameVi: name,
-        quantity: double.tryParse(_quantityController.text) ?? 1,
+        quantity: double.parse(quantityText),
         unit: _selectedUnit.toLowerCase(),
         expiryDate: _expiryDate,
         fridgeId: _selectedFridgeId,

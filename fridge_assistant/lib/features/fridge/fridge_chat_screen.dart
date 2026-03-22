@@ -1,7 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
-import 'package:image_picker/image_picker.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/chat_message_model.dart';
 import '../../models/fridge_model.dart';
@@ -441,28 +440,6 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
     );
   }
 
-  Future<void> _pickImage() async {
-    try {
-      final ImagePicker picker = ImagePicker();
-      final XFile? image = await picker.pickImage(source: ImageSource.gallery);
-
-      if (image == null) return;
-
-      // For now, we'll show a toast saying image support coming soon
-      // In production, you'd upload the image and send image URL in message
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Hỗ trợ gửi hình ảnh sẽ sớm có'),
-            duration: Duration(seconds: 2),
-          ),
-        );
-      }
-    } catch (e) {
-      debugPrint('Error picking image: $e');
-    }
-  }
-
   Widget _buildAvatar(String? url, String name) {
     return CircleAvatar(
       radius: 14,
@@ -491,11 +468,6 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
       ),
       child: Row(
         children: [
-          IconButton(
-            onPressed: _pickImage,
-            icon: const Icon(Icons.image, color: AppColors.primary),
-            tooltip: 'Gửi hình ảnh',
-          ),
           Expanded(
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 16),
