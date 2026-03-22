@@ -647,7 +647,7 @@ class PantryService {
     if (normalized == null || normalized.isEmpty) return const [];
 
     if (normalized == 'vegetarian' || normalized == 'an_chay') {
-      return const [
+      return [
         RecipeSuggestion(
           id: 'diet_veg_1',
           name: 'Đậu hũ sốt nấm',
@@ -679,7 +679,7 @@ class PantryService {
     }
 
     if (normalized == 'weight_loss' || normalized == 'giam_can') {
-      return const [
+      return [
         RecipeSuggestion(
           id: 'diet_fit_1',
           name: 'Ức gà áp chảo rau củ',
@@ -711,7 +711,7 @@ class PantryService {
     }
 
     if (normalized == 'eat_clean') {
-      return const [
+      return [
         RecipeSuggestion(
           id: 'diet_clean_1',
           name: 'Cá hồi áp chảo măng tây',
@@ -742,7 +742,7 @@ class PantryService {
       ];
     }
 
-    return const [];
+    return [];
   }
 
   /// Tự động cleanup sản phẩm hết hạn
