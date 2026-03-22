@@ -32,6 +32,7 @@ public class RecipeController : ControllerBase
             request.Region,
             request.RefreshToken,
             request.ExcludeRecipeNames,
+            GetCurrentUserId(),
             request.Limit
         );
 
@@ -107,6 +108,7 @@ public class RecipeController : ControllerBase
             null,
             refreshToken,
             excludes,
+            GetCurrentUserId(),
             limit
         );
 

@@ -444,6 +444,13 @@ class PantryService {
     } catch (e) {
       debugPrint('PantryService.getAiSuggestions error: $e');
     }
+    final regionCode = await _resolveRegionCode(region);
+    if (refreshToken != null && refreshToken.isNotEmpty) {
+      if (mode == RecipeSuggestionMode.region) {
+        return _regionFallbackRecipes(regionCode, limit);
+      }
+      return _pantryRefreshFallback(limit, refreshToken);
+    }
     final cached = await getCachedAiSuggestions(
       mode: mode,
       fridgeId: fridgeId,
@@ -452,7 +459,6 @@ class PantryService {
     if (cached.isNotEmpty) return cached;
 
     if (mode == RecipeSuggestionMode.region) {
-      final regionCode = await _resolveRegionCode(region);
       return _regionFallbackRecipes(regionCode, limit);
     }
     return [];
@@ -550,6 +556,74 @@ class PantryService {
     if (limit <= 0) return recipes;
     if (recipes.length <= limit) return recipes;
     return recipes.take(limit).toList();
+  }
+
+  static List<RecipeSuggestion> _pantryRefreshFallback(int limit, String refreshToken) {
+    final pool = <RecipeSuggestion>[
+      RecipeSuggestion(
+        id: 'p_f_1',
+        name: 'Gà kho gừng',
+        description: 'Thơm ấm vị gừng, hợp bữa cơm gia đình.',
+        ingredientsUsed: const ['gà', 'gừng', 'hành tím'],
+        cookTimeMinutes: 28,
+        difficulty: 'easy',
+        matchScore: 0.78,
+      ),
+      RecipeSuggestion(
+        id: 'p_f_2',
+        name: 'Canh rau ngót thịt bằm',
+        description: 'Món canh thanh mát, nấu nhanh và dễ ăn.',
+        ingredientsUsed: const ['rau ngót', 'thịt bằm'],
+        cookTimeMinutes: 15,
+        difficulty: 'easy',
+        matchScore: 0.76,
+      ),
+      RecipeSuggestion(
+        id: 'p_f_3',
+        name: 'Cà tím xào thịt bằm',
+        description: 'Món xào mềm thơm, đậm vị, rất đưa cơm.',
+        ingredientsUsed: const ['cà tím', 'thịt bằm', 'tỏi'],
+        cookTimeMinutes: 18,
+        difficulty: 'easy',
+        matchScore: 0.74,
+      ),
+      RecipeSuggestion(
+        id: 'p_f_4',
+        name: 'Bò lúc lắc',
+        description: 'Thịt bò mềm thơm, có thể ăn với cơm hoặc salad.',
+        ingredientsUsed: const ['thịt bò', 'ớt chuông'],
+        cookTimeMinutes: 20,
+        difficulty: 'medium',
+        matchScore: 0.75,
+      ),
+      RecipeSuggestion(
+        id: 'p_f_5',
+        name: 'Mướp xào trứng',
+        description: 'Món dân dã nhanh gọn, vị ngọt tự nhiên.',
+        ingredientsUsed: const ['mướp', 'trứng'],
+        cookTimeMinutes: 12,
+        difficulty: 'easy',
+        matchScore: 0.73,
+      ),
+      RecipeSuggestion(
+        id: 'p_f_6',
+        name: 'Đậu que xào tỏi',
+        description: 'Rau giòn xanh, phù hợp bữa ăn nhẹ nhàng.',
+        ingredientsUsed: const ['đậu que', 'tỏi'],
+        cookTimeMinutes: 10,
+        difficulty: 'easy',
+        matchScore: 0.72,
+      ),
+    ];
+
+    final list = List<RecipeSuggestion>.from(pool);
+    final seed = refreshToken.hashCode;
+    final random = DateTime.fromMillisecondsSinceEpoch(seed.abs() % 2147483647)
+        .millisecondsSinceEpoch;
+    list.sort((a, b) => (a.id.hashCode ^ random).compareTo(b.id.hashCode ^ random));
+    final take = limit <= 0 ? 5 : limit;
+    if (list.length <= take) return list;
+    return list.take(take).toList();
   }
 
   /// Tự động cleanup sản phẩm hết hạn

@@ -22,6 +22,8 @@ public class AIRecipeService
     private static readonly TimeSpan _geminiTimeout = TimeSpan.FromSeconds(20);
     private static readonly TimeSpan _circuitOpenDuration = TimeSpan.FromSeconds(45);
     private const int GeminiFailureThreshold = 5;
+    private const int RecentSuggestionsPerUser = 40;
+    private static readonly ConcurrentDictionary<int, LinkedList<string>> _recentRecipeNamesByUser = new();
 
     private readonly string? _apiKey;
     private readonly HttpClient _httpClient;
@@ -45,6 +47,7 @@ public class AIRecipeService
         string? region = null,
         string? refreshToken = null,
         List<string>? excludeRecipeNames = null,
+        int? userId = null,
         int limit = 5)
     {
         // If no ingredients, we enter "Discovery" mode
@@ -104,18 +107,22 @@ public class AIRecipeService
 
             var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit);
             var recipesWithImages = EnsureRecipeImages(aiRecipes);
+            var recentNames = GetRecentRecipeNames(userId);
             var finalRecipes = ApplyExcludeAndFillRecipes(
                 recipesWithImages,
                 excludeRecipeNames,
                 ingredients,
                 region,
+                refreshToken,
+                recentNames,
                 limit
             );
             if (finalRecipes.Count == 0)
             {
-                finalRecipes = BuildLocalFallbackRecipes(ingredients, region, excludeRecipeNames, limit);
+                finalRecipes = BuildLocalFallbackRecipes(ingredients, region, excludeRecipeNames, limit, refreshToken, recentNames);
             }
             await SaveToCacheAsync(cacheKey, finalRecipes);
+            RecordRecentRecipeNames(userId, finalRecipes);
 
             return new Dictionary<string, object>
             {
@@ -128,10 +135,12 @@ public class AIRecipeService
         {
             _logger.LogError(ex, "AI suggestion error");
 
-            var fallbackRecipes = BuildLocalFallbackRecipes(ingredients, region, excludeRecipeNames, limit);
+            var recentNames = GetRecentRecipeNames(userId);
+            var fallbackRecipes = BuildLocalFallbackRecipes(ingredients, region, excludeRecipeNames, limit, refreshToken, recentNames);
             if (fallbackRecipes.Count > 0)
             {
                 await SaveToCacheAsync(cacheKey, fallbackRecipes, ttlHours: 2);
+                RecordRecentRecipeNames(userId, fallbackRecipes);
                 return new Dictionary<string, object>
                 {
                     ["success"] = true,
@@ -180,7 +189,7 @@ public class AIRecipeService
         var pantryItems = await query.ToListAsync();
 
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
-        return await SuggestRecipesAsync(ingredients, preferences, region, refreshToken, excludeRecipeNames, limit);
+        return await SuggestRecipesAsync(ingredients, preferences, region, refreshToken, excludeRecipeNames, userId, limit);
     }
 
     /// <summary>
@@ -191,9 +200,10 @@ public class AIRecipeService
         Dictionary<string, object>? preferences = null,
         string? refreshToken = null,
         List<string>? excludeRecipeNames = null,
+        int? userId = null,
         int limit = 5)
     {
-        return await SuggestRecipesAsync(new List<string>(), preferences, region, refreshToken, excludeRecipeNames, limit);
+        return await SuggestRecipesAsync(new List<string>(), preferences, region, refreshToken, excludeRecipeNames, userId, limit);
     }
 
     private async Task<List<object>> GenerateAISuggestionsAsync(
@@ -517,7 +527,9 @@ public class AIRecipeService
         List<string> ingredients,
         string? region,
         List<string>? excludeRecipeNames,
-        int limit)
+        int limit,
+        string? refreshToken = null,
+        HashSet<string>? recentRecipeNames = null)
     {
         var normalizedIngredients = ingredients
             .Select(i => i.Trim().ToLower())
@@ -527,6 +539,7 @@ public class AIRecipeService
             .Select(NormalizeVietnameseText)
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToHashSet();
+        var normalizedRecent = recentRecipeNames ?? new HashSet<string>();
 
         var templates = new List<(string Name, string Description, string Difficulty, int Prep, int Cook, string[] Ingredients, string[] Steps, string Tips)>
         {
@@ -589,6 +602,156 @@ public class AIRecipeService
                     "Nêm nếm lại, đảo đều đến khi hạt cơm săn."
                 },
                 "Dùng cơm nguội để hạt cơm chiên tơi ngon hơn."
+            ),
+            (
+                "Gà kho gừng",
+                "Món kho thơm nồng, rất hợp bữa cơm gia đình.",
+                "easy",
+                12,
+                25,
+                new[] { "thịt gà", "gừng", "hành tím", "nước mắm", "đường" },
+                new[]
+                {
+                    "Ướp gà với gừng và gia vị.",
+                    "Phi hành, cho gà vào đảo săn.",
+                    "Kho nhỏ lửa đến khi thịt gà thấm vị."
+                },
+                "Thêm chút tiêu sau cùng để dậy mùi."
+            ),
+            (
+                "Đậu que xào tỏi",
+                "Món rau nhanh gọn, giữ độ giòn ngọt tự nhiên.",
+                "easy",
+                7,
+                8,
+                new[] { "đậu que", "tỏi", "muối", "dầu ăn" },
+                new[]
+                {
+                    "Đậu que rửa sạch, cắt khúc.",
+                    "Phi thơm tỏi rồi cho đậu vào xào lửa lớn.",
+                    "Nêm nhẹ và đảo nhanh để rau xanh giòn."
+                },
+                "Không xào quá lâu để giữ màu xanh đẹp."
+            ),
+            (
+                "Canh rau ngót thịt bằm",
+                "Canh ngọt mát, dễ ăn cho cả nhà.",
+                "easy",
+                8,
+                12,
+                new[] { "rau ngót", "thịt bằm", "hành tím", "nước mắm" },
+                new[]
+                {
+                    "Ướp thịt bằm với chút mắm.",
+                    "Xào thơm hành rồi cho thịt vào đảo.",
+                    "Thêm nước, đun sôi rồi cho rau ngót vào nấu chín."
+                },
+                "Vò nhẹ rau ngót để canh ngọt hơn."
+            ),
+            (
+                "Cà tím xào thịt bằm",
+                "Món xào mềm thơm, ăn cơm rất hợp.",
+                "easy",
+                10,
+                12,
+                new[] { "cà tím", "thịt bằm", "tỏi", "nước tương" },
+                new[]
+                {
+                    "Cà tím cắt miếng ngâm nước muối loãng.",
+                    "Xào thịt bằm với tỏi cho thơm.",
+                    "Cho cà tím vào đảo mềm, nêm vừa ăn."
+                },
+                "Có thể thêm chút ớt để tăng vị."
+            ),
+            (
+                "Trứng hấp thịt",
+                "Món mềm mịn, đậm đà và rất nhanh làm.",
+                "easy",
+                8,
+                15,
+                new[] { "trứng", "thịt bằm", "nước mắm", "hành lá" },
+                new[]
+                {
+                    "Đánh trứng cùng thịt bằm và gia vị.",
+                    "Lọc hỗn hợp để món mịn hơn.",
+                    "Hấp lửa vừa đến khi trứng chín."
+                },
+                "Phủ màng bọc chịu nhiệt để mặt trứng đẹp."
+            ),
+            (
+                "Bắp cải cuộn thịt sốt cà",
+                "Món đủ chất, vị sốt cà chua nhẹ rất đưa cơm.",
+                "medium",
+                15,
+                20,
+                new[] { "bắp cải", "thịt bằm", "cà chua", "hành tím" },
+                new[]
+                {
+                    "Chần lá bắp cải cho mềm để cuộn.",
+                    "Cuộn thịt bằm vào lá bắp cải.",
+                    "Nấu sốt cà chua rồi rim cuộn bắp cải."
+                },
+                "Cuộn chắc tay để không bung khi nấu."
+            ),
+            (
+                "Mướp xào trứng",
+                "Món xào mềm ngọt tự nhiên, nấu rất nhanh.",
+                "easy",
+                6,
+                8,
+                new[] { "mướp", "trứng", "hành tím", "muối" },
+                new[]
+                {
+                    "Mướp gọt vỏ, cắt lát vừa.",
+                    "Xào trứng tơi rồi để riêng.",
+                    "Xào mướp nhanh, cho trứng vào đảo đều."
+                },
+                "Nêm nhẹ để giữ vị ngọt của mướp."
+            ),
+            (
+                "Thịt heo rang cháy cạnh",
+                "Món mặn đậm đà, thơm mùi nước mắm.",
+                "easy",
+                10,
+                18,
+                new[] { "thịt heo", "hành tím", "nước mắm", "đường" },
+                new[]
+                {
+                    "Thịt thái mỏng, ướp nhẹ gia vị.",
+                    "Rang thịt lửa vừa cho săn cạnh.",
+                    "Nêm lại nước mắm và chút đường cho cân vị."
+                },
+                "Rang đủ lâu để thịt xém nhẹ thơm hơn."
+            ),
+            (
+                "Cải thìa sốt nấm",
+                "Món rau thanh vị, hợp bữa cơm nhẹ nhàng.",
+                "easy",
+                8,
+                10,
+                new[] { "cải thìa", "nấm", "tỏi", "dầu hào" },
+                new[]
+                {
+                    "Chần cải thìa qua nước sôi.",
+                    "Xào nấm với tỏi cho thơm.",
+                    "Rưới sốt nấm lên cải thìa đã chần."
+                },
+                "Giữ cải thìa vừa chín để còn độ giòn."
+            ),
+            (
+                "Bò lúc lắc",
+                "Món bò mềm thơm, phù hợp cho cả bữa chính và tiệc nhỏ.",
+                "medium",
+                12,
+                12,
+                new[] { "thịt bò", "ớt chuông", "hành tây", "bơ" },
+                new[]
+                {
+                    "Cắt bò miếng vuông, ướp nhanh gia vị.",
+                    "Áp chảo bò lửa lớn cho săn mặt.",
+                    "Xào ớt chuông, hành tây rồi trộn cùng bò."
+                },
+                "Không xào quá lâu để bò mềm mọng."
             ),
             (
                 "Đậu hũ sốt cà",
@@ -711,8 +874,12 @@ public class AIRecipeService
             }
         }
 
-        var ranked = templates
-            .Where(t => !normalizedExcludes.Contains(NormalizeVietnameseText(t.Name)))
+        var candidates = templates
+            .Where(t =>
+            {
+                var normalizedName = NormalizeVietnameseText(t.Name);
+                return !normalizedExcludes.Contains(normalizedName) && !normalizedRecent.Contains(normalizedName);
+            })
             .Select(t =>
             {
                 var ing = t.Ingredients.Select(x => x.ToLower()).ToList();
@@ -731,9 +898,29 @@ public class AIRecipeService
                     Score = matchScore
                 };
             })
-            .OrderByDescending(x => x.Score)
-            .ThenBy(x => x.Template.Prep + x.Template.Cook)
-            .Take(Math.Max(1, limit))
+            .ToList();
+
+        IEnumerable<dynamic> selected;
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+        {
+            var topCandidates = candidates
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Template.Prep + x.Template.Cook)
+                .Take(Math.Max(limit * 3, 12))
+                .ToList();
+            var seed = refreshToken.GetHashCode();
+            var rng = new Random(seed);
+            selected = topCandidates.OrderBy(_ => rng.Next()).Take(Math.Max(1, limit));
+        }
+        else
+        {
+            selected = candidates
+                .OrderByDescending(x => x.Score)
+                .ThenBy(x => x.Template.Prep + x.Template.Cook)
+                .Take(Math.Max(1, limit));
+        }
+
+        var ranked = selected
             .Select(x =>
             {
                 var recipe = new Dictionary<string, object>
@@ -829,6 +1016,8 @@ public class AIRecipeService
         List<string>? excludeRecipeNames,
         List<string> ingredients,
         string? region,
+        string? refreshToken,
+        HashSet<string> recentNames,
         int limit)
     {
         var excludes = (excludeRecipeNames ?? new List<string>())
@@ -850,6 +1039,7 @@ public class AIRecipeService
             var normalizedName = NormalizeVietnameseText(name);
             if (string.IsNullOrWhiteSpace(normalizedName)) continue;
             if (excludes.Contains(normalizedName)) continue;
+            if (recentNames.Contains(normalizedName)) continue;
             if (!seen.Add(normalizedName)) continue;
             result.Add(map);
             if (result.Count >= limit) return result;
@@ -861,7 +1051,9 @@ public class AIRecipeService
             ingredients,
             region,
             excludeRecipeNames,
-            limit * 2
+            limit * 2,
+            refreshToken,
+            recentNames
         );
 
         foreach (var item in fallback)
@@ -880,6 +1072,42 @@ public class AIRecipeService
         }
 
         return result;
+    }
+
+    private HashSet<string> GetRecentRecipeNames(int? userId)
+    {
+        if (!userId.HasValue) return new HashSet<string>();
+        if (!_recentRecipeNamesByUser.TryGetValue(userId.Value, out var list) || list.Count == 0)
+        {
+            return new HashSet<string>();
+        }
+        return list.ToHashSet();
+    }
+
+    private void RecordRecentRecipeNames(int? userId, List<object> recipes)
+    {
+        if (!userId.HasValue || recipes.Count == 0) return;
+        var list = _recentRecipeNamesByUser.GetOrAdd(userId.Value, _ => new LinkedList<string>());
+        lock (list)
+        {
+            var existing = list.ToHashSet();
+            foreach (var item in recipes)
+            {
+                var map = ToDictionary(item);
+                if (map == null) continue;
+                var name = map.TryGetValue("name", out var raw) ? raw?.ToString() ?? string.Empty : string.Empty;
+                var normalized = NormalizeVietnameseText(name);
+                if (string.IsNullOrWhiteSpace(normalized)) continue;
+                if (existing.Contains(normalized)) continue;
+                list.AddLast(normalized);
+                existing.Add(normalized);
+            }
+
+            while (list.Count > RecentSuggestionsPerUser)
+            {
+                list.RemoveFirst();
+            }
+        }
     }
 
     private static void ApplyRegionalPreferences(Dictionary<string, object> preferences, string? region)
