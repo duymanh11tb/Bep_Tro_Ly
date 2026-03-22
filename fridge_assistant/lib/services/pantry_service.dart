@@ -393,6 +393,7 @@ class PantryService {
     String? region,
     int limit = 15,
     String? refreshToken,
+    List<String>? excludeRecipeNames,
   }) async {
     try {
       final regionCode = await _resolveRegionCode(region);
@@ -406,6 +407,17 @@ class PantryService {
       }
       if (refreshToken != null && refreshToken.isNotEmpty) {
         url += '&refreshToken=${Uri.encodeQueryComponent(refreshToken)}';
+      }
+      if (excludeRecipeNames != null && excludeRecipeNames.isNotEmpty) {
+        final cleaned = excludeRecipeNames
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toSet()
+            .toList();
+        if (cleaned.isNotEmpty) {
+          final raw = cleaned.join(',');
+          url += '&excludeRecipeNames=${Uri.encodeQueryComponent(raw)}';
+        }
       }
       
       final resp = await ApiService.get(
@@ -432,7 +444,18 @@ class PantryService {
     } catch (e) {
       debugPrint('PantryService.getAiSuggestions error: $e');
     }
-    return getCachedAiSuggestions(mode: mode, fridgeId: fridgeId, region: region);
+    final cached = await getCachedAiSuggestions(
+      mode: mode,
+      fridgeId: fridgeId,
+      region: region,
+    );
+    if (cached.isNotEmpty) return cached;
+
+    if (mode == RecipeSuggestionMode.region) {
+      final regionCode = await _resolveRegionCode(region);
+      return _regionFallbackRecipes(regionCode, limit);
+    }
+    return [];
   }
 
   static Future<String> _resolveRegionCode(String? region) async {
@@ -457,6 +480,76 @@ class PantryService {
     if (value == 'trung') return 'central';
     if (value == 'nam') return 'south';
     return value;
+  }
+
+  static List<RecipeSuggestion> _regionFallbackRecipes(String regionCode, int limit) {
+    final fallback = <String, List<RecipeSuggestion>>{
+      'north': [
+        RecipeSuggestion(
+          id: 'north_1',
+          name: 'Bún thang Hà Nội',
+          description: 'Món bún thanh vị, hợp bữa sáng hoặc trưa nhẹ.',
+          ingredientsUsed: const ['bún', 'trứng', 'gà'],
+          cookTimeMinutes: 30,
+          difficulty: 'medium',
+          matchScore: 0.82,
+        ),
+        RecipeSuggestion(
+          id: 'north_2',
+          name: 'Cá rô kho tộ',
+          description: 'Món kho đậm đà miền Bắc, ăn cùng cơm rất hợp.',
+          ingredientsUsed: const ['cá', 'hành', 'nước mắm'],
+          cookTimeMinutes: 28,
+          difficulty: 'easy',
+          matchScore: 0.8,
+        ),
+      ],
+      'central': [
+        RecipeSuggestion(
+          id: 'central_1',
+          name: 'Mì Quảng gà',
+          description: 'Sợi mì dai thơm, nước dùng đậm vừa phải đúng chất miền Trung.',
+          ingredientsUsed: const ['mì quảng', 'gà', 'đậu phộng'],
+          cookTimeMinutes: 35,
+          difficulty: 'medium',
+          matchScore: 0.83,
+        ),
+        RecipeSuggestion(
+          id: 'central_2',
+          name: 'Bún bò Huế',
+          description: 'Nước dùng thơm sả, vị đậm và cay nhẹ rất cuốn.',
+          ingredientsUsed: const ['bún', 'bò', 'sả'],
+          cookTimeMinutes: 40,
+          difficulty: 'medium',
+          matchScore: 0.81,
+        ),
+      ],
+      'south': [
+        RecipeSuggestion(
+          id: 'south_1',
+          name: 'Canh chua cá',
+          description: 'Canh chua ngọt hài hòa kiểu miền Nam, ăn là mát người.',
+          ingredientsUsed: const ['cá', 'dứa', 'cà chua'],
+          cookTimeMinutes: 25,
+          difficulty: 'easy',
+          matchScore: 0.82,
+        ),
+        RecipeSuggestion(
+          id: 'south_2',
+          name: 'Thịt kho tàu',
+          description: 'Món kho mặn ngọt đặc trưng miền Nam, hợp cơm gia đình.',
+          ingredientsUsed: const ['thịt ba chỉ', 'trứng', 'nước dừa'],
+          cookTimeMinutes: 40,
+          difficulty: 'easy',
+          matchScore: 0.84,
+        ),
+      ],
+    };
+
+    final recipes = fallback[regionCode] ?? fallback['south']!;
+    if (limit <= 0) return recipes;
+    if (recipes.length <= limit) return recipes;
+    return recipes.take(limit).toList();
   }
 
   /// Tự động cleanup sản phẩm hết hạn

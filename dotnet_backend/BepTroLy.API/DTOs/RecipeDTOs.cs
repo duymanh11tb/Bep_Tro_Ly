@@ -6,6 +6,7 @@ public class SuggestRecipesRequest
     public Dictionary<string, object>? Preferences { get; set; }
     public string? Region { get; set; }
     public string? RefreshToken { get; set; }
+    public List<string>? ExcludeRecipeNames { get; set; }
     public int Limit { get; set; } = 5;
 }
 
@@ -15,6 +16,7 @@ public class SuggestFromPantryRequest
     public Dictionary<string, object>? Preferences { get; set; }
     public string? Region { get; set; }
     public string? RefreshToken { get; set; }
+    public List<string>? ExcludeRecipeNames { get; set; }
     public int Limit { get; set; } = 5;
 }
 
@@ -23,6 +25,7 @@ public class SuggestByRegionRequest
     public string? Region { get; set; }
     public Dictionary<string, object>? Preferences { get; set; }
     public string? RefreshToken { get; set; }
+    public List<string>? ExcludeRecipeNames { get; set; }
     public int Limit { get; set; } = 5;
 }
 

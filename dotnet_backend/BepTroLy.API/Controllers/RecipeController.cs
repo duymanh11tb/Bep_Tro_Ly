@@ -31,6 +31,7 @@ public class RecipeController : ControllerBase
             request.Preferences,
             request.Region,
             request.RefreshToken,
+            request.ExcludeRecipeNames,
             request.Limit
         );
 
@@ -53,6 +54,7 @@ public class RecipeController : ControllerBase
             request.Preferences,
             request.Region,
             request.RefreshToken,
+            request.ExcludeRecipeNames,
             request.Limit
         );
 
@@ -68,10 +70,12 @@ public class RecipeController : ControllerBase
         [FromQuery] int? fridgeId,
         [FromQuery] int limit = 5,
         [FromQuery] string? region = null,
-        [FromQuery] string? refreshToken = null)
+        [FromQuery] string? refreshToken = null,
+        [FromQuery] string? excludeRecipeNames = null)
     {
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
+        var excludes = ParseExcludeRecipeNames(excludeRecipeNames);
 
         var result = await _aiService.SuggestFromPantryAsync(
             userId.Value,
@@ -79,6 +83,7 @@ public class RecipeController : ControllerBase
             null,
             region,
             refreshToken,
+            excludes,
             limit
         );
 
@@ -93,12 +98,15 @@ public class RecipeController : ControllerBase
     public async Task<IActionResult> SuggestByRegionGet(
         [FromQuery] string? region,
         [FromQuery] int limit = 5,
-        [FromQuery] string? refreshToken = null)
+        [FromQuery] string? refreshToken = null,
+        [FromQuery] string? excludeRecipeNames = null)
     {
+        var excludes = ParseExcludeRecipeNames(excludeRecipeNames);
         var result = await _aiService.SuggestByRegionAsync(
             region,
             null,
             refreshToken,
+            excludes,
             limit
         );
 
@@ -200,5 +208,16 @@ public class RecipeController : ControllerBase
     {
         var claim = User.FindFirst("user_id")?.Value;
         return claim != null ? int.Parse(claim) : null;
+    }
+
+    private static List<string> ParseExcludeRecipeNames(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
+
+        return raw
+            .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 }

@@ -44,6 +44,7 @@ public class AIRecipeService
         Dictionary<string, object>? preferences = null,
         string? region = null,
         string? refreshToken = null,
+        List<string>? excludeRecipeNames = null,
         int limit = 5)
     {
         // If no ingredients, we enter "Discovery" mode
@@ -57,6 +58,14 @@ public class AIRecipeService
         {
             // Let clients request a fresh batch on demand ("Gợi ý mới").
             preferences["refresh_token"] = refreshToken;
+        }
+        if (excludeRecipeNames != null && excludeRecipeNames.Count > 0)
+        {
+            preferences["exclude_recipe_names"] = excludeRecipeNames
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .Select(x => x.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
         preferences["limit"] = limit;
 
@@ -108,7 +117,7 @@ public class AIRecipeService
         {
             _logger.LogError(ex, "AI suggestion error");
 
-            var fallbackRecipes = BuildLocalFallbackRecipes(ingredients, limit);
+            var fallbackRecipes = BuildLocalFallbackRecipes(ingredients, region, excludeRecipeNames, limit);
             if (fallbackRecipes.Count > 0)
             {
                 await SaveToCacheAsync(cacheKey, fallbackRecipes, ttlHours: 2);
@@ -146,6 +155,7 @@ public class AIRecipeService
         Dictionary<string, object>? preferences = null,
         string? region = null,
         string? refreshToken = null,
+        List<string>? excludeRecipeNames = null,
         int limit = 5)
     {
         var query = _db.PantryItems
@@ -159,7 +169,7 @@ public class AIRecipeService
         var pantryItems = await query.ToListAsync();
 
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
-        return await SuggestRecipesAsync(ingredients, preferences, region, refreshToken, limit);
+        return await SuggestRecipesAsync(ingredients, preferences, region, refreshToken, excludeRecipeNames, limit);
     }
 
     /// <summary>
@@ -169,9 +179,10 @@ public class AIRecipeService
         string? region,
         Dictionary<string, object>? preferences = null,
         string? refreshToken = null,
+        List<string>? excludeRecipeNames = null,
         int limit = 5)
     {
-        return await SuggestRecipesAsync(new List<string>(), preferences, region, refreshToken, limit);
+        return await SuggestRecipesAsync(new List<string>(), preferences, region, refreshToken, excludeRecipeNames, limit);
     }
 
     private async Task<List<object>> GenerateAISuggestionsAsync(
@@ -190,12 +201,16 @@ public class AIRecipeService
         var regionLabel = preferences.TryGetValue("region_label", out var r) ? r?.ToString() ?? "Toàn quốc" : "Toàn quốc";
         var seasoningStyle = preferences.TryGetValue("seasoning_preference", out var s) ? s?.ToString() ?? "" : "";
         var refreshToken = preferences.TryGetValue("refresh_token", out var rt) ? rt?.ToString() ?? "" : "";
+        var excludedRecipeNames = ExtractExcludeRecipeNames(preferences);
 
         var dietaryText = !string.IsNullOrEmpty(dietary) ? $"Chế độ ăn đặc biệt: {dietary}" : "";
         var difficultyText = difficulty != "any" ? $"Độ khó: {difficulty}" : "";
         var seasoningText = !string.IsNullOrEmpty(seasoningStyle) ? $"Khẩu vị vùng miền ưu tiên: {seasoningStyle}" : "";
         var refreshHintText = !string.IsNullOrWhiteSpace(refreshToken)
             ? $"Yêu cầu làm mới phiên gợi ý: {refreshToken}. Hãy ưu tiên danh sách đa dạng, hạn chế lặp lại các món quá phổ biến."
+            : "";
+        var excludedText = excludedRecipeNames.Count > 0
+            ? $"KHÔNG ĐƯỢC gợi ý lại các món sau: {string.Join(", ", excludedRecipeNames)}."
             : "";
 
         var statusText = ingredients.Any()
@@ -212,6 +227,7 @@ public class AIRecipeService
             {{dietaryText}}
             {{difficultyText}}
             {{refreshHintText}}
+            {{excludedText}}
 
             NHIỆM VỤ: Đề xuất {{limit}} món ăn. 
             - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất, mang tính ứng dụng cao cho bữa ăn gia đình hàng ngày.
@@ -262,7 +278,9 @@ public class AIRecipeService
             },
             generationConfig = new
             {
-                responseMimeType = "application/json"
+                responseMimeType = "application/json",
+                temperature = 0.95,
+                topP = 0.95
             }
         };
 
@@ -484,11 +502,19 @@ public class AIRecipeService
         }
     }
 
-    private List<object> BuildLocalFallbackRecipes(List<string> ingredients, int limit)
+    private List<object> BuildLocalFallbackRecipes(
+        List<string> ingredients,
+        string? region,
+        List<string>? excludeRecipeNames,
+        int limit)
     {
         var normalizedIngredients = ingredients
             .Select(i => i.Trim().ToLower())
             .Where(i => !string.IsNullOrWhiteSpace(i))
+            .ToHashSet();
+        var normalizedExcludes = (excludeRecipeNames ?? new List<string>())
+            .Select(NormalizeVietnameseText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToHashSet();
 
         var templates = new List<(string Name, string Description, string Difficulty, int Prep, int Cook, string[] Ingredients, string[] Steps, string Tips)>
@@ -570,7 +596,112 @@ public class AIRecipeService
             )
         };
 
+        if (!string.IsNullOrWhiteSpace(region))
+        {
+            var normalizedRegion = region.Trim().ToLowerInvariant();
+            if (normalizedRegion is "north" or "bac")
+            {
+                templates.Add((
+                    "Bún thang Hà Nội",
+                    "Món bún thanh nhẹ kiểu Bắc, hợp bữa sáng hoặc trưa.",
+                    "medium",
+                    15,
+                    25,
+                    new[] { "bún", "trứng", "thịt gà", "nấm hương", "hành lá" },
+                    new[]
+                    {
+                        "Luộc gà và xé nhỏ, tráng trứng thái sợi.",
+                        "Nấu nước dùng với nấm hương và hành.",
+                        "Xếp bún, gà, trứng rồi chan nước dùng nóng."
+                    },
+                    "Giữ nước dùng trong để món có vị thanh đặc trưng."
+                ));
+                templates.Add((
+                    "Cá rô đồng kho tộ",
+                    "Món kho đậm đà kiểu Bắc, ăn cùng cơm trắng rất đưa cơm.",
+                    "easy",
+                    12,
+                    25,
+                    new[] { "cá rô", "nước mắm", "hành tím", "tiêu", "đường" },
+                    new[]
+                    {
+                        "Sơ chế cá sạch, ướp gia vị 10 phút.",
+                        "Thắng nhẹ nước màu rồi cho cá vào kho.",
+                        "Kho lửa nhỏ đến khi cá săn và thấm."
+                    },
+                    "Kho lửa nhỏ để cá chắc thịt và dậy mùi."
+                ));
+            }
+            else if (normalizedRegion is "central" or "trung")
+            {
+                templates.Add((
+                    "Mì Quảng gà",
+                    "Món miền Trung nổi bật với nước dùng đậm vừa phải, thơm nghệ.",
+                    "medium",
+                    18,
+                    25,
+                    new[] { "mì quảng", "thịt gà", "nghệ", "đậu phộng", "hành lá" },
+                    new[]
+                    {
+                        "Ướp gà với nghệ và gia vị.",
+                        "Xào săn gà rồi thêm nước nấu sệt nhẹ.",
+                        "Chan lên mì, rắc đậu phộng và rau sống."
+                    },
+                    "Nước dùng chỉ xâm xấp để đúng kiểu mì Quảng."
+                ));
+                templates.Add((
+                    "Bún bò Huế",
+                    "Bún đậm vị miền Trung, thơm sả và chút cay nồng hấp dẫn.",
+                    "medium",
+                    20,
+                    35,
+                    new[] { "bún", "thịt bò", "sả", "ớt", "hành tím" },
+                    new[]
+                    {
+                        "Hầm nước dùng với sả để tạo hương.",
+                        "Luộc bò vừa chín, thái lát mỏng.",
+                        "Trụng bún, xếp thịt và chan nước dùng."
+                    },
+                    "Thêm sa tế tùy khẩu vị để tăng độ cay chuẩn vị Huế."
+                ));
+            }
+            else if (normalizedRegion is "south" or "nam")
+            {
+                templates.Add((
+                    "Canh chua cá",
+                    "Món canh chua miền Nam thanh mát, cân bằng vị chua ngọt.",
+                    "easy",
+                    12,
+                    20,
+                    new[] { "cá", "cà chua", "dứa", "bạc hà", "đậu bắp" },
+                    new[]
+                    {
+                        "Sơ chế cá và các loại rau.",
+                        "Đun nước sôi, cho cá và dứa vào nấu.",
+                        "Nêm chua ngọt rồi thêm rau vào trước khi tắt bếp."
+                    },
+                    "Cho rau sau cùng để giữ độ giòn và màu đẹp."
+                ));
+                templates.Add((
+                    "Thịt kho tàu",
+                    "Món kho miền Nam vị mặn ngọt hài hòa, ăn với cơm rất hợp.",
+                    "easy",
+                    15,
+                    35,
+                    new[] { "thịt ba chỉ", "trứng", "nước dừa", "nước mắm", "đường" },
+                    new[]
+                    {
+                        "Ướp thịt với gia vị 15 phút.",
+                        "Đảo săn thịt rồi cho nước dừa vào kho.",
+                        "Thêm trứng luộc, kho nhỏ lửa đến khi thấm."
+                    },
+                    "Kho liu riu để nước kho trong và thịt mềm."
+                ));
+            }
+        }
+
         var ranked = templates
+            .Where(t => !normalizedExcludes.Contains(NormalizeVietnameseText(t.Name)))
             .Select(t =>
             {
                 var ing = t.Ingredients.Select(x => x.ToLower()).ToList();
@@ -615,6 +746,71 @@ public class AIRecipeService
             .ToList();
 
         return ranked;
+    }
+
+    private static List<string> ExtractExcludeRecipeNames(Dictionary<string, object> preferences)
+    {
+        if (!preferences.TryGetValue("exclude_recipe_names", out var raw) || raw == null)
+        {
+            return new List<string>();
+        }
+
+        try
+        {
+            if (raw is JsonElement element && element.ValueKind == JsonValueKind.Array)
+            {
+                return element
+                    .EnumerateArray()
+                    .Select(x => x.GetString() ?? string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            if (raw is IEnumerable<object> list)
+            {
+                return list
+                    .Select(x => x?.ToString() ?? string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+            }
+
+            var text = raw.ToString() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text)) return new List<string>();
+            return text
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch
+        {
+            return new List<string>();
+        }
+    }
+
+    private static string NormalizeVietnameseText(string input)
+    {
+        var value = input.ToLowerInvariant().Trim();
+        var map = new Dictionary<char, char>
+        {
+            ['à'] = 'a', ['á'] = 'a', ['ạ'] = 'a', ['ả'] = 'a', ['ã'] = 'a',
+            ['â'] = 'a', ['ầ'] = 'a', ['ấ'] = 'a', ['ậ'] = 'a', ['ẩ'] = 'a', ['ẫ'] = 'a',
+            ['ă'] = 'a', ['ằ'] = 'a', ['ắ'] = 'a', ['ặ'] = 'a', ['ẳ'] = 'a', ['ẵ'] = 'a',
+            ['è'] = 'e', ['é'] = 'e', ['ẹ'] = 'e', ['ẻ'] = 'e', ['ẽ'] = 'e',
+            ['ê'] = 'e', ['ề'] = 'e', ['ế'] = 'e', ['ệ'] = 'e', ['ể'] = 'e', ['ễ'] = 'e',
+            ['ì'] = 'i', ['í'] = 'i', ['ị'] = 'i', ['ỉ'] = 'i', ['ĩ'] = 'i',
+            ['ò'] = 'o', ['ó'] = 'o', ['ọ'] = 'o', ['ỏ'] = 'o', ['õ'] = 'o',
+            ['ô'] = 'o', ['ồ'] = 'o', ['ố'] = 'o', ['ộ'] = 'o', ['ổ'] = 'o', ['ỗ'] = 'o',
+            ['ơ'] = 'o', ['ờ'] = 'o', ['ớ'] = 'o', ['ợ'] = 'o', ['ở'] = 'o', ['ỡ'] = 'o',
+            ['ù'] = 'u', ['ú'] = 'u', ['ụ'] = 'u', ['ủ'] = 'u', ['ũ'] = 'u',
+            ['ư'] = 'u', ['ừ'] = 'u', ['ứ'] = 'u', ['ự'] = 'u', ['ử'] = 'u', ['ữ'] = 'u',
+            ['ỳ'] = 'y', ['ý'] = 'y', ['ỵ'] = 'y', ['ỷ'] = 'y', ['ỹ'] = 'y',
+            ['đ'] = 'd'
+        };
+
+        var chars = value.Select(c => map.TryGetValue(c, out var to) ? to : c).ToArray();
+        return new string(chars);
     }
 
     private static void ApplyRegionalPreferences(Dictionary<string, object> preferences, string? region)

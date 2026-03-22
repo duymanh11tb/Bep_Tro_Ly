@@ -110,19 +110,26 @@ class _RecipeRecommendationsScreenState
 
     setState(() => _isLoadingMore = true);
     final nextLimit = _limit + _batchSize;
+    final excludes = _suggestions.map((e) => e.name).toList();
     final data = await PantryService.getAiSuggestions(
       mode: _suggestionMode,
-      limit: nextLimit,
+      limit: _batchSize,
       fridgeId: _selectedFridgeId,
       region: _selectedRegionCode,
       refreshToken: DateTime.now().millisecondsSinceEpoch.toString(),
+      excludeRecipeNames: excludes,
     );
     if (!mounted) return;
 
     int appended = 0;
     if (data.isNotEmpty) {
       setState(() {
-        appended = _appendSuggestions(data);
+        if (_suggestions.isEmpty) {
+          _replaceSuggestions(data);
+          appended = data.length;
+        } else {
+          appended = _appendSuggestions(data);
+        }
       });
     }
 
