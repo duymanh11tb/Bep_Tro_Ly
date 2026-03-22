@@ -182,8 +182,8 @@ public class AIRecipeService
             {{difficultyText}}
 
             NHIỆM VỤ: Đề xuất {{limit}} món ăn. 
-            - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất.
-            - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy chọn những món ngon nhất, dễ tìm mua nguyên liệu nhất.
+            - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất, mang tính ứng dụng cao cho bữa ăn gia đình hàng ngày.
+            - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy đề xuất những mâm cơm nhà hoặc món ăn thường ngày phong phú, sáng tạo, không lặp lại nhàm chán. Món ngon nhưng phải dễ nấu.
 
             QUY ĐỊNH TRẢ VỀ (CHỈ TRẢ VỀ JSON THUẦN, KHÔNG CÓ MARKDOWN, KHÔNG DÙNG ```):
             {
@@ -220,13 +220,17 @@ public class AIRecipeService
             throw new InvalidOperationException($"AI đang quá tải, vui lòng thử lại sau {waitSeconds} giây.");
         }
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={_apiKey}";
 
         var requestBody = new
         {
             contents = new[]
             {
                 new { parts = new[] { new { text = prompt } } }
+            },
+            generationConfig = new
+            {
+                responseMimeType = "application/json"
             }
         };
 
@@ -266,13 +270,8 @@ public class AIRecipeService
             .GetProperty("text")
             .GetString() ?? "";
 
-        // Strip markdown code block
+        // Remove markdown stripping since generationConfig handles it
         text = text.Trim();
-        if (text.StartsWith("```"))
-        {
-            var lines = text.Split('\n');
-            text = string.Join('\n', lines.Skip(1).Take(lines.Length - 2));
-        }
 
         // Parse JSON
         try
@@ -283,8 +282,10 @@ public class AIRecipeService
             RecordGeminiSuccess();
             return parsed;
         }
-        catch (JsonException)
+        catch (JsonException ex)
         {
+            _logger.LogError(ex, "Lỗi parse JSON trả về từ AI: {Text}", text);
+            
             // Try regex extraction
             var match = Regex.Match(text, @"\{[\s\S]*\}");
             if (match.Success)
