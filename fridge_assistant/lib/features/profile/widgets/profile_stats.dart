@@ -3,14 +3,14 @@ import '../../../core/theme/app_colors.dart';
 
 class ProfileStats extends StatelessWidget {
   final int cookedCount;
-  final String savings;
-  final String optimizationRate;
+  final int pantryItems;
+  final int expiringSoonCount;
 
   const ProfileStats({
     super.key,
     required this.cookedCount,
-    required this.savings,
-    required this.optimizationRate,
+    required this.pantryItems,
+    required this.expiringSoonCount,
   });
 
   @override
@@ -31,20 +31,20 @@ class ProfileStats extends StatelessWidget {
           const SizedBox(width: 12),
           _buildStatCard(
             context,
-            savings,
-            'Tiết kiệm',
-            Icons.savings,
-            const Color(0xFFE8F5E9),
-            const Color(0xFF2E7D32),
+            pantryItems.toString(),
+            'Trong tủ',
+            Icons.kitchen_outlined,
+            const Color(0xFFE3F2FD),
+            const Color(0xFF1565C0),
           ),
           const SizedBox(width: 12),
           _buildStatCard(
             context,
-            optimizationRate,
-            'Tỉ lệ sạch tủ',
-            Icons.recycling,
-            const Color(0xFFE8F5E9),
-            const Color(0xFF2E7D32),
+            expiringSoonCount.toString(),
+            'Sắp hết hạn',
+            Icons.warning_amber_rounded,
+            const Color(0xFFFFF3E0),
+            const Color(0xFFEF6C00),
           ),
         ],
       ),

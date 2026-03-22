@@ -1,8 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../core/theme/app_colors.dart';
+import '../../services/app_info_service.dart';
+import '../../services/app_preferences_service.dart';
 import '../../services/auth_service.dart';
 import '../../services/google_auth_service.dart';
 import '../../services/pantry_service.dart';
+import '../../services/support_service.dart';
 
 class SettingsScreen extends StatefulWidget {
   final bool isTab;
@@ -16,6 +19,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   final AuthService _authService = AuthService();
   bool _expiryNotification = true;
   bool _dailyRecipeNotification = false;
+  String _languageCode = AppPreferencesService.vietnamese;
 
   @override
   void initState() {
@@ -26,10 +30,12 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Future<void> _loadPreferences() async {
     final showExpired = await PantryService.getShowExpiredPreference();
     final showAi = await PantryService.getShowAiSuggestionsPreference();
+    final languageCode = await AppPreferencesService.getPreferredLanguageCode();
     if (mounted) {
       setState(() {
         _expiryNotification = showExpired;
         _dailyRecipeNotification = showAi;
+        _languageCode = languageCode;
       });
     }
   }
@@ -140,9 +146,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildSettingsItem(
                 icon: Icons.language,
                 title: 'Ngôn ngữ',
-                onTap: () {
-                  // TODO: Hiển thị chọn ngôn ngữ
-                },
+                trailingText: AppPreferencesService.labelFor(_languageCode),
+                onTap: _handleLanguageSelection,
               ),
               const Divider(height: 1, indent: 56),
               _buildSettingsItem(
@@ -156,9 +161,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildSettingsItem(
                 icon: Icons.info_outline,
                 title: 'Về Bếp Trợ Lý',
-                onTap: () {
-                  // TODO: Hiển thị thông tin ứng dụng
-                },
+                trailingText: AppInfoService.version,
+                onTap: _showAboutApp,
               ),
             ]),
             const SizedBox(height: 32),
@@ -205,6 +209,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
   Widget _buildSettingsItem({
     required IconData icon,
     required String title,
+    String? trailingText,
     required VoidCallback onTap,
   }) {
     return ListTile(
@@ -223,7 +228,23 @@ class _SettingsScreenState extends State<SettingsScreen> {
           color: AppColors.textPrimary,
         ),
       ),
-      trailing: const Icon(Icons.chevron_right, color: AppColors.textHint),
+      trailing: trailingText == null
+          ? const Icon(Icons.chevron_right, color: AppColors.textHint)
+          : Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  trailingText,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: AppColors.textSecondary,
+                  ),
+                ),
+                const SizedBox(width: 4),
+                const Icon(Icons.chevron_right, color: AppColors.textHint),
+              ],
+            ),
       onTap: onTap,
     );
   }
@@ -338,5 +359,93 @@ class _SettingsScreenState extends State<SettingsScreen> {
         );
       }
     }
+  }
+
+  Future<void> _handleLanguageSelection() async {
+    final selectedCode = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Chọn ngôn ngữ ưu tiên',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Tuỳ chọn này sẽ được dùng cho trải nghiệm cá nhân hoá và các cập nhật giao diện sau này.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                ...AppPreferencesService.supportedLanguages.map((option) {
+                  return RadioListTile<String>(
+                    value: option.code,
+                    groupValue: _languageCode,
+                    activeColor: AppColors.primary,
+                    title: Text(option.label),
+                    subtitle: Text(option.subtitle),
+                    onChanged: (value) => Navigator.of(context).pop(value),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selectedCode == null || selectedCode == _languageCode) return;
+
+    await AppPreferencesService.setPreferredLanguageCode(selectedCode);
+    if (!mounted) return;
+
+    setState(() => _languageCode = selectedCode);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Đã lưu ngôn ngữ ưu tiên: ${AppPreferencesService.labelFor(selectedCode)}',
+        ),
+        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.primary,
+      ),
+    );
+  }
+
+  void _showAboutApp() {
+    showAboutDialog(
+      context: context,
+      applicationName: AppInfoService.appName,
+      applicationVersion: AppInfoService.version,
+      applicationIcon: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          color: AppColors.primary.withValues(alpha: 0.12),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: const Icon(Icons.kitchen_rounded, color: AppColors.primary),
+      ),
+      children: const [
+        SizedBox(height: 12),
+        Text(AppInfoService.shortDescription),
+        SizedBox(height: 12),
+        Text('Email hỗ trợ: ${SupportService.supportEmail}'),
+        SizedBox(height: 4),
+        Text('Hotline: ${SupportService.supportPhone}'),
+      ],
+    );
   }
 }

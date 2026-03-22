@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
+import '../../services/auth_service.dart';
+import '../../services/support_service.dart';
 
 class HelpFeedbackScreen extends StatefulWidget {
   const HelpFeedbackScreen({super.key});
@@ -11,6 +14,15 @@ class HelpFeedbackScreen extends StatefulWidget {
 class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
   final _issueController = TextEditingController();
   final _detailController = TextEditingController();
+  final AuthService _authService = AuthService();
+  bool _isSubmitting = false;
+  String? _userEmail;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserEmail();
+  }
 
   @override
   void dispose() {
@@ -19,7 +31,15 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
     super.dispose();
   }
 
-  void _submitFeedback() {
+  Future<void> _loadUserEmail() async {
+    final user = await _authService.getUser();
+    if (!mounted) return;
+    setState(() {
+      _userEmail = user?['email']?.toString();
+    });
+  }
+
+  Future<void> _submitFeedback() async {
     if (_issueController.text.trim().isEmpty || _detailController.text.trim().isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Vui lòng điền đầy đủ thông tin')),
@@ -27,20 +47,42 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
       return;
     }
 
-    // Mock submission
+    if (_isSubmitting) return;
+
+    setState(() => _isSubmitting = true);
+    final success = await SupportService.sendFeedback(
+      issue: _issueController.text,
+      detail: _detailController.text,
+      userEmail: _userEmail,
+    );
+
+    if (!mounted) return;
+    setState(() => _isSubmitting = false);
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã mở ứng dụng email để bạn gửi phản hồi.'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+      _issueController.clear();
+      _detailController.clear();
+      return;
+    }
+
+    await Clipboard.setData(
+      const ClipboardData(text: SupportService.supportEmail),
+    );
+
+    if (!mounted) return;
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Cảm ơn bạn đã phản hồi! Chúng tôi sẽ xem xét sớm nhất.'),
-        backgroundColor: AppColors.primary,
+        content: Text(
+          'Không mở được email. Đã sao chép địa chỉ hỗ trợ để bạn gửi thủ công.',
+        ),
       ),
     );
-    
-    _issueController.clear();
-    _detailController.clear();
-    
-    Future.delayed(const Duration(seconds: 2), () {
-      if (mounted) Navigator.pop(context);
-    });
   }
 
   @override
@@ -135,6 +177,13 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
             ),
           ),
           const SizedBox(height: 20),
+          if (_userEmail != null && _userEmail!.isNotEmpty) ...[
+            Text(
+              'Phản hồi sẽ được gửi kèm email tài khoản: $_userEmail',
+              style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+            ),
+            const SizedBox(height: 12),
+          ],
           const Text(
             'Chi tiết phản hồi',
             style: TextStyle(
@@ -164,7 +213,7 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
             width: double.infinity,
             height: 52,
             child: ElevatedButton(
-              onPressed: _submitFeedback,
+              onPressed: _isSubmitting ? null : _submitFeedback,
               style: ElevatedButton.styleFrom(
                 backgroundColor: AppColors.primary,
                 foregroundColor: Colors.white,
@@ -173,10 +222,19 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
                   borderRadius: BorderRadius.circular(14),
                 ),
               ),
-              child: const Text(
-                'Gửi phản hồi',
-                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-              ),
+              child: _isSubmitting
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Text(
+                      'Gửi phản hồi',
+                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                    ),
             ),
           ),
         ],
@@ -203,24 +261,24 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
             icon: Icons.phone_in_talk_outlined,
             iconColor: Colors.red,
             title: 'Hotline',
-            subtitle: '1900XXX',
-            onTap: () {},
+            subtitle: SupportService.supportPhone,
+            onTap: _openHotline,
           ),
           _buildDivider(),
           _buildSupportItem(
             icon: Icons.mail_outline,
             iconColor: Colors.blue,
             title: 'Email hỗ trợ',
-            subtitle: 'beptroly@gmail.com',
-            onTap: () {},
+            subtitle: SupportService.supportEmail,
+            onTap: _openSupportEmail,
           ),
           _buildDivider(),
           _buildSupportItem(
             icon: Icons.chat_bubble_outline,
             iconColor: Colors.purple,
             title: 'Chat trực tuyến',
-            subtitle: 'Phản hồi lập tức',
-            onTap: () {},
+            subtitle: 'Nhắn nhanh tới ${SupportService.supportPhone}',
+            onTap: _openSupportChat,
           ),
         ],
       ),
@@ -270,6 +328,63 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
       color: Colors.grey[100],
       indent: 20,
       endIndent: 20,
+    );
+  }
+
+  Future<void> _openHotline() async {
+    final success = await SupportService.callSupport();
+    await _handleLaunchResult(
+      success: success,
+      fallbackText: SupportService.supportPhone,
+      successMessage: 'Đang mở trình gọi điện hỗ trợ.',
+      failureMessage: 'Không mở được trình gọi điện. Đã sao chép số hotline.',
+    );
+  }
+
+  Future<void> _openSupportEmail() async {
+    final success = await SupportService.emailSupport(
+      subject: '[Hỗ trợ] Bếp Trợ Lý',
+      body: 'Xin chào, tôi cần được hỗ trợ thêm về ứng dụng.',
+    );
+    await _handleLaunchResult(
+      success: success,
+      fallbackText: SupportService.supportEmail,
+      successMessage: 'Đã mở ứng dụng email hỗ trợ.',
+      failureMessage: 'Không mở được email. Đã sao chép địa chỉ hỗ trợ.',
+    );
+  }
+
+  Future<void> _openSupportChat() async {
+    final success = await SupportService.openChatSupport(
+      message: 'Xin chào, tôi cần được hỗ trợ nhanh về ứng dụng Bếp Trợ Lý.',
+    );
+    await _handleLaunchResult(
+      success: success,
+      fallbackText: SupportService.supportPhone,
+      successMessage: 'Đã mở kênh nhắn hỗ trợ nhanh.',
+      failureMessage: 'Không mở được kênh nhắn. Đã sao chép số hỗ trợ.',
+    );
+  }
+
+  Future<void> _handleLaunchResult({
+    required bool success,
+    required String fallbackText,
+    required String successMessage,
+    required String failureMessage,
+  }) async {
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(successMessage)),
+      );
+      return;
+    }
+
+    await Clipboard.setData(ClipboardData(text: fallbackText));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(failureMessage)),
     );
   }
 }

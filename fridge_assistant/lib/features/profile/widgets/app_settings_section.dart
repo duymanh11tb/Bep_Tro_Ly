@@ -38,7 +38,7 @@ class AppSettingsSection extends StatelessWidget {
         const SizedBox(height: 8),
         _buildToggleItem(
           'Thông báo hết hạn',
-          'Nhắc nhở trước 2 ngày',
+          'Hiển thị nguyên liệu hết hạn và sắp hết hạn trong ứng dụng',
           Icons.notifications_active,
           Colors.blue[50]!,
           Colors.blue[600]!,
@@ -47,7 +47,7 @@ class AppSettingsSection extends StatelessWidget {
         ),
         _buildToggleItem(
           'Gợi ý món ăn',
-          'Mỗi ngày lúc 16:00',
+          'Bật hoặc tắt phần gợi ý công thức trong ứng dụng',
           Icons.restaurant_menu,
           Colors.purple[50]!,
           Colors.purple[600]!,

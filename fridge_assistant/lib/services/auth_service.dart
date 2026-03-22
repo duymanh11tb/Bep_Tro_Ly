@@ -114,6 +114,39 @@ class AuthService {
     return null;
   }
 
+  Future<Map<String, dynamic>?> refreshCurrentUser() async {
+    try {
+      final response = await ApiService.get('/api/v1/auth/me', withAuth: true);
+      if (response.statusCode != 200 || response.body.isEmpty) {
+        return getUser();
+      }
+
+      final responseData = jsonDecode(utf8.decode(response.bodyBytes));
+      final existingUser = await getUser() ?? <String, dynamic>{};
+      final refreshedUser = Map<String, dynamic>.from(
+        responseData['user'] ?? responseData,
+      );
+      final mergedUser = <String, dynamic>{
+        ...existingUser,
+        ...refreshedUser,
+      };
+
+      if (mergedUser['photo_url'] is String) {
+        final url = mergedUser['photo_url'] as String;
+        if (url.startsWith('/')) {
+          mergedUser['photo_url'] = '${ApiService.baseUrl}$url';
+        }
+      }
+
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_userKey, jsonEncode(mergedUser));
+      return mergedUser;
+    } catch (e) {
+      debugPrint('AuthService: Error in refreshCurrentUser: $e');
+      return getUser();
+    }
+  }
+
   Future<Map<String, dynamic>> updateProfile(Map<String, dynamic> data) async {
     try {
       // Chuyển đổi sang snake_case cho .NET Backend

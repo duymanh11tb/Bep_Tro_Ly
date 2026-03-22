@@ -6,7 +6,13 @@ import 'widgets/profile_stats.dart';
 import 'widgets/personal_info_section.dart';
 import 'widgets/dietary_preferences_section.dart';
 import 'widgets/app_settings_section.dart';
+import '../../services/activity_log_service.dart';
+import '../../services/app_info_service.dart';
+import '../../services/app_preferences_service.dart';
 import '../../services/auth_service.dart';
+import '../../services/fridge_service.dart';
+import '../../services/google_auth_service.dart';
+import '../../services/pantry_service.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({super.key});
@@ -25,6 +31,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isLoading = true;
   bool _isSaving = false;
   bool _isReadOnly = true;
+  String _memberSince = 'gần đây';
 
   String _selectedDiet = 'Bình thường';
   List<String> _selectedAllergies = [];
@@ -32,7 +39,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
   
   bool _expiryNotifications = true;
   bool _dishSuggestions = true;
-  final String _language = 'Tiếng Việt';
+  String _languageCode = AppPreferencesService.vietnamese;
+  int _cookedCount = 0;
+  int _pantryItems = 0;
+  int _expiringSoonCount = 0;
 
   @override
   void initState() {
@@ -41,65 +51,32 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   Future<void> _loadUserData() async {
-    final user = await _authService.getUser();
-    if (user != null && mounted) {
+    try {
+      final user = await _authService.refreshCurrentUser() ?? await _authService.getUser();
+      final languageCode = await AppPreferencesService.getPreferredLanguageCode();
+      final showExpired = await PantryService.getShowExpiredPreference();
+      final showAi = await PantryService.getShowAiSuggestionsPreference();
+      final summary = await _loadProfileSummary();
+
+      if (!mounted) return;
+
+      if (user != null) {
+        _applyUserData(user);
+      }
+
       setState(() {
-        _nameController.text = user['display_name'] ?? '';
-        _emailController.text = user['email'] ?? '';
-        _phoneController.text = user['phone_number'] ?? user['phone'] ?? '';
-        _avatarUrl = user['photo_url'];
-
-        // Parse Dietary Restrictions (JSON)
-        final dietStr = user['dietary_restrictions'] as String?;
-        if (dietStr != null && dietStr.isNotEmpty) {
-          try {
-            final decoded = jsonDecode(dietStr);
-            if (decoded is List && decoded.isNotEmpty) {
-              _selectedDiet = decoded.first;
-            } else if (decoded is String) {
-              _selectedDiet = decoded;
-            } else {
-              _selectedDiet = dietStr;
-            }
-          } catch (_) {
-            _selectedDiet = dietStr;
-          }
-        }
-
-        // Parse Allergies (JSON)
-        final allergiesStr = user['allergies'] as String?;
-        if (allergiesStr != null && allergiesStr.isNotEmpty) {
-          try {
-            final decoded = jsonDecode(allergiesStr);
-            if (decoded is List) {
-              _selectedAllergies = List<String>.from(decoded);
-            } else {
-              _selectedAllergies = allergiesStr.split(',').map((e) => e.trim()).toList();
-            }
-          } catch (_) {
-            _selectedAllergies = allergiesStr.split(',').map((e) => e.trim()).toList();
-          }
-        }
-
-        // Parse Cuisines (JSON)
-        final cuisinesStr = user['cuisine_preferences'] as String?;
-        if (cuisinesStr != null && cuisinesStr.isNotEmpty) {
-          try {
-            final decoded = jsonDecode(cuisinesStr);
-            if (decoded is List) {
-              _selectedCuisines = List<String>.from(decoded);
-            } else {
-              _selectedCuisines = cuisinesStr.split(',').map((e) => e.trim()).toList();
-            }
-          } catch (_) {
-            _selectedCuisines = cuisinesStr.split(',').map((e) => e.trim()).toList();
-          }
-        }
-
+        _languageCode = languageCode;
+        _expiryNotifications = showExpired;
+        _dishSuggestions = showAi;
+        _cookedCount = summary.cookedCount;
+        _pantryItems = summary.pantryItems;
+        _expiringSoonCount = summary.expiringSoonCount;
         _isLoading = false;
       });
-    } else if (mounted) {
-      setState(() => _isLoading = false);
+    } catch (_) {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
 
@@ -127,6 +104,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
       });
 
       if (result['success'] && mounted) {
+        final refreshedUser = result['user'];
+        if (refreshedUser is Map<String, dynamic>) {
+          _applyUserData(refreshedUser);
+        }
         setState(() => _isReadOnly = true);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
@@ -196,9 +177,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
 
     if (confirmed == true && mounted) {
-      await AuthService().logout();
+      final googleAuthService = GoogleAuthService();
+      await googleAuthService.signOut();
+      await _authService.logout();
+      await PantryService.clearCache();
       if (mounted) {
-        Navigator.of(context).pushNamedAndRemoveUntil('/login', (route) => false);
+        Navigator.of(context).pushNamedAndRemoveUntil(
+          '/onboarding',
+          (route) => false,
+          arguments: {'showLogoutNotice': true},
+        );
       }
     }
   }
@@ -262,16 +250,16 @@ class _ProfileScreenState extends State<ProfileScreen> {
           children: [
             const SizedBox(height: 24),
             ProfileHeader(
-              name: _nameController.text,
+              name: _nameController.text.isEmpty ? 'Người dùng' : _nameController.text,
               avatarUrl: _avatarUrl,
-              memberSince: '2023',
+              memberSince: _memberSince,
               onEditAvatar: (filePath) => _handleAvatarChange(filePath),
             ),
             const SizedBox(height: 24),
-            const ProfileStats(
-              cookedCount: 120,
-              savings: '450k',
-              optimizationRate: '80%',
+            ProfileStats(
+              cookedCount: _cookedCount,
+              pantryItems: _pantryItems,
+              expiringSoonCount: _expiringSoonCount,
             ),
             const SizedBox(height: 32),
             PersonalInfoSection(
@@ -300,12 +288,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
             AppSettingsSection(
               expiryNotifications: _expiryNotifications,
               dishSuggestions: _dishSuggestions,
-              language: _language,
-              onExpiryToggle: (val) => setState(() => _expiryNotifications = val),
-              onSuggestionsToggle: (val) => setState(() => _dishSuggestions =val),
-              onLanguageTap: () {
-                // Language selection
-              },
+              language: AppPreferencesService.labelFor(_languageCode),
+              onExpiryToggle: _handleExpiryToggle,
+              onSuggestionsToggle: _handleSuggestionsToggle,
+              onLanguageTap: _handleLanguageSelection,
             ),
             const SizedBox(height: 40),
             if (!_isReadOnly)
@@ -366,8 +352,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
             const SizedBox(height: 16),
-            const Text(
-              'Phiên bản 1.0.2',
+            Text(
+              AppInfoService.versionLabel,
               style: TextStyle(color: Colors.grey, fontSize: 12),
             ),
             const SizedBox(height: 40),
@@ -376,4 +362,192 @@ class _ProfileScreenState extends State<ProfileScreen> {
       ),
     );
   }
+
+  void _applyUserData(Map<String, dynamic> user) {
+    _nameController.text = user['display_name']?.toString() ?? '';
+    _emailController.text = user['email']?.toString() ?? '';
+    _phoneController.text = user['phone_number']?.toString() ?? user['phone']?.toString() ?? '';
+    _avatarUrl = user['photo_url']?.toString();
+    _memberSince = AppInfoService.formatMemberSince(
+      user['created_at']?.toString(),
+    );
+
+    _selectedDiet = 'Bình thường';
+    _selectedAllergies = [];
+    _selectedCuisines = [];
+
+    final dietStr = user['dietary_restrictions'] as String?;
+    if (dietStr != null && dietStr.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(dietStr);
+        if (decoded is List && decoded.isNotEmpty) {
+          _selectedDiet = decoded.first.toString();
+        } else if (decoded is String && decoded.isNotEmpty) {
+          _selectedDiet = decoded;
+        } else {
+          _selectedDiet = dietStr;
+        }
+      } catch (_) {
+        _selectedDiet = dietStr;
+      }
+    }
+
+    final allergiesStr = user['allergies'] as String?;
+    if (allergiesStr != null && allergiesStr.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(allergiesStr);
+        if (decoded is List) {
+          _selectedAllergies = decoded.map((e) => e.toString()).toList();
+        } else {
+          _selectedAllergies = allergiesStr
+              .split(',')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+        }
+      } catch (_) {
+        _selectedAllergies = allergiesStr
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+    }
+
+    final cuisinesStr = user['cuisine_preferences'] as String?;
+    if (cuisinesStr != null && cuisinesStr.isNotEmpty) {
+      try {
+        final decoded = jsonDecode(cuisinesStr);
+        if (decoded is List) {
+          _selectedCuisines = decoded.map((e) => e.toString()).toList();
+        } else {
+          _selectedCuisines = cuisinesStr
+              .split(',')
+              .map((e) => e.trim())
+              .where((e) => e.isNotEmpty)
+              .toList();
+        }
+      } catch (_) {
+        _selectedCuisines = cuisinesStr
+            .split(',')
+            .map((e) => e.trim())
+            .where((e) => e.isNotEmpty)
+            .toList();
+      }
+    }
+  }
+
+  Future<_ProfileSummary> _loadProfileSummary() async {
+    int cookedCount = 0;
+    int pantryItems = 0;
+    int expiringSoonCount = 0;
+
+    try {
+      final pantryStats = await PantryService.getStats();
+      pantryItems = pantryStats?.totalItems ?? 0;
+      expiringSoonCount = pantryStats?.expiringSoon ?? 0;
+    } catch (_) {}
+
+    try {
+      final fridgeId = await FridgeService.getActiveFridgeId();
+      if (fridgeId != null) {
+        final activities = await ActivityLogService().getFridgeActivities(
+          fridgeId,
+          type: 'cook_recipe',
+        );
+        cookedCount = activities.length;
+      }
+    } catch (_) {}
+
+    return _ProfileSummary(
+      cookedCount: cookedCount,
+      pantryItems: pantryItems,
+      expiringSoonCount: expiringSoonCount,
+    );
+  }
+
+  Future<void> _handleExpiryToggle(bool value) async {
+    setState(() => _expiryNotifications = value);
+    await PantryService.setShowExpiredPreference(value);
+  }
+
+  Future<void> _handleSuggestionsToggle(bool value) async {
+    setState(() => _dishSuggestions = value);
+    await PantryService.setShowAiSuggestionsPreference(value);
+  }
+
+  Future<void> _handleLanguageSelection() async {
+    final selectedCode = await showModalBottomSheet<String>(
+      context: context,
+      backgroundColor: Colors.white,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (context) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Chọn ngôn ngữ ưu tiên',
+                  style: TextStyle(
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                    color: AppColors.textPrimary,
+                  ),
+                ),
+                const SizedBox(height: 8),
+                const Text(
+                  'Thiết lập này sẽ đồng bộ giữa hồ sơ và màn cài đặt của ứng dụng.',
+                  style: TextStyle(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 16),
+                ...AppPreferencesService.supportedLanguages.map((option) {
+                  return RadioListTile<String>(
+                    value: option.code,
+                    groupValue: _languageCode,
+                    activeColor: AppColors.primary,
+                    title: Text(option.label),
+                    subtitle: Text(option.subtitle),
+                    onChanged: (value) => Navigator.of(context).pop(value),
+                  );
+                }),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (selectedCode == null || selectedCode == _languageCode) return;
+
+    await AppPreferencesService.setPreferredLanguageCode(selectedCode);
+    if (!mounted) return;
+
+    setState(() => _languageCode = selectedCode);
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          'Đã lưu ngôn ngữ ưu tiên: ${AppPreferencesService.labelFor(selectedCode)}',
+        ),
+        backgroundColor: AppColors.primary,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+}
+
+class _ProfileSummary {
+  final int cookedCount;
+  final int pantryItems;
+  final int expiringSoonCount;
+
+  const _ProfileSummary({
+    required this.cookedCount,
+    required this.pantryItems,
+    required this.expiringSoonCount,
+  });
 }
