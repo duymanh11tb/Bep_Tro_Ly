@@ -104,13 +104,24 @@ public class AIRecipeService
 
             var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit);
             var recipesWithImages = EnsureRecipeImages(aiRecipes);
-            await SaveToCacheAsync(cacheKey, recipesWithImages);
+            var finalRecipes = ApplyExcludeAndFillRecipes(
+                recipesWithImages,
+                excludeRecipeNames,
+                ingredients,
+                region,
+                limit
+            );
+            if (finalRecipes.Count == 0)
+            {
+                finalRecipes = BuildLocalFallbackRecipes(ingredients, region, excludeRecipeNames, limit);
+            }
+            await SaveToCacheAsync(cacheKey, finalRecipes);
 
             return new Dictionary<string, object>
             {
                 ["success"] = true,
                 ["source"] = "ai",
-                ["recipes"] = recipesWithImages
+                ["recipes"] = finalRecipes
             };
         }
         catch (Exception ex)
@@ -811,6 +822,64 @@ public class AIRecipeService
 
         var chars = value.Select(c => map.TryGetValue(c, out var to) ? to : c).ToArray();
         return new string(chars);
+    }
+
+    private List<object> ApplyExcludeAndFillRecipes(
+        List<object> generatedRecipes,
+        List<string>? excludeRecipeNames,
+        List<string> ingredients,
+        string? region,
+        int limit)
+    {
+        var excludes = (excludeRecipeNames ?? new List<string>())
+            .Select(NormalizeVietnameseText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet();
+
+        var result = new List<object>();
+        var seen = new HashSet<string>();
+
+        foreach (var item in generatedRecipes)
+        {
+            var map = ToDictionary(item);
+            if (map == null) continue;
+
+            var name = map.TryGetValue("name", out var nameObj)
+                ? nameObj?.ToString() ?? string.Empty
+                : string.Empty;
+            var normalizedName = NormalizeVietnameseText(name);
+            if (string.IsNullOrWhiteSpace(normalizedName)) continue;
+            if (excludes.Contains(normalizedName)) continue;
+            if (!seen.Add(normalizedName)) continue;
+            result.Add(map);
+            if (result.Count >= limit) return result;
+        }
+
+        if (result.Count >= limit) return result;
+
+        var fallback = BuildLocalFallbackRecipes(
+            ingredients,
+            region,
+            excludeRecipeNames,
+            limit * 2
+        );
+
+        foreach (var item in fallback)
+        {
+            var map = ToDictionary(item);
+            if (map == null) continue;
+            var name = map.TryGetValue("name", out var nameObj)
+                ? nameObj?.ToString() ?? string.Empty
+                : string.Empty;
+            var normalizedName = NormalizeVietnameseText(name);
+            if (string.IsNullOrWhiteSpace(normalizedName)) continue;
+            if (excludes.Contains(normalizedName)) continue;
+            if (!seen.Add(normalizedName)) continue;
+            result.Add(map);
+            if (result.Count >= limit) break;
+        }
+
+        return result;
     }
 
     private static void ApplyRegionalPreferences(Dictionary<string, object> preferences, string? region)

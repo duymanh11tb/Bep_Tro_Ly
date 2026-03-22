@@ -121,15 +121,11 @@ class _RecipeRecommendationsScreenState
     );
     if (!mounted) return;
 
-    int appended = 0;
+    int replaced = 0;
     if (data.isNotEmpty) {
       setState(() {
-        if (_suggestions.isEmpty) {
-          _replaceSuggestions(data);
-          appended = data.length;
-        } else {
-          appended = _appendSuggestions(data);
-        }
+        _replaceSuggestions(data);
+        replaced = data.length;
       });
     }
 
@@ -138,7 +134,7 @@ class _RecipeRecommendationsScreenState
       _isLoadingMore = false;
     });
 
-    if (appended == 0) {
+    if (replaced == 0) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text('Hiện chưa có thêm món mới để gợi ý.'),
