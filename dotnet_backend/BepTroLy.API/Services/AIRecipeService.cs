@@ -56,6 +56,7 @@ public class AIRecipeService
         // Ensure preferences is not null and include limit so cache key
         // differentiates between different requested recipe counts.
         preferences ??= new Dictionary<string, object>();
+        await ApplyUserPersonalizationAsync(preferences, userId);
         ApplyRegionalPreferences(preferences, region);
         if (!string.IsNullOrWhiteSpace(refreshToken))
         {
@@ -115,11 +116,20 @@ public class AIRecipeService
                 region,
                 refreshToken,
                 recentNames,
+                preferences,
                 limit
             );
             if (finalRecipes.Count == 0)
             {
-                finalRecipes = BuildLocalFallbackRecipes(ingredients, region, excludeRecipeNames, limit, refreshToken, recentNames);
+                finalRecipes = BuildLocalFallbackRecipes(
+                    ingredients,
+                    region,
+                    excludeRecipeNames,
+                    limit,
+                    refreshToken,
+                    recentNames,
+                    preferences
+                );
             }
             await SaveToCacheAsync(cacheKey, finalRecipes);
             RecordRecentRecipeNames(userId, finalRecipes);
@@ -136,7 +146,15 @@ public class AIRecipeService
             _logger.LogError(ex, "AI suggestion error");
 
             var recentNames = GetRecentRecipeNames(userId);
-            var fallbackRecipes = BuildLocalFallbackRecipes(ingredients, region, excludeRecipeNames, limit, refreshToken, recentNames);
+            var fallbackRecipes = BuildLocalFallbackRecipes(
+                ingredients,
+                region,
+                excludeRecipeNames,
+                limit,
+                refreshToken,
+                recentNames,
+                preferences
+            );
             if (fallbackRecipes.Count > 0)
             {
                 await SaveToCacheAsync(cacheKey, fallbackRecipes, ttlHours: 2);
@@ -223,6 +241,11 @@ public class AIRecipeService
         var seasoningStyle = preferences.TryGetValue("seasoning_preference", out var s) ? s?.ToString() ?? "" : "";
         var refreshToken = preferences.TryGetValue("refresh_token", out var rt) ? rt?.ToString() ?? "" : "";
         var excludedRecipeNames = ExtractExcludeRecipeNames(preferences);
+        var skillLevel = preferences.TryGetValue("user_skill_level", out var us) ? us?.ToString() ?? "beginner" : "beginner";
+        var userCuisineFocus = preferences.TryGetValue("user_cuisine_focus", out var uc) ? uc?.ToString() ?? "" : "";
+        var userAvoidText = preferences.TryGetValue("user_avoid_ingredients", out var ua) ? ua?.ToString() ?? "" : "";
+        var userFlavorProfile = preferences.TryGetValue("user_flavor_profile", out var uf) ? uf?.ToString() ?? "" : "";
+        var userVariantHint = preferences.TryGetValue("user_variant_hint", out var uv) ? uv?.ToString() ?? "" : "";
 
         var dietaryText = !string.IsNullOrEmpty(dietary) ? $"Chế độ ăn đặc biệt: {dietary}" : "";
         var difficultyText = difficulty != "any" ? $"Độ khó: {difficulty}" : "";
@@ -232,6 +255,18 @@ public class AIRecipeService
             : "";
         var excludedText = excludedRecipeNames.Count > 0
             ? $"KHÔNG ĐƯỢC gợi ý lại các món sau: {string.Join(", ", excludedRecipeNames)}."
+            : "";
+        var userCuisineText = !string.IsNullOrWhiteSpace(userCuisineFocus)
+            ? $"Người dùng thường ưu tiên các nhóm món: {userCuisineFocus}."
+            : "";
+        var userAvoidIngredientsText = !string.IsNullOrWhiteSpace(userAvoidText)
+            ? $"Tránh ưu tiên các nguyên liệu sau nếu không thật sự cần: {userAvoidText}."
+            : "";
+        var userFlavorText = !string.IsNullOrWhiteSpace(userFlavorProfile)
+            ? $"Hồ sơ khẩu vị cá nhân: {userFlavorProfile}."
+            : "";
+        var userVariantText = !string.IsNullOrWhiteSpace(userVariantHint)
+            ? $"Biến thể cá nhân hóa cho user này: {userVariantHint}."
             : "";
 
         var statusText = ingredients.Any()
@@ -246,6 +281,11 @@ public class AIRecipeService
             Vùng miền ưu tiên: {{regionLabel}}
             {{seasoningText}}
             {{dietaryText}}
+            Trình độ nấu ăn của người dùng: {{skillLevel}}
+            {{userCuisineText}}
+            {{userAvoidIngredientsText}}
+            {{userFlavorText}}
+            {{userVariantText}}
             {{difficultyText}}
             {{refreshHintText}}
             {{excludedText}}
@@ -529,7 +569,8 @@ public class AIRecipeService
         List<string>? excludeRecipeNames,
         int limit,
         string? refreshToken = null,
-        HashSet<string>? recentRecipeNames = null)
+        HashSet<string>? recentRecipeNames = null,
+        Dictionary<string, object>? preferences = null)
     {
         var normalizedIngredients = ingredients
             .Select(i => i.Trim().ToLower())
@@ -540,6 +581,22 @@ public class AIRecipeService
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .ToHashSet();
         var normalizedRecent = recentRecipeNames ?? new HashSet<string>();
+        preferences ??= new Dictionary<string, object>();
+        var skillLevel = preferences.TryGetValue("user_skill_level", out var rawSkill)
+            ? rawSkill?.ToString()?.ToLowerInvariant() ?? "beginner"
+            : "beginner";
+        var cuisineFocus = preferences.TryGetValue("user_cuisine_focus", out var rawCuisine)
+            ? NormalizeVietnameseText(rawCuisine?.ToString() ?? string.Empty)
+            : string.Empty;
+        var avoidIngredients = preferences.TryGetValue("user_avoid_ingredients", out var rawAvoid)
+            ? rawAvoid?.ToString() ?? string.Empty
+            : string.Empty;
+        var userSeed = preferences.TryGetValue("user_personalization_seed", out var rawSeed)
+            ? rawSeed?.ToString() ?? "default-user"
+            : "default-user";
+        var flavorProfile = preferences.TryGetValue("user_flavor_profile", out var rawFlavor)
+            ? NormalizeVietnameseText(rawFlavor?.ToString() ?? string.Empty)
+            : string.Empty;
 
         var templates = new List<(string Name, string Description, string Difficulty, int Prep, int Cook, string[] Ingredients, string[] Steps, string Tips)>
         {
@@ -890,12 +947,58 @@ public class AIRecipeService
                     ? 0.6
                     : Math.Min(0.98, Math.Max(0.35, (double)used.Count / ing.Count));
 
+                var personalizationBoost = 0.0;
+                var normalizedName = NormalizeVietnameseText(t.Name);
+
+                if (skillLevel == "beginner" && t.Difficulty == "easy") personalizationBoost += 0.08;
+                if (skillLevel == "intermediate" && t.Difficulty == "medium") personalizationBoost += 0.05;
+                if (skillLevel == "advanced" && t.Difficulty == "hard") personalizationBoost += 0.06;
+
+                if (!string.IsNullOrWhiteSpace(cuisineFocus) &&
+                    (cuisineFocus.Contains("viet") || cuisineFocus.Contains("mien") || cuisineFocus.Contains("com")))
+                {
+                    personalizationBoost += 0.03;
+                }
+
+                if (!string.IsNullOrWhiteSpace(flavorProfile))
+                {
+                    if (flavorProfile.Contains("thanh") &&
+                        (normalizedName.Contains("canh") || normalizedName.Contains("bun")))
+                    {
+                        personalizationBoost += 0.05;
+                    }
+                    if (flavorProfile.Contains("dam") &&
+                        (normalizedName.Contains("kho") || normalizedName.Contains("xao")))
+                    {
+                        personalizationBoost += 0.05;
+                    }
+                    if (flavorProfile.Contains("ngot") &&
+                        (normalizedName.Contains("kho tau") || normalizedName.Contains("canh chua")))
+                    {
+                        personalizationBoost += 0.04;
+                    }
+                }
+
+                if (!string.IsNullOrWhiteSpace(avoidIngredients))
+                {
+                    foreach (var ingredient in ing)
+                    {
+                        if (NormalizeVietnameseText(avoidIngredients).Contains(NormalizeVietnameseText(ingredient)))
+                        {
+                            personalizationBoost -= 0.12;
+                        }
+                    }
+                }
+
+                var deterministicNudge = (Math.Abs($"{userSeed}|{t.Name}".GetHashCode()) % 11) / 100.0;
+                var finalScore = Math.Max(0.05, Math.Min(0.99, matchScore + personalizationBoost + deterministicNudge));
+
                 return new
                 {
                     Template = t,
                     Used = used,
                     Missing = missing,
-                    Score = matchScore
+                    Score = finalScore
                 };
             })
             .ToList();
@@ -1018,6 +1121,7 @@ public class AIRecipeService
         string? region,
         string? refreshToken,
         HashSet<string> recentNames,
+        Dictionary<string, object>? preferences,
         int limit)
     {
         var excludes = (excludeRecipeNames ?? new List<string>())
@@ -1053,7 +1157,8 @@ public class AIRecipeService
             excludeRecipeNames,
             limit * 2,
             refreshToken,
-            recentNames
+            recentNames,
+            preferences
         );
 
         foreach (var item in fallback)
@@ -1108,6 +1213,120 @@ public class AIRecipeService
                 list.RemoveFirst();
             }
         }
+    }
+
+    private async Task ApplyUserPersonalizationAsync(Dictionary<string, object> preferences, int? userId)
+    {
+        if (!userId.HasValue) return;
+
+        preferences["user_personalization_seed"] = $"user-{userId.Value}";
+
+        var user = await _db.Users
+            .AsNoTracking()
+            .FirstOrDefaultAsync(u => u.UserId == userId.Value);
+        if (user == null) return;
+
+        preferences["user_skill_level"] = string.IsNullOrWhiteSpace(user.SkillLevel)
+            ? "beginner"
+            : user.SkillLevel;
+
+        var dietary = ParseJsonStringArray(user.DietaryRestrictions);
+        if (dietary.Count > 0 && !preferences.ContainsKey("dietary_restrictions"))
+        {
+            preferences["dietary_restrictions"] = string.Join(", ", dietary);
+        }
+
+        var cuisinePreferences = ParseJsonStringArray(user.CuisinePreferences);
+        if (cuisinePreferences.Count > 0)
+        {
+            if (!preferences.ContainsKey("cuisine"))
+            {
+                preferences["cuisine"] = cuisinePreferences[0];
+            }
+            preferences["user_cuisine_focus"] = string.Join(", ", cuisinePreferences);
+        }
+
+        var allergies = ParseJsonStringArray(user.Allergies);
+        if (allergies.Count > 0)
+        {
+            preferences["user_avoid_ingredients"] = string.Join(", ", allergies);
+        }
+
+        preferences["user_flavor_profile"] = BuildFlavorProfile(user, cuisinePreferences, dietary);
+        preferences["user_variant_hint"] = BuildUserVariantHint(user.UserId);
+    }
+
+    private static List<string> ParseJsonStringArray(string? raw)
+    {
+        if (string.IsNullOrWhiteSpace(raw)) return new List<string>();
+        try
+        {
+            using var doc = JsonDocument.Parse(raw);
+            if (doc.RootElement.ValueKind == JsonValueKind.Array)
+            {
+                return doc.RootElement
+                    .EnumerateArray()
+                    .Select(x => x.GetString() ?? string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .ToList();
+            }
+            if (doc.RootElement.ValueKind == JsonValueKind.String)
+            {
+                var single = doc.RootElement.GetString();
+                return string.IsNullOrWhiteSpace(single) ? new List<string>() : new List<string> { single };
+            }
+        }
+        catch
+        {
+            return raw
+                .Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+        }
+
+        return new List<string>();
+    }
+
+    private static string BuildFlavorProfile(User user, List<string> cuisines, List<string> dietary)
+    {
+        var parts = new List<string>();
+
+        if (user.SkillLevel == "beginner")
+        {
+            parts.Add("uu tien mon de nau, it buoc");
+        }
+        else if (user.SkillLevel == "advanced")
+        {
+            parts.Add("co the thu mon cau ky hon");
+        }
+
+        if (cuisines.Any())
+        {
+            parts.Add($"thich {string.Join(", ", cuisines.Take(2))}");
+        }
+
+        if (dietary.Any())
+        {
+            parts.Add($"uu tien che do {string.Join(", ", dietary.Take(2))}");
+        }
+
+        var variant = user.UserId % 3;
+        if (variant == 0) parts.Add("nghieng ve vi thanh va mon canh");
+        if (variant == 1) parts.Add("nghieng ve mon xao kho dua com");
+        if (variant == 2) parts.Add("nghieng ve mon nhanh gon cho bua hang ngay");
+
+        return string.Join("; ", parts);
+    }
+
+    private static string BuildUserVariantHint(int userId)
+    {
+        return (userId % 4) switch
+        {
+            0 => "uu tien bua com canh - kho - rau",
+            1 => "uu tien mon nhanh gon duoi 30 phut",
+            2 => "uu tien mon xao va mon nuoc xen ke",
+            _ => "uu tien bua an can bang va it lap lai"
+        };
     }
 
     private static void ApplyRegionalPreferences(Dictionary<string, object> preferences, string? region)
