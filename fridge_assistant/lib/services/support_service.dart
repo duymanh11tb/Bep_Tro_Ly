@@ -5,6 +5,7 @@ import 'app_info_service.dart';
 class SupportService {
   static const String supportEmail = 'doanduymanh11@gmail.com';
   static const String supportPhone = '0865060731';
+  static const String supportZaloUrl = 'https://zalo.me/0865060731';
 
   static Future<bool> sendFeedback({
     required String issue,
@@ -40,17 +41,8 @@ class SupportService {
   }
 
   static Future<bool> openChatSupport({String? message}) async {
-    final smsSent = await _safeLaunch(
-      Uri(
-        scheme: 'sms',
-        path: supportPhone,
-        queryParameters: message == null || message.trim().isEmpty
-            ? null
-            : {'body': message.trim()},
-      ),
-    );
-
-    if (smsSent) return true;
+    final zaloOpened = await _safeLaunch(Uri.parse(supportZaloUrl));
+    if (zaloOpened) return true;
 
     return emailSupport(
       subject: '[${AppInfoService.appName}] Yeu cau ho tro nhanh',

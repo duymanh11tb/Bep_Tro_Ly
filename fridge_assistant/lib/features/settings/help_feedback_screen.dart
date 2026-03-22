@@ -276,8 +276,8 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
           _buildSupportItem(
             icon: Icons.chat_bubble_outline,
             iconColor: Colors.purple,
-            title: 'Chat trực tuyến',
-            subtitle: 'Nhắn nhanh tới ${SupportService.supportPhone}',
+            title: 'Nhắn Zalo',
+            subtitle: 'Mở Zalo hỗ trợ: ${SupportService.supportPhone}',
             onTap: _openSupportChat,
           ),
         ],
@@ -360,9 +360,9 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
     );
     await _handleLaunchResult(
       success: success,
-      fallbackText: SupportService.supportPhone,
-      successMessage: 'Đã mở kênh nhắn hỗ trợ nhanh.',
-      failureMessage: 'Không mở được kênh nhắn. Đã sao chép số hỗ trợ.',
+      fallbackText: SupportService.supportZaloUrl,
+      successMessage: 'Đã mở Zalo hỗ trợ.',
+      failureMessage: 'Không mở được Zalo. Đã sao chép đường dẫn hỗ trợ.',
     );
   }
 
