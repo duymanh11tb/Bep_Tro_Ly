@@ -21,6 +21,29 @@ Ung dung quan ly thuc pham trong tu lanh, goi y mon an bang AI, va quan ly meal 
 - .NET SDK 8.0 (neu chay backend local)
 - Flutter SDK (neu chay mobile local)
 
+## Cau Hinh Flutter API URL
+
+Flutter app load bien moi truong tu `fridge_assistant/assets/.env`.
+
+Mau cau hinh nam o `fridge_assistant/assets/.env.example`:
+
+```env
+API_URL=http://103.77.173.6:5001
+API_URL_WEB=auto
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
+```
+
+Quy uoc:
+
+- `API_URL`: dung cho mobile/native va local debug.
+- `API_URL_WEB=auto`: web tu dong goi same-origin cua trang dang mo.
+- `API_URL_WEB=https://api.tenmien.com`: chi dung khi muon web goi sang mot host rieng.
+
+Khuyen nghi production:
+
+- Frontend web va API nen chay chung domain/HTTPS qua reverse proxy.
+- Giu `API_URL_WEB=auto` de tranh loi `Failed to fetch`, mixed content, va lech origin.
+
 ## Chay Nhanh Bang Docker (Khuyen Dung)
 
 1. Tao file `.env` tu file mau:
