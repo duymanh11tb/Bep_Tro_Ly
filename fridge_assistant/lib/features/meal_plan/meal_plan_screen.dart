@@ -17,6 +17,12 @@ class MealPlanScreen extends StatefulWidget {
 
 class _MealPlanScreenState extends State<MealPlanScreen> {
   static const List<String> _mealTypes = ['breakfast', 'lunch', 'dinner'];
+  static const List<Map<String, String>> _dietaryOptions = [
+    {'code': 'default', 'label': 'Mặc định'},
+    {'code': 'vegetarian', 'label': 'Ăn chay'},
+    {'code': 'weight_loss', 'label': 'Giảm cân'},
+    {'code': 'eat_clean', 'label': 'Eat Clean'},
+  ];
 
   int _selectedDayOffset = 0;
   bool _isLoading = true;
@@ -28,6 +34,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
 
   final Set<String> _selectedIngredients = <String>{};
   Map<String, dynamic> _planData = <String, dynamic>{};
+  String _selectedDietaryMode = 'default';
 
   @override
   void initState() {
@@ -40,7 +47,10 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
 
     final results = await Future.wait([
       MealPlanService.loadPlan(),
-      MealPlanService.getDiscoverySuggestions(limit: 12),
+      MealPlanService.getDiscoverySuggestions(
+        limit: 12,
+        dietaryPreference: _effectiveDietaryPreference,
+      ),
       PantryService.getItems(),
     ]);
 
@@ -65,7 +75,10 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
   }
 
   Future<void> _refreshDiscovery() async {
-    final data = await MealPlanService.getDiscoverySuggestions(limit: 12);
+    final data = await MealPlanService.getDiscoverySuggestions(
+      limit: 12,
+      dietaryPreference: _effectiveDietaryPreference,
+    );
     if (!mounted) return;
     setState(() => _discoverySuggestions = data);
   }
@@ -85,6 +98,7 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
     final data = await MealPlanService.getSuggestionsByIngredients(
       _selectedIngredients.toList(),
       limit: 8,
+      dietaryPreference: _effectiveDietaryPreference,
     );
 
     if (!mounted) return;
@@ -111,6 +125,9 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
 
   DateTime get _selectedDate =>
       DateTime.now().add(Duration(days: _selectedDayOffset));
+
+  String? get _effectiveDietaryPreference =>
+      _selectedDietaryMode == 'default' ? null : _selectedDietaryMode;
 
   String get _selectedDateKey {
     final d = _selectedDate;
@@ -529,6 +546,36 @@ class _MealPlanScreenState extends State<MealPlanScreen> {
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: _dietaryOptions.map((option) {
+                final code = option['code']!;
+                final selected = _selectedDietaryMode == code;
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ChoiceChip(
+                    label: Text(option['label']!),
+                    selected: selected,
+                    showCheckmark: false,
+                    onSelected: (_) async {
+                      setState(() => _selectedDietaryMode = code);
+                      await _refreshDiscovery();
+                    },
+                    backgroundColor: const Color(0xFFF1F3F5),
+                    selectedColor: AppColors.primary,
+                    side: BorderSide.none,
+                    labelStyle: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: selected ? Colors.white : AppColors.textPrimary,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
           ),
           const SizedBox(height: 16),
           for (final mealType in _mealTypes) ...[

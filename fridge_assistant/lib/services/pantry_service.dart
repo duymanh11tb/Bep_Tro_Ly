@@ -394,6 +394,7 @@ class PantryService {
     int limit = 15,
     String? refreshToken,
     List<String>? excludeRecipeNames,
+    String? dietaryPreference,
   }) async {
     try {
       final regionCode = await _resolveRegionCode(region);
@@ -418,6 +419,9 @@ class PantryService {
           final raw = cleaned.join(',');
           url += '&excludeRecipeNames=${Uri.encodeQueryComponent(raw)}';
         }
+      }
+      if (dietaryPreference != null && dietaryPreference.isNotEmpty) {
+        url += '&dietary=${Uri.encodeQueryComponent(dietaryPreference)}';
       }
       
       final resp = await ApiService.get(
@@ -447,9 +451,9 @@ class PantryService {
     final regionCode = await _resolveRegionCode(region);
     if (refreshToken != null && refreshToken.isNotEmpty) {
       if (mode == RecipeSuggestionMode.region) {
-        return _regionFallbackRecipes(regionCode, limit);
+        return _regionFallbackRecipes(regionCode, limit, dietaryPreference);
       }
-      return _pantryRefreshFallback(limit, refreshToken);
+      return _pantryRefreshFallback(limit, refreshToken, dietaryPreference);
     }
     final cached = await getCachedAiSuggestions(
       mode: mode,
@@ -459,7 +463,7 @@ class PantryService {
     if (cached.isNotEmpty) return cached;
 
     if (mode == RecipeSuggestionMode.region) {
-      return _regionFallbackRecipes(regionCode, limit);
+      return _regionFallbackRecipes(regionCode, limit, dietaryPreference);
     }
     return [];
   }
@@ -488,7 +492,11 @@ class PantryService {
     return value;
   }
 
-  static List<RecipeSuggestion> _regionFallbackRecipes(String regionCode, int limit) {
+  static List<RecipeSuggestion> _regionFallbackRecipes(
+    String regionCode,
+    int limit, [
+    String? dietaryPreference,
+  ]) {
     final fallback = <String, List<RecipeSuggestion>>{
       'north': [
         RecipeSuggestion(
@@ -552,14 +560,22 @@ class PantryService {
       ],
     };
 
-    final recipes = fallback[regionCode] ?? fallback['south']!;
+    final dietaryFallback = _dietaryFallbackRecipes(dietaryPreference);
+    final recipes = dietaryFallback.isNotEmpty
+        ? dietaryFallback
+        : (fallback[regionCode] ?? fallback['south']!);
     if (limit <= 0) return recipes;
     if (recipes.length <= limit) return recipes;
     return recipes.take(limit).toList();
   }
 
-  static List<RecipeSuggestion> _pantryRefreshFallback(int limit, String refreshToken) {
-    final pool = <RecipeSuggestion>[
+  static List<RecipeSuggestion> _pantryRefreshFallback(
+    int limit,
+    String refreshToken, [
+    String? dietaryPreference,
+  ]) {
+    final dietaryFallback = _dietaryFallbackRecipes(dietaryPreference);
+    final pool = dietaryFallback.isNotEmpty ? dietaryFallback : <RecipeSuggestion>[
       RecipeSuggestion(
         id: 'p_f_1',
         name: 'Gà kho gừng',
@@ -624,6 +640,109 @@ class PantryService {
     final take = limit <= 0 ? 5 : limit;
     if (list.length <= take) return list;
     return list.take(take).toList();
+  }
+
+  static List<RecipeSuggestion> _dietaryFallbackRecipes(String? dietaryPreference) {
+    final normalized = dietaryPreference?.trim().toLowerCase();
+    if (normalized == null || normalized.isEmpty) return const [];
+
+    if (normalized == 'vegetarian' || normalized == 'an_chay') {
+      return const [
+        RecipeSuggestion(
+          id: 'diet_veg_1',
+          name: 'Đậu hũ sốt nấm',
+          description: 'Món chay thanh vị, dễ nấu cho bữa hằng ngày.',
+          ingredientsUsed: ['đậu hũ', 'nấm', 'hành boa rô'],
+          cookTimeMinutes: 18,
+          difficulty: 'easy',
+          matchScore: 0.84,
+        ),
+        RecipeSuggestion(
+          id: 'diet_veg_2',
+          name: 'Canh bí đỏ đậu hũ',
+          description: 'Canh nhẹ bụng, ngọt tự nhiên và hợp bữa tối.',
+          ingredientsUsed: ['bí đỏ', 'đậu hũ'],
+          cookTimeMinutes: 20,
+          difficulty: 'easy',
+          matchScore: 0.82,
+        ),
+        RecipeSuggestion(
+          id: 'diet_veg_3',
+          name: 'Rau củ hấp chấm mè rang',
+          description: 'Ít dầu mỡ, giữ trọn vị ngọt tự nhiên của rau củ.',
+          ingredientsUsed: ['bông cải', 'cà rốt', 'bí ngòi'],
+          cookTimeMinutes: 15,
+          difficulty: 'easy',
+          matchScore: 0.8,
+        ),
+      ];
+    }
+
+    if (normalized == 'weight_loss' || normalized == 'giam_can') {
+      return const [
+        RecipeSuggestion(
+          id: 'diet_fit_1',
+          name: 'Ức gà áp chảo rau củ',
+          description: 'Món ít dầu, giàu đạm và phù hợp chế độ giảm cân.',
+          ingredientsUsed: ['ức gà', 'rau củ'],
+          cookTimeMinutes: 20,
+          difficulty: 'easy',
+          matchScore: 0.85,
+        ),
+        RecipeSuggestion(
+          id: 'diet_fit_2',
+          name: 'Salad cá ngừ trứng luộc',
+          description: 'Nhẹ bụng, đủ chất và làm rất nhanh.',
+          ingredientsUsed: ['cá ngừ', 'xà lách', 'trứng'],
+          cookTimeMinutes: 15,
+          difficulty: 'easy',
+          matchScore: 0.83,
+        ),
+        RecipeSuggestion(
+          id: 'diet_fit_3',
+          name: 'Canh nấm ức gà',
+          description: 'Món canh thanh, ít calo, hợp bữa tối.',
+          ingredientsUsed: ['nấm', 'ức gà'],
+          cookTimeMinutes: 18,
+          difficulty: 'easy',
+          matchScore: 0.81,
+        ),
+      ];
+    }
+
+    if (normalized == 'eat_clean') {
+      return const [
+        RecipeSuggestion(
+          id: 'diet_clean_1',
+          name: 'Cá hồi áp chảo măng tây',
+          description: 'Bữa ăn Eat Clean đủ đạm, rau và chất béo tốt.',
+          ingredientsUsed: ['cá hồi', 'măng tây'],
+          cookTimeMinutes: 18,
+          difficulty: 'easy',
+          matchScore: 0.85,
+        ),
+        RecipeSuggestion(
+          id: 'diet_clean_2',
+          name: 'Cơm gạo lứt bò xào rau',
+          description: 'Món Eat Clean cân bằng, phù hợp bữa trưa.',
+          ingredientsUsed: ['gạo lứt', 'thịt bò', 'rau củ'],
+          cookTimeMinutes: 25,
+          difficulty: 'medium',
+          matchScore: 0.83,
+        ),
+        RecipeSuggestion(
+          id: 'diet_clean_3',
+          name: 'Tôm hấp bí ngòi',
+          description: 'Thanh nhẹ, ít dầu mỡ và giữ vị tự nhiên.',
+          ingredientsUsed: ['tôm', 'bí ngòi'],
+          cookTimeMinutes: 16,
+          difficulty: 'easy',
+          matchScore: 0.8,
+        ),
+      ];
+    }
+
+    return const [];
   }
 
   /// Tự động cleanup sản phẩm hết hạn

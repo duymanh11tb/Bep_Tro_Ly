@@ -72,16 +72,18 @@ public class RecipeController : ControllerBase
         [FromQuery] int limit = 5,
         [FromQuery] string? region = null,
         [FromQuery] string? refreshToken = null,
-        [FromQuery] string? excludeRecipeNames = null)
+        [FromQuery] string? excludeRecipeNames = null,
+        [FromQuery] string? dietary = null)
     {
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
         var excludes = ParseExcludeRecipeNames(excludeRecipeNames);
+        var preferences = BuildQueryPreferences(dietary);
 
         var result = await _aiService.SuggestFromPantryAsync(
             userId.Value,
             fridgeId,
-            null,
+            preferences,
             region,
             refreshToken,
             excludes,
@@ -100,12 +102,14 @@ public class RecipeController : ControllerBase
         [FromQuery] string? region,
         [FromQuery] int limit = 5,
         [FromQuery] string? refreshToken = null,
-        [FromQuery] string? excludeRecipeNames = null)
+        [FromQuery] string? excludeRecipeNames = null,
+        [FromQuery] string? dietary = null)
     {
         var excludes = ParseExcludeRecipeNames(excludeRecipeNames);
+        var preferences = BuildQueryPreferences(dietary);
         var result = await _aiService.SuggestByRegionAsync(
             region,
-            null,
+            preferences,
             refreshToken,
             excludes,
             GetCurrentUserId(),
@@ -221,5 +225,38 @@ public class RecipeController : ControllerBase
             .Where(x => !string.IsNullOrWhiteSpace(x))
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .ToList();
+    }
+
+    private static Dictionary<string, object>? BuildQueryPreferences(string? dietary)
+    {
+        if (string.IsNullOrWhiteSpace(dietary)) return null;
+
+        var normalized = dietary.Trim().ToLowerInvariant();
+        var preferences = new Dictionary<string, object>();
+        if (normalized is "vegetarian" or "an_chay" or "ăn chay")
+        {
+            preferences["dietary_restrictions"] = "Ăn chay";
+            preferences["cuisine"] = "Món chay Việt Nam";
+            return preferences;
+        }
+
+        if (normalized is "weight_loss" or "giam_can" or "giảm cân")
+        {
+            preferences["dietary_restrictions"] = "Giảm cân";
+            preferences["difficulty"] = "easy";
+            preferences["cuisine"] = "Món Việt nhẹ bụng, ít dầu mỡ";
+            return preferences;
+        }
+
+        if (normalized is "eat_clean" or "eat clean")
+        {
+            preferences["dietary_restrictions"] = "Eat Clean";
+            preferences["difficulty"] = "easy";
+            preferences["cuisine"] = "Món Việt Eat Clean";
+            return preferences;
+        }
+
+        preferences["dietary_restrictions"] = dietary.Trim();
+        return preferences;
     }
 }

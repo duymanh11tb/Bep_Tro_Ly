@@ -63,6 +63,12 @@ public class AIRecipeService
             // Let clients request a fresh batch on demand ("Gợi ý mới").
             preferences["refresh_token"] = refreshToken;
         }
+        else
+        {
+            // Refresh suggestions automatically every 2 hours even without explicit user action.
+            var timeSlot = DateTime.UtcNow.Ticks / TimeSpan.TicksPerHour / 2;
+            preferences["_auto_refresh_slot"] = timeSlot;
+        }
         if (excludeRecipeNames != null && excludeRecipeNames.Count > 0)
         {
             preferences["exclude_recipe_names"] = excludeRecipeNames
@@ -106,8 +112,11 @@ public class AIRecipeService
                 };
             }
 
-            var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit);
-            var recipesWithImages = EnsureRecipeImages(aiRecipes);
+            var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit * 2);
+            var shuffleSeed = BuildShuffleSeed(preferences);
+            var rng = new Random(shuffleSeed);
+            var shuffled = aiRecipes.OrderBy(_ => rng.Next()).ToList();
+            var recipesWithImages = EnsureRecipeImages(shuffled);
             var recentNames = GetRecentRecipeNames(userId);
             var finalRecipes = ApplyExcludeAndFillRecipes(
                 recipesWithImages,
@@ -246,6 +255,7 @@ public class AIRecipeService
         var userAvoidText = preferences.TryGetValue("user_avoid_ingredients", out var ua) ? ua?.ToString() ?? "" : "";
         var userFlavorProfile = preferences.TryGetValue("user_flavor_profile", out var uf) ? uf?.ToString() ?? "" : "";
         var userVariantHint = preferences.TryGetValue("user_variant_hint", out var uv) ? uv?.ToString() ?? "" : "";
+        var creativityToken = preferences.TryGetValue("creativity_token", out var ct) ? ct?.ToString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
 
         var dietaryText = !string.IsNullOrEmpty(dietary) ? $"Chế độ ăn đặc biệt: {dietary}" : "";
         var difficultyText = difficulty != "any" ? $"Độ khó: {difficulty}" : "";
@@ -268,6 +278,15 @@ public class AIRecipeService
         var userVariantText = !string.IsNullOrWhiteSpace(userVariantHint)
             ? $"Biến thể cá nhân hóa cho user này: {userVariantHint}."
             : "";
+        var diversityConstraint = $$"""
+            RÀNG BUỘC ĐA DẠNG BẮT BUỘC (cực kỳ quan trọng):
+            - Phải có ÍT NHẤT 3 PHƯƠNG THỨC NẤU khác nhau trong danh sách:
+              xào / kho / canh / hấp / chiên / nướng / luộc / salad / súp / lẩu.
+            - Phải có ÍT NHẤT 2 LOẠI NGUYÊN LIỆU CHÍNH khác nhau:
+              thịt heo / thịt bò / thịt gà / hải sản / trứng / đậu hũ / rau củ.
+            - TUYỆT ĐỐI không đề xuất 2 món có cùng tên gần giống nhau.
+            - Creativity token: {{creativityToken}}
+            """;
 
         var statusText = ingredients.Any()
             ? $"CHẾ ĐỘ GỢI Ý: Dựa trên {ingredients.Count} nguyên liệu có sẵn: {string.Join(", ", ingredients)}."
@@ -289,8 +308,9 @@ public class AIRecipeService
             {{difficultyText}}
             {{refreshHintText}}
             {{excludedText}}
+            {{diversityConstraint}}
 
-            NHIỆM VỤ: Đề xuất {{limit}} món ăn. 
+            NHIỆM VỤ: Đề xuất {{limit * 2}} món ăn.
             - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất, mang tính ứng dụng cao cho bữa ăn gia đình hàng ngày.
             - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy đề xuất những mâm cơm nhà hoặc món ăn thường ngày phong phú, sáng tạo, không lặp lại nhàm chán. Món ngon nhưng phải dễ nấu.
 
@@ -1047,6 +1067,15 @@ public class AIRecipeService
             .ToList();
 
         return ranked;
+    }
+
+    private static int BuildShuffleSeed(Dictionary<string, object> preferences)
+    {
+        var refreshToken = preferences.TryGetValue("refresh_token", out var rt) ? rt?.ToString() ?? string.Empty : string.Empty;
+        var slot = preferences.TryGetValue("_auto_refresh_slot", out var ars) ? ars?.ToString() ?? string.Empty : string.Empty;
+        var userSeed = preferences.TryGetValue("user_personalization_seed", out var ups) ? ups?.ToString() ?? "default-user" : "default-user";
+        var composite = $"{userSeed}|{refreshToken}|{slot}|{Guid.NewGuid():N}";
+        return composite.GetHashCode();
     }
 
     private static List<string> ExtractExcludeRecipeNames(Dictionary<string, object> preferences)
