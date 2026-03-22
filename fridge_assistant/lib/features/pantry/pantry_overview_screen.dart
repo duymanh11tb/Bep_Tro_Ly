@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/pantry_service.dart';
 import '../../services/fridge_service.dart';
@@ -266,7 +266,7 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
                     setState(() => _searchQuery = value);
                   },
                   decoration: InputDecoration(
-                    hintText: 'Tìm kiếm nguyên liệu',
+                    hintText: context.tr('Tìm kiếm nguyên liệu'),
                     prefixIcon: const Icon(Icons.search, size: 18),
                     filled: true,
                     fillColor: const Color(0xFFF4F5F7),

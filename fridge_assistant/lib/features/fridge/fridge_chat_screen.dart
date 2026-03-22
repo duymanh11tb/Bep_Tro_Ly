@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import 'package:intl/intl.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/chat_message_model.dart';
@@ -189,9 +189,9 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
           controller: controller,
           maxLines: 4,
           minLines: 1,
-          decoration: const InputDecoration(
-            hintText: 'Nội dung tin nhắn...',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            hintText: context.tr('Nội dung tin nhắn...'),
+            border: const OutlineInputBorder(),
           ),
         ),
         actions: [
@@ -477,10 +477,10 @@ class _FridgeChatScreenState extends State<FridgeChatScreen> {
               ),
               child: TextField(
                 controller: _messageController,
-                decoration: const InputDecoration(
-                  hintText: 'Nhập tin nhắn...',
+                decoration: InputDecoration(
+                  hintText: context.tr('Nhập tin nhắn...'),
                   border: InputBorder.none,
-                  hintStyle: TextStyle(fontSize: 13),
+                  hintStyle: const TextStyle(fontSize: 13),
                 ),
                 maxLines: 4,
                 minLines: 1,

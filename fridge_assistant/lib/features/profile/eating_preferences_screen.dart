@@ -1,5 +1,5 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../services/auth_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
@@ -279,8 +279,8 @@ class _EatingPreferencesScreenState extends State<EatingPreferencesScreen> {
           Expanded(
             child: TextField(
               controller: _otherAllergyController,
-              decoration: const InputDecoration(
-                hintText: 'Thêm nguyên liệu cần tránh khác',
+              decoration: InputDecoration(
+                hintText: context.tr('Thêm nguyên liệu cần tránh khác'),
                 border: InputBorder.none,
               ),
               onSubmitted: (val) {

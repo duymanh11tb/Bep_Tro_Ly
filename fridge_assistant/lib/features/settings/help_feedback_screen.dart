@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
@@ -165,7 +165,7 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
           TextField(
             controller: _issueController,
             decoration: InputDecoration(
-              hintText: 'Loại vấn đề bạn gặp phải......',
+              hintText: context.tr('Loại vấn đề bạn gặp phải......'),
               hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
               filled: true,
               fillColor: const Color(0xFFF3F4F6),
@@ -197,7 +197,7 @@ class _HelpFeedbackScreenState extends State<HelpFeedbackScreen> {
             controller: _detailController,
             maxLines: 4,
             decoration: InputDecoration(
-              hintText: 'Hãy mô tả vấn đề hoặc ý kiến của bạn....',
+              hintText: context.tr('Hãy mô tả vấn đề hoặc ý kiến của bạn....'),
               hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
               filled: true,
               fillColor: const Color(0xFFF3F4F6),

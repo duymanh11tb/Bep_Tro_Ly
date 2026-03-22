@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 
 /// Định nghĩa màu sắc chính cho ứng dụng Bếp Trợ Lý
 class AppColors {

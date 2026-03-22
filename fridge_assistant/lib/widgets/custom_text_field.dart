@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../core/theme/app_colors.dart';
 import '../core/theme/app_text_styles.dart';
 
@@ -47,7 +47,7 @@ class _CustomTextFieldState extends State<CustomTextField> {
       children: [
         // Label
         Text(
-          widget.label,
+          context.tr(widget.label),
           style: AppTextStyles.inputLabel,
         ),
         const SizedBox(height: 8),
@@ -113,6 +113,8 @@ class _CustomTextFieldState extends State<CustomTextField> {
               borderRadius: BorderRadius.circular(12),
               borderSide: const BorderSide(color: AppColors.error, width: 2),
             ),
+          ).copyWith(
+            hintText: context.tr(widget.hintText),
           ),
         ),
       ],

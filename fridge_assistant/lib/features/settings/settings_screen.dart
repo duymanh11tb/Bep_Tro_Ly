@@ -1,4 +1,5 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
+import '../../core/localization/app_locale_controller.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/app_info_service.dart';
 import '../../services/app_preferences_service.dart';
@@ -409,7 +410,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
     if (selectedCode == null || selectedCode == _languageCode) return;
 
-    await AppPreferencesService.setPreferredLanguageCode(selectedCode);
+    await AppLocaleController.instance.setLocaleCode(selectedCode);
     if (!mounted) return;
 
     setState(() => _languageCode = selectedCode);
@@ -427,8 +428,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
   void _showAboutApp() {
     showAboutDialog(
       context: context,
-      applicationName: AppInfoService.appName,
-      applicationVersion: AppInfoService.version,
+      applicationName: context.tr(AppInfoService.appName),
+      applicationVersion: context.tr(AppInfoService.versionLabel),
       applicationIcon: Container(
         width: 56,
         height: 56,

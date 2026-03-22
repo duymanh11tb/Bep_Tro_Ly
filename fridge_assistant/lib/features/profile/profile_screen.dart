@@ -1,5 +1,6 @@
 import 'dart:convert';
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
+import '../../core/localization/app_locale_controller.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/profile_header.dart';
 import 'widgets/profile_stats.dart';
@@ -524,7 +525,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
     if (selectedCode == null || selectedCode == _languageCode) return;
 
-    await AppPreferencesService.setPreferredLanguageCode(selectedCode);
+    await AppLocaleController.instance.setLocaleCode(selectedCode);
     if (!mounted) return;
 
     setState(() => _languageCode = selectedCode);

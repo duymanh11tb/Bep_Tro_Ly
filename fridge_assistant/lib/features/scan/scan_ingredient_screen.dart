@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
@@ -12,7 +12,6 @@ import '../dashboard/dashboard_screen.dart';
 import '../../services/barcode_lookup_service.dart';
 import '../../models/fridge_model.dart';
 import '../../services/pantry_service.dart';
-import '../../services/fridge_service.dart';
 
 class ScanIngredientScreen extends StatefulWidget {
   const ScanIngredientScreen({super.key});
@@ -346,9 +345,9 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Tên sản phẩm',
-                        hintText: 'Nhập tên để lưu vào tủ lạnh',
+                      decoration: InputDecoration(
+                        labelText: context.tr('Tên sản phẩm'),
+                        hintText: context.tr('Nhập tên để lưu vào tủ lạnh'),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -359,8 +358,8 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                           child: TextField(
                             controller: quantityController,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Số lượng',
+                            decoration: InputDecoration(
+                              labelText: context.tr('Số lượng'),
                             ),
                           ),
                         ),
@@ -369,7 +368,9 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                           flex: 1,
                           child: DropdownButtonFormField<String>(
                             value: selectedUnit,
-                            decoration: const InputDecoration(labelText: 'Đơn vị'),
+                            decoration: InputDecoration(
+                              labelText: context.tr('Đơn vị'),
+                            ),
                             items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
                             onChanged: (val) {
                               if (val != null) {
@@ -831,9 +832,9 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                     TextField(
                       controller: nameController,
                       autofocus: true,
-                      decoration: const InputDecoration(
-                        labelText: 'Tên nguyên liệu',
-                        hintText: 'Ví dụ: Cà chua'
+                      decoration: InputDecoration(
+                        labelText: context.tr('Tên nguyên liệu'),
+                        hintText: context.tr('Ví dụ: Cà chua'),
                       ),
                     ),
                     const SizedBox(height: 12),
@@ -844,8 +845,8 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                           child: TextField(
                             controller: quantityController,
                             keyboardType: TextInputType.number,
-                            decoration: const InputDecoration(
-                              labelText: 'Số lượng',
+                            decoration: InputDecoration(
+                              labelText: context.tr('Số lượng'),
                             ),
                           ),
                         ),
@@ -854,7 +855,9 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                           flex: 1,
                           child: DropdownButtonFormField<String>(
                             value: selectedUnit,
-                            decoration: const InputDecoration(labelText: 'Đơn vị'),
+                            decoration: InputDecoration(
+                              labelText: context.tr('Đơn vị'),
+                            ),
                             items: units.map((u) => DropdownMenuItem(value: u, child: Text(u))).toList(),
                             onChanged: (val) {
                               if (val != null) {

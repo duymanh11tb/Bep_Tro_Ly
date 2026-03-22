@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/pantry_service.dart';
 import '../../widgets/fridge_selector.dart';
@@ -346,7 +346,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       child: TextField(
         controller: _searchController,
         decoration: InputDecoration(
-          hintText: 'Tìm kiếm hoặc quét mã vạch',
+          hintText: context.tr('Tìm kiếm hoặc quét mã vạch'),
           hintStyle: const TextStyle(
             color: AppColors.textHint,
             fontSize: 14,
@@ -437,7 +437,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
       controller: _nameController,
       textCapitalization: TextCapitalization.sentences,
       decoration: InputDecoration(
-        hintText: 'Vd: Thịt bò, Cà chua',
+        hintText: context.tr('Vd: Thịt bò, Cà chua'),
         hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
         filled: true,
         fillColor: AppColors.inputBackground,

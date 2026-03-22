@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import 'package:intl/intl.dart';
 import '../../models/activity_log_model.dart';
 import '../../services/activity_log_service.dart';

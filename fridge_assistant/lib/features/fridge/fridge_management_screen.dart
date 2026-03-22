@@ -1,5 +1,5 @@
 import 'dart:async';
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../services/chat_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/fridge_model.dart';

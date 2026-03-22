@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
 import '../../services/pantry_service.dart';
@@ -426,7 +426,7 @@ class _RecipeRecommendationsScreenState
                 controller: _searchController,
                 onChanged: (value) => setState(() => _searchQuery = value),
                 decoration: InputDecoration(
-                  hintText: 'Tìm kiếm công thức...',
+                  hintText: context.tr('Tìm kiếm công thức...'),
                   prefixIcon: const Icon(Icons.search, size: 20),
                   filled: true,
                   fillColor: const Color(0xFFF1F3F5),

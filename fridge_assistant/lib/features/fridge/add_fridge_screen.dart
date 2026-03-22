@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/fridge_service.dart';
 
@@ -156,7 +156,7 @@ class _AddFridgeScreenState extends State<AddFridgeScreen> {
           maxLines: maxLines,
           validator: validator,
           decoration: InputDecoration(
-            hintText: hint,
+            hintText: hint == null ? null : context.tr(hint),
             hintStyle: const TextStyle(color: Colors.grey),
             filled: true,
             fillColor: Colors.grey.shade50,

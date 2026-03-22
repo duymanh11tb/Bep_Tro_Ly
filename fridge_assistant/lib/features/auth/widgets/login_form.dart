@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../../services/auth_service.dart';
 import '../../../services/google_auth_service.dart';
 import '../../../core/theme/app_colors.dart';

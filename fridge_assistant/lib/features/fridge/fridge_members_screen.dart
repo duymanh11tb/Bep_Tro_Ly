@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/fridge_model.dart';
 import '../../services/fridge_service.dart';
@@ -63,9 +63,9 @@ class _FridgeMembersScreenState extends State<FridgeMembersScreen> {
         title: const Text('Mời thành viên mới'),
         content: TextField(
           controller: controller,
-          decoration: const InputDecoration(
-            hintText: 'Nhập email người dùng',
-            border: OutlineInputBorder(),
+          decoration: InputDecoration(
+            hintText: context.tr('Nhập email người dùng'),
+            border: const OutlineInputBorder(),
           ),
           keyboardType: TextInputType.emailAddress,
         ),

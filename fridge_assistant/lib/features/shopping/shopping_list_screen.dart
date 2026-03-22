@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import 'package:flutter/foundation.dart';
 import '../../core/theme/app_colors.dart';
 import '../../models/shopping_list_item.dart';
@@ -1237,9 +1237,9 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
                   children: [
                     TextField(
                       controller: nameController,
-                      decoration: const InputDecoration(
-                        labelText: 'Tên sản phẩm *',
-                        hintText: 'Ví dụ: Hành tím',
+                      decoration: InputDecoration(
+                        labelText: context.tr('Tên sản phẩm *'),
+                        hintText: context.tr('Ví dụ: Hành tím'),
                       ),
                     ),
                     const SizedBox(height: 10),
@@ -1251,8 +1251,8 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
                             keyboardType: const TextInputType.numberWithOptions(
                               decimal: true,
                             ),
-                            decoration: const InputDecoration(
-                              labelText: 'Số lượng',
+                            decoration: InputDecoration(
+                              labelText: context.tr('Số lượng'),
                             ),
                           ),
                         ),
@@ -1260,9 +1260,9 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
                         Expanded(
                           child: TextField(
                             controller: unitController,
-                            decoration: const InputDecoration(
-                              labelText: 'Đơn vị',
-                              hintText: 'g, kg, chai...',
+                            decoration: InputDecoration(
+                              labelText: context.tr('Đơn vị'),
+                              hintText: context.tr('g, kg, chai...'),
                             ),
                           ),
                         ),
@@ -1271,7 +1271,9 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
                     const SizedBox(height: 10),
                     TextField(
                       controller: notesController,
-                      decoration: const InputDecoration(labelText: 'Ghi chú'),
+                      decoration: InputDecoration(
+                        labelText: context.tr('Ghi chú'),
+                      ),
                     ),
                   ],
                 ),
@@ -1499,12 +1501,14 @@ class _ShoppingListScreenState extends State<ShoppingListScreen> {
       child: TextField(
         controller: _searchController,
         textInputAction: TextInputAction.search,
-        decoration: const InputDecoration(
-          hintText: 'Tìm món theo sở thích (ví dụ: cá, bò, cay, miền Nam...)',
-          hintStyle: TextStyle(color: AppColors.textHint, fontSize: 14),
-          prefixIcon: Icon(Icons.search, color: AppColors.textHint, size: 22),
+        decoration: InputDecoration(
+          hintText: context.tr(
+            'Tìm món theo sở thích (ví dụ: cá, bò, cay, miền Nam...)',
+          ),
+          hintStyle: const TextStyle(color: AppColors.textHint, fontSize: 14),
+          prefixIcon: const Icon(Icons.search, color: AppColors.textHint, size: 22),
           border: InputBorder.none,
-          contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         ),
         onChanged: (value) {
           setState(() {

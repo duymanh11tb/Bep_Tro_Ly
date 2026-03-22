@@ -1,6 +1,6 @@
 import 'dart:math' as math;
 
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
