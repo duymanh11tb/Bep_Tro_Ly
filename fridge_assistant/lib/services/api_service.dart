@@ -8,7 +8,14 @@ import 'package:flutter_dotenv/flutter_dotenv.dart';
 class ApiService {
   // API Backend deployed on VPS
   static String get baseUrl {
-    return dotenv.env['API_URL'] ?? 'http://localhost:5001';
+    final configured = dotenv.env['API_URL']?.trim();
+    if (!kIsWeb) {
+      return (configured == null || configured.isEmpty)
+          ? 'http://localhost:5001'
+          : configured;
+    }
+
+    return _resolveWebBaseUrl(configured);
   }
 
   static const Duration _requestTimeout = Duration(seconds: 15);
@@ -18,6 +25,35 @@ class ApiService {
   // Prevent request spam from rapid repeated taps.
   static final Map<String, Future<http.Response>> _inFlightRequests = {};
   static final Map<String, _RecentResponse> _recentResponses = {};
+
+  static String _resolveWebBaseUrl(String? configured) {
+    final page = Uri.base;
+    final pageOrigin = page.origin;
+
+    if (configured == null || configured.isEmpty) {
+      return pageOrigin;
+    }
+
+    final parsed = Uri.tryParse(configured);
+    if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
+      return pageOrigin;
+    }
+
+    final runningSecure = page.scheme == 'https';
+    if (runningSecure && parsed.scheme == 'http') {
+      // On web, https pages cannot fetch insecure http APIs.
+      // Prefer same-origin when deployed behind a reverse proxy.
+      if (page.host.isNotEmpty &&
+          page.host != 'localhost' &&
+          page.host != '127.0.0.1') {
+        return pageOrigin;
+      }
+
+      return parsed.replace(scheme: 'https').toString();
+    }
+
+    return configured;
+  }
 
   static Future<Map<String, String>> getHeaders({bool withAuth = false}) async {
     final headers = {

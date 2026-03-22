@@ -1,4 +1,4 @@
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import '../services/api_service.dart';
 
 class FridgeMemberModel {
   final int userId;
@@ -24,7 +24,7 @@ class FridgeMemberModel {
   factory FridgeMemberModel.fromJson(Map<String, dynamic> json) {
     String? photoUrl = json['photo_url'];
     if (photoUrl != null && photoUrl.startsWith('/')) {
-      photoUrl = '${dotenv.env['API_URL']}$photoUrl';
+      photoUrl = '${ApiService.baseUrl}$photoUrl';
     }
 
     return FridgeMemberModel(

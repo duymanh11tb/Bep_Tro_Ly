@@ -1,12 +1,12 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../models/fridge_model.dart';
 import 'auth_service.dart';
+import 'api_service.dart';
 
 class FridgeService {
-  final String? _baseUrl = dotenv.env['API_URL'];
+  final String _baseUrl = ApiService.baseUrl;
   final AuthService _authService = AuthService();
 
   Future<Map<String, String>> _getHeaders() async {

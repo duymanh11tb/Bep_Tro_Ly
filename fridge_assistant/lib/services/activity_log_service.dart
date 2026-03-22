@@ -2,10 +2,10 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/activity_log_model.dart';
 import 'auth_service.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'api_service.dart';
 
 class ActivityLogService {
-  final String _baseUrl = '${dotenv.env['API_URL']}/api';
+  final String _baseUrl = '${ApiService.baseUrl}/api/v1';
 
   Future<List<ActivityLogModel>> getFridgeActivities(int fridgeId, {String type = 'all'}) async {
     final token = await AuthService().getToken();
@@ -26,7 +26,7 @@ class ActivityLogService {
   }
 
   static Future<void> logCooking(int? fridgeId, String recipeName, {int? recipeId}) async {
-    final baseUrl = '${dotenv.env['API_URL']}/api';
+    final baseUrl = '${ApiService.baseUrl}/api/v1';
     final token = await AuthService().getToken();
     final response = await http.post(
       Uri.parse('$baseUrl/recipes/cook'),
