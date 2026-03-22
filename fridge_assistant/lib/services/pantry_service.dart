@@ -4,7 +4,10 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'auth_service.dart';
 import 'fridge_service.dart';
+import 'region_preference_service.dart';
 import '../models/recipe_suggestion.dart';
+
+enum RecipeSuggestionMode { pantry, region }
 
 class PantryItem {
   final int id;
@@ -134,19 +137,37 @@ class PantryService {
         .replaceAll(RegExp(r'_+'), '_');
   }
 
-  static Future<String> _getAiSuggestionsCacheKey({int? fridgeId}) async {
+  static String _modeCacheCode(RecipeSuggestionMode mode) {
+    return mode == RecipeSuggestionMode.region ? 'region' : 'pantry';
+  }
+
+  static Future<String> _getAiSuggestionsCacheKey({
+    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
+    int? fridgeId,
+    String? region,
+  }) async {
     final suffix = await _getUserCacheSuffix();
+    final modeSuffix = '_m${_modeCacheCode(mode)}';
+    final regionSuffix = (region != null && region.isNotEmpty)
+        ? '_r${_normalizeRegionCode(region)}'
+        : '';
     final fridgeSuffix = fridgeId != null ? '_f$fridgeId' : '';
-    return '$_aiSuggestionsCachePrefix${suffix}$fridgeSuffix';
+    return '$_aiSuggestionsCachePrefix${suffix}$modeSuffix$regionSuffix$fridgeSuffix';
   }
 
   static Future<void> _persistAiSuggestions(
     List<RecipeSuggestion> suggestions, {
+    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
+    String? region,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheKey = await _getAiSuggestionsCacheKey(fridgeId: fridgeId);
+      final cacheKey = await _getAiSuggestionsCacheKey(
+        mode: mode,
+        fridgeId: fridgeId,
+        region: region,
+      );
       final payload = jsonEncode(suggestions.map((e) => e.toJson()).toList());
       await prefs.setString(cacheKey, payload);
     } catch (e) {
@@ -155,11 +176,17 @@ class PantryService {
   }
 
   static Future<List<RecipeSuggestion>> _loadPersistedAiSuggestions({
+    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
+    String? region,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheKey = await _getAiSuggestionsCacheKey(fridgeId: fridgeId);
+      final cacheKey = await _getAiSuggestionsCacheKey(
+        mode: mode,
+        fridgeId: fridgeId,
+        region: region,
+      );
       final raw = prefs.getString(cacheKey);
       if (raw == null || raw.isEmpty) return [];
 
@@ -185,9 +212,15 @@ class PantryService {
   }
 
   static Future<List<RecipeSuggestion>> getCachedAiSuggestions({
+    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
+    String? region,
   }) async {
-    final persisted = await _loadPersistedAiSuggestions(fridgeId: fridgeId);
+    final persisted = await _loadPersistedAiSuggestions(
+      mode: mode,
+      fridgeId: fridgeId,
+      region: region,
+    );
     if (persisted.isNotEmpty) {
       _cachedAiSuggestions = persisted;
     }
@@ -355,13 +388,24 @@ class PantryService {
 
   /// Lấy gợi ý món ăn từ AI
   static Future<List<RecipeSuggestion>> getAiSuggestions({
+    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
+    String? region,
     int limit = 15,
+    String? refreshToken,
   }) async {
     try {
-      String url = '/api/v1/recipes/suggest-from-pantry?limit=$limit';
-      if (fridgeId != null) {
+      final regionCode = await _resolveRegionCode(region);
+      final endpoint = mode == RecipeSuggestionMode.region
+          ? '/api/v1/recipes/suggest-by-region'
+          : '/api/v1/recipes/suggest-from-pantry';
+
+      var url = '$endpoint?limit=$limit&region=$regionCode';
+      if (mode == RecipeSuggestionMode.pantry && fridgeId != null) {
         url += '&fridgeId=$fridgeId';
+      }
+      if (refreshToken != null && refreshToken.isNotEmpty) {
+        url += '&refreshToken=${Uri.encodeQueryComponent(refreshToken)}';
       }
       
       final resp = await ApiService.get(
@@ -376,14 +420,43 @@ class PantryService {
               .map((e) => RecipeSuggestion.fromJson(e))
               .toList();
           _cachedAiSuggestions = suggestions;
-          await _persistAiSuggestions(suggestions, fridgeId: fridgeId);
+          await _persistAiSuggestions(
+            suggestions,
+            mode: mode,
+            fridgeId: fridgeId,
+            region: regionCode,
+          );
           return suggestions;
         }
       }
     } catch (e) {
       debugPrint('PantryService.getAiSuggestions error: $e');
     }
-    return getCachedAiSuggestions();
+    return getCachedAiSuggestions(mode: mode, fridgeId: fridgeId, region: region);
+  }
+
+  static Future<String> _resolveRegionCode(String? region) async {
+    if (region != null && region.trim().isNotEmpty) {
+      return _normalizeRegionCode(region);
+    }
+
+    final profile = await RegionPreferenceService.getProfile();
+    switch (profile.region) {
+      case VietnamRegion.north:
+        return 'north';
+      case VietnamRegion.central:
+        return 'central';
+      case VietnamRegion.south:
+        return 'south';
+    }
+  }
+
+  static String _normalizeRegionCode(String raw) {
+    final value = raw.trim().toLowerCase();
+    if (value == 'bac') return 'north';
+    if (value == 'trung') return 'central';
+    if (value == 'nam') return 'south';
+    return value;
   }
 
   /// Tự động cleanup sản phẩm hết hạn

@@ -3,6 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
 import '../../services/pantry_service.dart';
 import '../../services/fridge_service.dart';
+import '../../services/region_preference_service.dart';
 import '../../widgets/fridge_selector.dart';
 import 'recipe_detail_screen.dart';
 
@@ -34,6 +35,8 @@ class _RecipeRecommendationsScreenState
   int? _selectedFridgeId;
   int _limit = _batchSize;
   int _ingredientCount = 0;
+  RecipeSuggestionMode _suggestionMode = RecipeSuggestionMode.pantry;
+  String _selectedRegionCode = 'south';
   late final AnimationController _shimmerController;
 
   @override
@@ -58,8 +61,14 @@ class _RecipeRecommendationsScreenState
 
     // Get active fridge ID as default
     _selectedFridgeId = await FridgeService.getActiveFridgeId();
+    final profile = await RegionPreferenceService.getProfile();
+    _selectedRegionCode = _regionCodeFromProfile(profile);
 
-    final cached = await PantryService.getCachedAiSuggestions(fridgeId: _selectedFridgeId);
+    final cached = await PantryService.getCachedAiSuggestions(
+      mode: _suggestionMode,
+      fridgeId: _selectedFridgeId,
+      region: _selectedRegionCode,
+    );
     if (mounted && cached.isNotEmpty) {
       setState(() {
         _replaceSuggestions(cached);
@@ -81,7 +90,12 @@ class _RecipeRecommendationsScreenState
   }
 
   Future<void> _refreshSuggestions({required int limit}) async {
-    final data = await PantryService.getAiSuggestions(limit: limit, fridgeId: _selectedFridgeId);
+    final data = await PantryService.getAiSuggestions(
+      mode: _suggestionMode,
+      limit: limit,
+      fridgeId: _selectedFridgeId,
+      region: _selectedRegionCode,
+    );
     if (!mounted) return;
 
     if (data.isNotEmpty) {
@@ -96,7 +110,13 @@ class _RecipeRecommendationsScreenState
 
     setState(() => _isLoadingMore = true);
     final nextLimit = _limit + _batchSize;
-    final data = await PantryService.getAiSuggestions(limit: nextLimit, fridgeId: _selectedFridgeId);
+    final data = await PantryService.getAiSuggestions(
+      mode: _suggestionMode,
+      limit: nextLimit,
+      fridgeId: _selectedFridgeId,
+      region: _selectedRegionCode,
+      refreshToken: DateTime.now().millisecondsSinceEpoch.toString(),
+    );
     if (!mounted) return;
 
     int appended = 0;
@@ -122,8 +142,88 @@ class _RecipeRecommendationsScreenState
   }
 
   Future<void> _refresh() async {
-    await _loadPantryIngredientCount();
+    if (_suggestionMode == RecipeSuggestionMode.pantry) {
+      await _loadPantryIngredientCount();
+    }
     await _refreshSuggestions(limit: _limit);
+  }
+
+  Future<void> _switchSuggestionMode(RecipeSuggestionMode mode) async {
+    if (_suggestionMode == mode) return;
+    setState(() {
+      _suggestionMode = mode;
+      _isLoading = true;
+      _limit = _batchSize;
+      _suggestions = [];
+      _loadedRecipeKeys.clear();
+    });
+
+    if (_suggestionMode == RecipeSuggestionMode.pantry) {
+      await _loadPantryIngredientCount();
+    } else {
+      setState(() => _ingredientCount = 0);
+    }
+
+    final cached = await PantryService.getCachedAiSuggestions(
+      mode: _suggestionMode,
+      fridgeId: _selectedFridgeId,
+      region: _selectedRegionCode,
+    );
+    if (!mounted) return;
+
+    if (cached.isNotEmpty) {
+      setState(() => _replaceSuggestions(cached));
+    }
+    await _refreshSuggestions(limit: _limit);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+  }
+
+  Future<void> _switchRegion(String regionCode) async {
+    if (_selectedRegionCode == regionCode) return;
+    setState(() {
+      _selectedRegionCode = regionCode;
+      _isLoading = true;
+      _limit = _batchSize;
+      _suggestions = [];
+      _loadedRecipeKeys.clear();
+    });
+
+    final cached = await PantryService.getCachedAiSuggestions(
+      mode: _suggestionMode,
+      fridgeId: _selectedFridgeId,
+      region: _selectedRegionCode,
+    );
+    if (!mounted) return;
+
+    if (cached.isNotEmpty) {
+      setState(() => _replaceSuggestions(cached));
+    }
+    await _refreshSuggestions(limit: _limit);
+    if (!mounted) return;
+    setState(() => _isLoading = false);
+  }
+
+  String _regionCodeFromProfile(RegionalProfile profile) {
+    switch (profile.region) {
+      case VietnamRegion.north:
+        return 'north';
+      case VietnamRegion.central:
+        return 'central';
+      case VietnamRegion.south:
+        return 'south';
+    }
+  }
+
+  String _regionLabel(String code) {
+    switch (code) {
+      case 'north':
+        return 'Miền Bắc';
+      case 'central':
+        return 'Miền Trung';
+      default:
+        return 'Miền Nam';
+    }
   }
 
   void _replaceSuggestions(List<RecipeSuggestion> data) {
@@ -264,19 +364,60 @@ class _RecipeRecommendationsScreenState
                 ],
               ),
               const SizedBox(height: 8),
-              FridgeSelector(
-                selectedFridgeId: _selectedFridgeId,
-                isCompact: true,
-                onSelected: (fridge) {
-                  setState(() {
-                    _selectedFridgeId = fridge.fridgeId;
-                    _isLoading = true;
-                  });
-                  _refresh().then((_) {
-                    if (mounted) setState(() => _isLoading = false);
-                  });
-                },
+              if (_suggestionMode == RecipeSuggestionMode.pantry) ...[
+                FridgeSelector(
+                  selectedFridgeId: _selectedFridgeId,
+                  isCompact: true,
+                  onSelected: (fridge) {
+                    setState(() {
+                      _selectedFridgeId = fridge.fridgeId;
+                      _isLoading = true;
+                    });
+                    _refresh().then((_) {
+                      if (mounted) setState(() => _isLoading = false);
+                    });
+                  },
+                ),
+                const SizedBox(height: 10),
+              ],
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildModeChip(
+                      title: 'Theo tủ lạnh',
+                      selected: _suggestionMode == RecipeSuggestionMode.pantry,
+                      onTap: () => _switchSuggestionMode(
+                        RecipeSuggestionMode.pantry,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: _buildModeChip(
+                      title: 'Theo vùng miền',
+                      selected: _suggestionMode == RecipeSuggestionMode.region,
+                      onTap: () => _switchSuggestionMode(
+                        RecipeSuggestionMode.region,
+                      ),
+                    ),
+                  ),
+                ],
               ),
+              if (_suggestionMode == RecipeSuggestionMode.region) ...[
+                const SizedBox(height: 10),
+                SingleChildScrollView(
+                  scrollDirection: Axis.horizontal,
+                  child: Row(
+                    children: [
+                      _buildRegionChip('north'),
+                      const SizedBox(width: 8),
+                      _buildRegionChip('central'),
+                      const SizedBox(width: 8),
+                      _buildRegionChip('south'),
+                    ],
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               TextField(
                 controller: _searchController,
@@ -310,7 +451,9 @@ class _RecipeRecommendationsScreenState
               ),
               const SizedBox(height: 8),
               Text(
-                'Dựa trên ${_ingredientCount > 0 ? _ingredientCount : 0} nguyên liệu trong tủ lạnh của bạn',
+                _suggestionMode == RecipeSuggestionMode.pantry
+                    ? 'Dựa trên ${_ingredientCount > 0 ? _ingredientCount : 0} nguyên liệu trong tủ lạnh của bạn'
+                    : 'Khám phá món ăn ${_regionLabel(_selectedRegionCode)} phù hợp bữa cơm hằng ngày',
                 style: const TextStyle(
                   fontSize: 13,
                   color: AppColors.textSecondary,
@@ -386,6 +529,51 @@ class _RecipeRecommendationsScreenState
         color: selected ? Colors.black : AppColors.textPrimary,
       ),
       visualDensity: const VisualDensity(horizontal: -1, vertical: -2),
+    );
+  }
+
+  Widget _buildModeChip({
+    required String title,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.primary : const Color(0xFFF1F3F5),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Text(
+          title,
+          textAlign: TextAlign.center,
+          style: TextStyle(
+            fontSize: 13,
+            fontWeight: FontWeight.w700,
+            color: selected ? Colors.white : AppColors.textPrimary,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRegionChip(String regionCode) {
+    final selected = _selectedRegionCode == regionCode;
+    return ChoiceChip(
+      label: Text(_regionLabel(regionCode)),
+      selected: selected,
+      showCheckmark: false,
+      onSelected: (_) => _switchRegion(regionCode),
+      backgroundColor: const Color(0xFFF1F3F5),
+      selectedColor: AppColors.primary,
+      side: BorderSide.none,
+      labelStyle: TextStyle(
+        fontSize: 13,
+        fontWeight: FontWeight.w600,
+        color: selected ? Colors.white : AppColors.textPrimary,
+      ),
     );
   }
 

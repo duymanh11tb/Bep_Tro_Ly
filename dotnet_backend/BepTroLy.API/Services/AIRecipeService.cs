@@ -42,6 +42,8 @@ public class AIRecipeService
     public async Task<Dictionary<string, object>> SuggestRecipesAsync(
         List<string> ingredients,
         Dictionary<string, object>? preferences = null,
+        string? region = null,
+        string? refreshToken = null,
         int limit = 5)
     {
         // If no ingredients, we enter "Discovery" mode
@@ -50,6 +52,12 @@ public class AIRecipeService
         // Ensure preferences is not null and include limit so cache key
         // differentiates between different requested recipe counts.
         preferences ??= new Dictionary<string, object>();
+        ApplyRegionalPreferences(preferences, region);
+        if (!string.IsNullOrWhiteSpace(refreshToken))
+        {
+            // Let clients request a fresh batch on demand ("Gợi ý mới").
+            preferences["refresh_token"] = refreshToken;
+        }
         preferences["limit"] = limit;
 
         // Check cache
@@ -136,6 +144,8 @@ public class AIRecipeService
         int userId,
         int? fridgeId = null,
         Dictionary<string, object>? preferences = null,
+        string? region = null,
+        string? refreshToken = null,
         int limit = 5)
     {
         var query = _db.PantryItems
@@ -149,7 +159,19 @@ public class AIRecipeService
         var pantryItems = await query.ToListAsync();
 
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
-        return await SuggestRecipesAsync(ingredients, preferences, limit);
+        return await SuggestRecipesAsync(ingredients, preferences, region, refreshToken, limit);
+    }
+
+    /// <summary>
+    /// Gợi ý món ăn theo vùng miền (không phụ thuộc tủ lạnh).
+    /// </summary>
+    public async Task<Dictionary<string, object>> SuggestByRegionAsync(
+        string? region,
+        Dictionary<string, object>? preferences = null,
+        string? refreshToken = null,
+        int limit = 5)
+    {
+        return await SuggestRecipesAsync(new List<string>(), preferences, region, refreshToken, limit);
     }
 
     private async Task<List<object>> GenerateAISuggestionsAsync(
@@ -165,21 +187,31 @@ public class AIRecipeService
         var dietary = preferences.TryGetValue("dietary_restrictions", out var d) ? d?.ToString() ?? "" : "";
         var cuisine = preferences.TryGetValue("cuisine", out var c) ? c?.ToString() ?? "Việt Nam" : "Việt Nam";
         var difficulty = preferences.TryGetValue("difficulty", out var diff) ? diff?.ToString() ?? "any" : "any";
+        var regionLabel = preferences.TryGetValue("region_label", out var r) ? r?.ToString() ?? "Toàn quốc" : "Toàn quốc";
+        var seasoningStyle = preferences.TryGetValue("seasoning_preference", out var s) ? s?.ToString() ?? "" : "";
+        var refreshToken = preferences.TryGetValue("refresh_token", out var rt) ? rt?.ToString() ?? "" : "";
 
         var dietaryText = !string.IsNullOrEmpty(dietary) ? $"Chế độ ăn đặc biệt: {dietary}" : "";
         var difficultyText = difficulty != "any" ? $"Độ khó: {difficulty}" : "";
+        var seasoningText = !string.IsNullOrEmpty(seasoningStyle) ? $"Khẩu vị vùng miền ưu tiên: {seasoningStyle}" : "";
+        var refreshHintText = !string.IsNullOrWhiteSpace(refreshToken)
+            ? $"Yêu cầu làm mới phiên gợi ý: {refreshToken}. Hãy ưu tiên danh sách đa dạng, hạn chế lặp lại các món quá phổ biến."
+            : "";
 
         var statusText = ingredients.Any()
             ? $"CHẾ ĐỘ GỢI Ý: Dựa trên {ingredients.Count} nguyên liệu có sẵn: {string.Join(", ", ingredients)}."
-            : "CHẾ ĐỘ KHÁM PHÁ: Tủ lạnh đang trống. Hãy gợi ý những món ăn Việt Nam 'quốc dân' cực kỳ hấp dẫn, dễ làm và phổ biến.";
+            : $"CHẾ ĐỘ KHÁM PHÁ: Hãy gợi ý thực đơn hằng ngày phù hợp với vùng miền ưu tiên: {regionLabel}.";
 
         var prompt = $$"""
             Bạn là một đầu bếp Việt Nam tài ba với kiến thức sâu rộng về ẩm thực 3 miền.
             
             {{statusText}}
             Phong cách ẩm thực yêu thích: {{cuisine}}
+            Vùng miền ưu tiên: {{regionLabel}}
+            {{seasoningText}}
             {{dietaryText}}
             {{difficultyText}}
+            {{refreshHintText}}
 
             NHIỆM VỤ: Đề xuất {{limit}} món ăn. 
             - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất, mang tính ứng dụng cao cho bữa ăn gia đình hàng ngày.
@@ -583,5 +615,41 @@ public class AIRecipeService
             .ToList();
 
         return ranked;
+    }
+
+    private static void ApplyRegionalPreferences(Dictionary<string, object> preferences, string? region)
+    {
+        if (string.IsNullOrWhiteSpace(region)) return;
+
+        var normalized = region.Trim().ToLowerInvariant();
+        if (normalized is "bac" or "north")
+        {
+            preferences["region_code"] = "north";
+            preferences["region_label"] = "Miền Bắc";
+            preferences["cuisine"] = "Ẩm thực miền Bắc Việt Nam";
+            preferences["seasoning_preference"] = "Nêm vị thanh, cân bằng, không quá ngọt.";
+            return;
+        }
+
+        if (normalized is "trung" or "central")
+        {
+            preferences["region_code"] = "central";
+            preferences["region_label"] = "Miền Trung";
+            preferences["cuisine"] = "Ẩm thực miền Trung Việt Nam";
+            preferences["seasoning_preference"] = "Nêm đậm đà hơn, có thể cay và mặn nhẹ tùy món.";
+            return;
+        }
+
+        if (normalized is "nam" or "south")
+        {
+            preferences["region_code"] = "south";
+            preferences["region_label"] = "Miền Nam";
+            preferences["cuisine"] = "Ẩm thực miền Nam Việt Nam";
+            preferences["seasoning_preference"] = "Nêm hài hòa thiên ngọt nhẹ, hương vị tròn đầy.";
+            return;
+        }
+
+        preferences["region_code"] = normalized;
+        preferences["region_label"] = region.Trim();
     }
 }

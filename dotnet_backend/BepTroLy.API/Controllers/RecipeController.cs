@@ -29,6 +29,8 @@ public class RecipeController : ControllerBase
         var result = await _aiService.SuggestRecipesAsync(
             request.Ingredients ?? new List<string>(),
             request.Preferences,
+            request.Region,
+            request.RefreshToken,
             request.Limit
         );
 
@@ -49,6 +51,8 @@ public class RecipeController : ControllerBase
             userId.Value,
             request.FridgeId,
             request.Preferences,
+            request.Region,
+            request.RefreshToken,
             request.Limit
         );
 
@@ -60,7 +64,11 @@ public class RecipeController : ControllerBase
     [HttpGet("suggest-from-pantry")]
     [Authorize]
     [EnableRateLimiting("ai-heavy")]
-    public async Task<IActionResult> SuggestFromPantryGet([FromQuery] int? fridgeId, [FromQuery] int limit = 5)
+    public async Task<IActionResult> SuggestFromPantryGet(
+        [FromQuery] int? fridgeId,
+        [FromQuery] int limit = 5,
+        [FromQuery] string? region = null,
+        [FromQuery] string? refreshToken = null)
     {
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
@@ -69,6 +77,28 @@ public class RecipeController : ControllerBase
             userId.Value,
             fridgeId,
             null,
+            region,
+            refreshToken,
+            limit
+        );
+
+        var success = (bool)result["success"];
+        return success ? Ok(result) : BadRequest(result);
+    }
+
+    /// <summary>Gợi ý món theo vùng miền (GET).</summary>
+    [HttpGet("suggest-by-region")]
+    [Authorize]
+    [EnableRateLimiting("ai-heavy")]
+    public async Task<IActionResult> SuggestByRegionGet(
+        [FromQuery] string? region,
+        [FromQuery] int limit = 5,
+        [FromQuery] string? refreshToken = null)
+    {
+        var result = await _aiService.SuggestByRegionAsync(
+            region,
+            null,
+            refreshToken,
             limit
         );
 

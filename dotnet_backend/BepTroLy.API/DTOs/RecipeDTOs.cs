@@ -4,6 +4,8 @@ public class SuggestRecipesRequest
 {
     public List<string> Ingredients { get; set; } = new();
     public Dictionary<string, object>? Preferences { get; set; }
+    public string? Region { get; set; }
+    public string? RefreshToken { get; set; }
     public int Limit { get; set; } = 5;
 }
 
@@ -11,6 +13,16 @@ public class SuggestFromPantryRequest
 {
     public int? FridgeId { get; set; }
     public Dictionary<string, object>? Preferences { get; set; }
+    public string? Region { get; set; }
+    public string? RefreshToken { get; set; }
+    public int Limit { get; set; } = 5;
+}
+
+public class SuggestByRegionRequest
+{
+    public string? Region { get; set; }
+    public Dictionary<string, object>? Preferences { get; set; }
+    public string? RefreshToken { get; set; }
     public int Limit { get; set; } = 5;
 }
 
