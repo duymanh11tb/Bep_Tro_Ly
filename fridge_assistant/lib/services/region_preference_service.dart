@@ -168,6 +168,12 @@ class RegionPreferenceService {
 
   static Future<RegionalProfile?> _detectRegionFromIp() async {
     try {
+      // Avoid third-party geo lookups in web builds because they are commonly
+      // blocked by browser policies/network rules in production.
+      if (kIsWeb) {
+        return null;
+      }
+
       final uri = Uri.parse('https://ipapi.co/json/');
       final resp = await http.get(uri).timeout(const Duration(seconds: 6));
       if (resp.statusCode != 200) return null;

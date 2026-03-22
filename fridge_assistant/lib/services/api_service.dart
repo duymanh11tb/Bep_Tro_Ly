@@ -49,6 +49,10 @@ class ApiService {
   static String _resolveWebBaseUrl(String? configured) {
     final page = Uri.base;
     final pageOrigin = page.origin;
+    final isLocalWebHost =
+        page.host == 'localhost' ||
+        page.host == '127.0.0.1' ||
+        page.host == '0.0.0.0';
 
     if (configured == null || configured.isEmpty) {
       return pageOrigin;
@@ -59,13 +63,17 @@ class ApiService {
       return pageOrigin;
     }
 
+    // In production web deployments, prefer same-origin so the app stays
+    // aligned with reverse proxies and avoids cross-origin/mixed-content issues.
+    if (!isLocalWebHost) {
+      return pageOrigin;
+    }
+
     final runningSecure = page.scheme == 'https';
     if (runningSecure && parsed.scheme == 'http') {
       // On web, https pages cannot fetch insecure http APIs.
       // Prefer same-origin when deployed behind a reverse proxy.
-      if (page.host.isNotEmpty &&
-          page.host != 'localhost' &&
-          page.host != '127.0.0.1') {
+      if (!isLocalWebHost) {
         return pageOrigin;
       }
 
