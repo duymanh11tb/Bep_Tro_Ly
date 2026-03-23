@@ -133,14 +133,14 @@ public class RecipeSuggestionService
             }
 
             var historyText = string.Join(", ", recentNames.Take(10));
-            var aiRecipes = await FetchRecipesFromSpoonacularAsync(
+            var catalogRecipes = await FetchRecipesFromSpoonacularAsync(
                 ingredients,
                 preferences,
                 limit,
                 historyText);
 
             var prioritizedCatalogRecipes = PrioritizePantryRelevantRecipes(
-                aiRecipes,
+                catalogRecipes,
                 ingredients,
                 requirePantryIngredientMatch
             );

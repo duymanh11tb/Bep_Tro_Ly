@@ -236,18 +236,6 @@ class PantryService {
     return persisted;
   }
 
-  static Future<List<RecipeSuggestion>> getCachedAiSuggestions({
-    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
-    int? fridgeId,
-    String? region,
-  }) {
-    return getCachedRecipeSuggestions(
-      mode: mode,
-      fridgeId: fridgeId,
-      region: region,
-    );
-  }
-
   static Future<void> clearCache({bool clearPersistent = false}) async {
     _cachedExpiringItems = [];
     _cachedStats = null;
@@ -538,26 +526,6 @@ class PantryService {
     }
   }
 
-  static Future<List<RecipeSuggestion>> getAiSuggestions({
-    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
-    int? fridgeId,
-    String? region,
-    int limit = 15,
-    String? refreshToken,
-    List<String>? excludeRecipeNames,
-    String? dietaryPreference,
-  }) {
-    return getRecipeSuggestions(
-      mode: mode,
-      fridgeId: fridgeId,
-      region: region,
-      limit: limit,
-      refreshToken: refreshToken,
-      excludeRecipeNames: excludeRecipeNames,
-      dietaryPreference: dietaryPreference,
-    );
-  }
-
   static bool get hasActiveRecipeCooldown =>
       _catalogCooldownUntil != null &&
       _catalogCooldownUntil!.isAfter(DateTime.now());
@@ -571,12 +539,6 @@ class PantryService {
 
   static String? get currentRecipeCooldownMessage =>
       _currentCatalogCooldownMessage();
-
-  static bool get hasActiveAiCooldown => hasActiveRecipeCooldown;
-
-  static int get aiCooldownRemainingSeconds => recipeCooldownRemainingSeconds;
-
-  static String? get currentAiCooldownMessage => currentRecipeCooldownMessage;
 
   static String? _currentCatalogCooldownMessage() {
     if (!hasActiveRecipeCooldown) return null;

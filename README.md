@@ -1,6 +1,6 @@
 # Bep Tro Ly
 
-Ung dung quan ly thuc pham trong tu lanh, goi y mon an bang AI, va quan ly meal plan.
+Ung dung quan ly thuc pham trong tu lanh, goi y mon an theo nguyen lieu, va quan ly meal plan.
 
 ## Tong Quan
 
@@ -28,7 +28,7 @@ Flutter app load bien moi truong tu `fridge_assistant/assets/.env`.
 Mau cau hinh nam o `fridge_assistant/assets/.env.example`:
 
 ```env
-API_URL=http://103.77.173.6:5001
+API_URL=< IP VPS >:5001
 API_URL_WEB=auto
 GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 ```
@@ -37,9 +37,7 @@ Quy uoc:
 
 - `API_URL`: dung cho mobile/native va local debug.
 - `API_URL_WEB=auto`: web tu dong goi same-origin cua trang dang mo.
-- `API_URL_WEB=https://api.tenmien.com`: chi dung khi muon web goi sang mot host rieng.
-
-Khuyen nghi production:
+  Khuyen nghi production:
 
 - Frontend web va API nen chay chung domain/HTTPS qua reverse proxy.
 - Giu `API_URL_WEB=auto` de tranh loi `Failed to fetch`, mixed content, va lech origin.
@@ -56,7 +54,7 @@ cp .env.example .env
 
 - `DB_PASSWORD`
 - `JWT_SECRET`
-- `GEMINI_API_KEY`
+- `SPOONACULAR_API_KEY`
 - `GOOGLE_CLIENT_ID`
 
 3. Build va chay:
@@ -89,7 +87,7 @@ docker compose logs -f api
 
 - Khong commit file `.env`.
 - Khong dua secret that vao `appsettings*.json`.
-- Neu nghi ngo lo secret: doi ngay `DB_PASSWORD`, `JWT_SECRET`, `GEMINI_API_KEY`.
+- Neu nghi ngo lo secret: doi ngay `DB_PASSWORD`, `JWT_SECRET`, `SPOONACULAR_API_KEY`.
 
 ## Lenh Thuong Dung
 
