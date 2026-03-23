@@ -458,15 +458,67 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              ClipRRect(
-                borderRadius: BorderRadius.circular(18),
-                child: SizedBox(
-                  height: 190,
-                  width: double.infinity,
-                  child: _buildHeaderImage(),
-                ),
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(18),
+                    child: SizedBox(
+                      height: 190,
+                      width: double.infinity,
+                      child: _buildHeaderImage(),
+                    ),
+                  ),
+                  Positioned(
+                    top: 12,
+                    left: 12,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withValues(alpha: 0.6),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.flash_on,
+                            color: Colors.amber,
+                            size: 16,
+                          ),
+                          const SizedBox(width: 4),
+                          Text(
+                            'Tương thích ${recipe.matchPercentage}%',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 14,
+                              fontWeight: FontWeight.w800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
               ),
               const SizedBox(height: 14),
+              if (recipe.cuisines.isNotEmpty || recipe.dishTypes.isNotEmpty)
+                Padding(
+                  padding: const EdgeInsets.only(bottom: 12),
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      ...recipe.cuisines.map(
+                        (c) => _buildMetadataBadge(c, const Color(0xFFFFE0B2)),
+                      ),
+                      ...recipe.dishTypes.map(
+                        (t) => _buildMetadataBadge(t, const Color(0xFFE1F5FE)),
+                      ),
+                    ],
+                  ),
+                ),
               Text(
                 recipe.description,
                 style: const TextStyle(
@@ -499,6 +551,50 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
                   _buildMetricCard('Khẩu phần', '${_servingEstimate()} Người'),
                   _buildMetricCard('Độ khó', _difficultyText()),
                 ],
+              ),
+              const SizedBox(height: 18),
+              const Text(
+                'Cách nấu (Công thức)',
+                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+              ),
+              const SizedBox(height: 10),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(14),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: _buildSteps().asMap().entries.map((entry) {
+                    final i = entry.key;
+                    final step = entry.value;
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8.0),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 10,
+                            backgroundColor: AppColors.primary,
+                            child: Text(
+                              '${i + 1}',
+                              style: const TextStyle(fontSize: 10, color: Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              step,
+                              style: const TextStyle(fontSize: 15, height: 1.4),
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  }).toList(),
+                ),
               ),
               const SizedBox(height: 18),
               const Text(
@@ -597,6 +693,24 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
               ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMetadataBadge(String label, Color color) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+          color: Colors.black87,
         ),
       ),
     );
@@ -723,26 +837,14 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
 
   Widget _buildHeaderImage() {
     final primary = recipe.imageUrl;
-    final secondary = RecipeSuggestion.fallbackImageForRecipe(recipe);
-
     if (primary == null || primary.isEmpty) {
-      return Image.network(
-        secondary,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildImageFallback(recipe.name),
-      );
+      return _buildImageFallback(recipe.name);
     }
 
     return Image.network(
       primary,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        return Image.network(
-          secondary,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildImageFallback(recipe.name),
-        );
-      },
+      errorBuilder: (_, __, ___) => _buildImageFallback(recipe.name),
     );
   }
 }

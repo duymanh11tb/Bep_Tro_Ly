@@ -14,11 +14,9 @@ namespace BepTroLy.API.Services;
 public class RecipeSuggestionService
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> _cacheKeyLocks = new();
-    private static readonly ConcurrentDictionary<string, string> _recipeImageCache = new();
     private const int RecentSuggestionsPerUser = 40;
     private static readonly ConcurrentDictionary<int, LinkedList<string>> _recentRecipeNamesByUser = new();
 
-    private readonly string? _pexelsApiKey;
     private readonly string? _spoonacularApiKey;
     private readonly string _spoonacularBaseUrl;
     private readonly HttpClient _httpClient;
@@ -32,7 +30,6 @@ public class RecipeSuggestionService
         IRecipeCatalogProvider catalogProvider,
         ILogger<RecipeSuggestionService> logger)
     {
-        _pexelsApiKey = configuration["Pexels:ApiKey"];
         _spoonacularApiKey = configuration["Spoonacular:ApiKey"];
         _spoonacularBaseUrl = configuration["Spoonacular:BaseUrl"] ?? "https://api.spoonacular.com";
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
@@ -531,7 +528,7 @@ public class RecipeSuggestionService
         return Convert.ToHexString(hashBytes).ToLower();
     }
 
-    private async Task<List<object>> EnsureRecipeImagesAsync(List<object> recipes)
+    private Task<List<object>> EnsureRecipeImagesAsync(List<object> recipes)
     {
         var result = new List<object>();
 
@@ -544,30 +541,19 @@ public class RecipeSuggestionService
                 continue;
             }
 
-            var name = map.TryGetValue("name", out var nameObj)
-                ? nameObj?.ToString() ?? "Mon an Viet Nam"
-                : "Mon an Viet Nam";
-
             var imageUrl = map.TryGetValue("image_url", out var imageObj)
                 ? imageObj?.ToString()
                 : null;
 
             if (ShouldResolveImageUrl(imageUrl))
             {
-                var imageQuery = map.TryGetValue("image_query", out var imageQueryObj)
-                    ? imageQueryObj?.ToString()
-                    : null;
-                var ingredientsUsed = map.TryGetValue("ingredients_used", out var usedObj)
-                    ? ExtractStringList(usedObj)
-                    : new List<string>();
-                var resolvedImage = await ResolveRecipeImageUrlAsync(name, imageQuery, ingredientsUsed);
-                map["image_url"] = resolvedImage;
+                map["image_url"] = string.Empty;
             }
 
             result.Add(map);
         }
 
-        return result;
+        return Task.FromResult(result);
     }
 
     private bool ShouldResolveImageUrl(string? imageUrl)
@@ -583,124 +569,10 @@ public class RecipeSuggestionService
         }
 
         var host = imageUri.Host.ToLowerInvariant();
-        return host.Contains("source.unsplash.com");
-    }
-
-    private async Task<string> ResolveRecipeImageUrlAsync(
-        string recipeName,
-        string? aiImageQuery,
-        List<string> ingredientsUsed)
-    {
-        foreach (var query in BuildRecipeImageQueries(recipeName, aiImageQuery, ingredientsUsed))
-        {
-            var cacheKey = NormalizeVietnameseText(query);
-            if (_recipeImageCache.TryGetValue(cacheKey, out var cachedImageUrl) &&
-                !string.IsNullOrWhiteSpace(cachedImageUrl))
-            {
-                return cachedImageUrl;
-            }
-
-            var pexelsImageUrl = await SearchPexelsImageAsync(query);
-            if (!string.IsNullOrWhiteSpace(pexelsImageUrl))
-            {
-                _recipeImageCache[cacheKey] = pexelsImageUrl;
-                return pexelsImageUrl;
-            }
-        }
-
-        return BuildFallbackImageUrl(recipeName);
-    }
-
-    private IEnumerable<string> BuildRecipeImageQueries(
-        string recipeName,
-        string? aiImageQuery,
-        List<string> ingredientsUsed)
-    {
-        var queries = new List<string>();
-
-        if (!string.IsNullOrWhiteSpace(aiImageQuery))
-        {
-            queries.Add(aiImageQuery.Trim());
-        }
-
-        if (!string.IsNullOrWhiteSpace(recipeName))
-        {
-            queries.Add(recipeName.Trim());
-            queries.Add($"Vietnamese dish {recipeName.Trim()}");
-        }
-
-        if (ingredientsUsed.Count > 0)
-        {
-            var signatureIngredients = string.Join(", ", ingredientsUsed.Take(3));
-            queries.Add($"Vietnamese food {recipeName.Trim()} {signatureIngredients}");
-        }
-
-        return queries
-            .Where(q => !string.IsNullOrWhiteSpace(q))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
-    }
-
-    private async Task<string?> SearchPexelsImageAsync(string query)
-    {
-        if (string.IsNullOrWhiteSpace(_pexelsApiKey) || string.IsNullOrWhiteSpace(query))
-        {
-            return null;
-        }
-
-        var url =
-            $"https://api.pexels.com/v1/search?query={Uri.EscapeDataString(query)}&per_page=1&orientation=landscape&locale=vi-VN";
-
-        try
-        {
-            using var request = new HttpRequestMessage(HttpMethod.Get, url);
-            request.Headers.TryAddWithoutValidation("Authorization", _pexelsApiKey);
-
-            using var response = await _httpClient.SendAsync(request);
-            if (!response.IsSuccessStatusCode)
-            {
-                _logger.LogWarning("Pexels image search failed for query '{Query}' with status {StatusCode}", query, response.StatusCode);
-                return null;
-            }
-
-            var payload = await response.Content.ReadAsStringAsync();
-            using var doc = JsonDocument.Parse(payload);
-            if (!doc.RootElement.TryGetProperty("photos", out var photos) ||
-                photos.ValueKind != JsonValueKind.Array ||
-                photos.GetArrayLength() == 0)
-            {
-                return null;
-            }
-
-            var firstPhoto = photos[0];
-            if (!firstPhoto.TryGetProperty("src", out var src) || src.ValueKind != JsonValueKind.Object)
-            {
-                return null;
-            }
-
-            if (src.TryGetProperty("landscape", out var landscape) &&
-                !string.IsNullOrWhiteSpace(landscape.GetString()))
-            {
-                return landscape.GetString();
-            }
-
-            if (src.TryGetProperty("large2x", out var large2x) &&
-                !string.IsNullOrWhiteSpace(large2x.GetString()))
-            {
-                return large2x.GetString();
-            }
-
-            if (src.TryGetProperty("large", out var large) &&
-                !string.IsNullOrWhiteSpace(large.GetString()))
-            {
-                return large.GetString();
-            }
-        }
-        catch (Exception ex)
-        {
-            _logger.LogWarning(ex, "Pexels image search error for query '{Query}'", query);
-        }
-
-        return null;
+        return host.Contains("source.unsplash.com") ||
+               host.Contains("imgur.com") ||
+               host.Contains("picsum.photos") ||
+               host.Contains("loremflickr.com");
     }
 
     private List<object> PrioritizePantryRelevantRecipes(
@@ -779,38 +651,6 @@ public class RecipeSuggestionService
         {
             return null;
         }
-    }
-
-    private string BuildFallbackImageUrl(string recipeName)
-    {
-        var normalized = NormalizeVietnameseText(recipeName);
-
-        if (normalized.Contains("bo") || normalized.Contains("bit tet") || normalized.Contains("steak"))
-        {
-            return "https://images.pexels.com/photos/361184/asparagus-steak-veal-steak-veal-361184.jpeg?auto=compress&cs=tinysrgb&w=1200";
-        }
-
-        if (normalized.Contains("ga"))
-        {
-            return "https://images.pexels.com/photos/616354/pexels-photo-616354.jpeg?auto=compress&cs=tinysrgb&w=1200";
-        }
-
-        if (normalized.Contains("ca") || normalized.Contains("tom") || normalized.Contains("hai san"))
-        {
-            return "https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1200";
-        }
-
-        if (normalized.Contains("pho") || normalized.Contains("bun") || normalized.Contains("mi"))
-        {
-            return "https://images.pexels.com/photos/1437267/pexels-photo-1437267.jpeg?auto=compress&cs=tinysrgb&w=1200";
-        }
-
-        if (normalized.Contains("salad") || normalized.Contains("rau") || normalized.Contains("chay"))
-        {
-            return "https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200";
-        }
-
-        return "https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=1200";
     }
 
     private static List<string> ExtractStringList(object? value)
@@ -1415,7 +1255,7 @@ public class RecipeSuggestionService
                 {
                     ["name"] = x.Template.Name,
                     ["description"] = x.Template.Description,
-                    ["image_url"] = BuildFallbackImageUrl(x.Template.Name),
+                    ["image_url"] = string.Empty,
                     ["difficulty"] = x.Template.Difficulty,
                     ["prep_time"] = x.Template.Prep,
                     ["cook_time"] = x.Template.Cook,

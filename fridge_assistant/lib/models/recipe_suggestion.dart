@@ -11,6 +11,8 @@ class RecipeSuggestion {
   final double matchScore;
   final int ingredientsExpiringCount;
   final List<String> instructions;
+  final List<String> cuisines;
+  final List<String> dishTypes;
   final String? tips;
   String? status; // liked, disliked, hidden
 
@@ -27,6 +29,8 @@ class RecipeSuggestion {
     this.matchScore = 0.0,
     this.ingredientsExpiringCount = 0,
     this.instructions = const [],
+    this.cuisines = const [],
+    this.dishTypes = const [],
     this.tips,
     this.status,
   });
@@ -67,11 +71,7 @@ class RecipeSuggestion {
           json['id']?.toString() ??
           DateTime.now().millisecondsSinceEpoch.toString(),
       name: recipeName,
-      imageUrl: _normalizeImageUrl(
-        json['image_url'],
-        recipeName,
-        ingredientsUsed,
-      ),
+      imageUrl: _normalizeImageUrl(json['image_url']),
       description: json['description'] ?? '',
       ingredientsUsed: ingredientsUsed,
       ingredientsMissing: List<String>.from(json['ingredients_missing'] ?? []),
@@ -81,222 +81,22 @@ class RecipeSuggestion {
       matchScore: (json['match_score'] ?? 0.0).toDouble(),
       ingredientsExpiringCount: json['ingredients_expiring_count'] ?? 0,
       instructions: List<String>.from(json['instructions'] ?? []),
+      cuisines: List<String>.from(json['cuisines'] ?? []),
+      dishTypes: List<String>.from(json['dish_types'] ?? []),
       tips: json['tips'],
       status: json['status'],
     );
   }
 
-  static String fallbackImageForName(String recipeName) {
-    return _fallbackImageUrl(recipeName, const []);
-  }
-
-  static String fallbackImageForRecipe(RecipeSuggestion recipe) {
-    return _fallbackImageUrl(recipe.name, recipe.ingredientsUsed);
-  }
-
-  static String _fallbackImageUrl(
-    String recipeName,
-    List<String> ingredientsUsed,
-  ) {
-    final normalized = _normalizeText(
-      '$recipeName ${ingredientsUsed.join(' ')}',
-    );
-
-    const exactDishImages = <String, String>{
-      'bò xào cà chua':
-          'https://cdn.tgdd.vn/2022/01/CookDish/cach-lam-mon-thit-bam-xao-ca-chua-thom-ngon-la-mieng-cho-bua-avt-1200x676.jpg',
-      'thịt bò lúc lắc':
-          'https://i.ytimg.com/vi/0X5m98q3Pn0/maxresdefault.jpg',
-      'gà kho gừng':
-          'https://i.ytimg.com/vi/xFzQdCIrgko/maxresdefault.jpg',
-      'thịt kho tàu':
-          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
-      'canh chua cá lóc':
-          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
-      'cá kho tộ':
-          'https://i.ytimg.com/vi/zvlct2ZXhj8/maxresdefault.jpg',
-      'phở bò':
-          'https://cdn.tgdd.vn/2020/11/CookProduct/pho-bo-thumbnail-1200x676.jpg',
-      'bún bò huế':
-          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
-      'bún riêu cua':
-          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
-      'mì xào bò rau cải':
-          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
-      'cơm chiên dương châu':
-          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
-      'gỏi cuốn tôm thịt':
-          'https://images.pexels.com/photos/2097090/pexels-photo-2097090.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'lẩu thái hải sản':
-          'https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'salad úc gà và bò':
-          'https://images.pexels.com/photos/1213710/pexels-photo-1213710.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'bò né chảo gang':
-          'https://images.pexels.com/photos/361184/asparagus-steak-veal-steak-veal-361184.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'bánh xèo miền tây':
-          'https://images.pexels.com/photos/5560763/pexels-photo-5560763.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'mì quảng gà':
-          'https://images.pexels.com/photos/1437267/pexels-photo-1437267.jpeg?auto=compress&cs=tinysrgb&w=1200',
-    };
-
-    for (final entry in exactDishImages.entries) {
-      if (normalized.contains(entry.key)) return entry.value;
-    }
-    const imageByKeyword = <String, List<String>>{
-      'bo': [
-        'https://images.pexels.com/photos/1860204/pexels-photo-1860204.jpeg?auto=compress&cs=tinysrgb&w=1200',
-        'https://images.pexels.com/photos/361184/asparagus-steak-veal-steak-veal-361184.jpeg?auto=compress&cs=tinysrgb&w=1200',
-        'https://images.pexels.com/photos/769289/pexels-photo-769289.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'ga': [
-        'https://images.pexels.com/photos/616354/pexels-photo-616354.jpeg?auto=compress&cs=tinysrgb&w=1200',
-        'https://images.pexels.com/photos/2338407/pexels-photo-2338407.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'ca': [
-        'https://images.pexels.com/photos/262959/pexels-photo-262959.jpeg?auto=compress&cs=tinysrgb&w=1200',
-        'https://images.pexels.com/photos/1516415/pexels-photo-1516415.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'tom': [
-        'https://images.pexels.com/photos/3296277/pexels-photo-3296277.jpeg?auto=compress&cs=tinysrgb&w=1200',
-        'https://images.pexels.com/photos/725991/pexels-photo-725991.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'pho': [
-        'https://images.pexels.com/photos/6646035/pexels-photo-6646035.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'bun': [
-        'https://images.pexels.com/photos/884600/pexels-photo-884600.jpeg?auto=compress&cs=tinysrgb&w=1200',
-        'https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'mi': [
-        'https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'lau': [
-        'https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'salad': [
-        'https://images.pexels.com/photos/1213710/pexels-photo-1213710.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'canh': [
-        'https://images.pexels.com/photos/539451/pexels-photo-539451.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'com': [
-        'https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'xao': [
-        'https://images.pexels.com/photos/1437267/pexels-photo-1437267.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-      'chay': [
-        'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      ],
-    };
-
-    for (final entry in imageByKeyword.entries) {
-      if (normalized.contains(entry.key)) {
-        final options = entry.value;
-        return options[recipeName.hashCode.abs() % options.length];
-      }
-    }
-
-    const generic = [
-      'https://images.pexels.com/photos/1640774/pexels-photo-1640774.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'https://images.pexels.com/photos/958545/pexels-photo-958545.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'https://images.pexels.com/photos/958547/pexels-photo-958547.jpeg?auto=compress&cs=tinysrgb&w=1200',
-    ];
-    return generic[recipeName.hashCode.abs() % generic.length];
-  }
-
-  static String _normalizeText(String input) {
-    var text = input.toLowerCase().trim();
-    const vietnameseMap = {
-      'à': 'a',
-      'á': 'a',
-      'ạ': 'a',
-      'ả': 'a',
-      'ã': 'a',
-      'â': 'a',
-      'ầ': 'a',
-      'ấ': 'a',
-      'ậ': 'a',
-      'ẩ': 'a',
-      'ẫ': 'a',
-      'ă': 'a',
-      'ằ': 'a',
-      'ắ': 'a',
-      'ặ': 'a',
-      'ẳ': 'a',
-      'ẵ': 'a',
-      'è': 'e',
-      'é': 'e',
-      'ẹ': 'e',
-      'ẻ': 'e',
-      'ẽ': 'e',
-      'ê': 'e',
-      'ề': 'e',
-      'ế': 'e',
-      'ệ': 'e',
-      'ể': 'e',
-      'ễ': 'e',
-      'ì': 'i',
-      'í': 'i',
-      'ị': 'i',
-      'ỉ': 'i',
-      'ĩ': 'i',
-      'ò': 'o',
-      'ó': 'o',
-      'ọ': 'o',
-      'ỏ': 'o',
-      'õ': 'o',
-      'ô': 'o',
-      'ồ': 'o',
-      'ố': 'o',
-      'ộ': 'o',
-      'ổ': 'o',
-      'ỗ': 'o',
-      'ơ': 'o',
-      'ờ': 'o',
-      'ớ': 'o',
-      'ợ': 'o',
-      'ở': 'o',
-      'ỡ': 'o',
-      'ù': 'u',
-      'ú': 'u',
-      'ụ': 'u',
-      'ủ': 'u',
-      'ũ': 'u',
-      'ư': 'u',
-      'ừ': 'u',
-      'ứ': 'u',
-      'ự': 'u',
-      'ử': 'u',
-      'ữ': 'u',
-      'ỳ': 'y',
-      'ý': 'y',
-      'ỵ': 'y',
-      'ỷ': 'y',
-      'ỹ': 'y',
-      'đ': 'd',
-    };
-
-    vietnameseMap.forEach((key, value) {
-      text = text.replaceAll(key, value);
-    });
-
-    return text.replaceAll(RegExp(r'\s+'), ' ');
-  }
-
-  static String? _normalizeImageUrl(
-    dynamic rawUrl,
-    String recipeName,
-    List<String> ingredientsUsed,
-  ) {
+  static String? _normalizeImageUrl(dynamic rawUrl) {
     final url = rawUrl?.toString().trim();
     if (url == null || url.isEmpty) {
-      return _fallbackImageUrl(recipeName, ingredientsUsed);
+      return null;
     }
 
     final uri = Uri.tryParse(url);
     if (uri == null || !uri.hasScheme || !uri.hasAuthority) {
-      return _fallbackImageUrl(recipeName, ingredientsUsed);
+      return null;
     }
 
     final host = uri.host.toLowerCase();
@@ -310,15 +110,14 @@ class RecipeSuggestion {
     };
 
     if (blockedHosts.contains(host)) {
-      return _fallbackImageUrl(recipeName, ingredientsUsed);
+      return null;
     }
 
-    // Replace weak/random providers with curated food photos.
     if (url.contains('source.unsplash.com') ||
         url.contains('picsum.photos') ||
         url.contains('loremflickr.com') ||
         url.contains('imgur.com')) {
-      return _fallbackImageUrl(recipeName, ingredientsUsed);
+      return null;
     }
 
     return url;
@@ -337,6 +136,8 @@ class RecipeSuggestion {
     double? matchScore,
     int? ingredientsExpiringCount,
     List<String>? instructions,
+    List<String>? cuisines,
+    List<String>? dishTypes,
     String? tips,
     String? status,
   }) {
@@ -354,6 +155,8 @@ class RecipeSuggestion {
       ingredientsExpiringCount:
           ingredientsExpiringCount ?? this.ingredientsExpiringCount,
       instructions: instructions ?? this.instructions,
+      cuisines: cuisines ?? this.cuisines,
+      dishTypes: dishTypes ?? this.dishTypes,
       tips: tips ?? this.tips,
       status: status ?? this.status,
     );
@@ -373,6 +176,8 @@ class RecipeSuggestion {
       'match_score': matchScore,
       'ingredients_expiring_count': ingredientsExpiringCount,
       'instructions': instructions,
+      'cuisines': cuisines,
+      'dish_types': dishTypes,
       'tips': tips,
       'status': status,
     };

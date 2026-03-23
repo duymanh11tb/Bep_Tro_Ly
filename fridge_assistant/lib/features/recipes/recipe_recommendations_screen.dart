@@ -1,7 +1,6 @@
 import 'dart:async';
 
 import 'package:fridge_assistant/core/localization/app_material.dart';
-import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
@@ -261,11 +260,6 @@ class _RecipeRecommendationsScreenState
     }
   }
 
-  Future<void> _openPexelsCredit() async {
-    final uri = Uri.parse('https://www.pexels.com');
-    await launchUrl(uri, mode: LaunchMode.externalApplication);
-  }
-
   void _replaceSuggestions(List<RecipeSuggestion> data) {
     _suggestions = List<RecipeSuggestion>.from(data);
     _loadedRecipeKeys
@@ -441,7 +435,7 @@ class _RecipeRecommendationsScreenState
     }
 
     if (_suggestionMode == RecipeSuggestionMode.pantry && _ingredientCount == 0) {
-      return 'Tủ lạnh đang trống. Hãy thêm nguyên liệu để nhận gợi ý công thức.';
+      return 'Không tìm thấy nguyên liệu để gợi ý. Hãy thêm thức ăn vào tủ lạnh nhé!';
     }
 
     if (_searchQuery.trim().isNotEmpty || _selectedTab != _tabAll) {
@@ -624,25 +618,6 @@ class _RecipeRecommendationsScreenState
                   color: AppColors.textSecondary,
                 ),
               ),
-              Align(
-                alignment: Alignment.centerLeft,
-                child: TextButton(
-                  onPressed: _openPexelsCredit,
-                  style: TextButton.styleFrom(
-                    padding: EdgeInsets.zero,
-                    minimumSize: const Size(0, 28),
-                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                  child: const Text(
-                    'Ảnh minh họa từ Pexels khi có sẵn',
-                    style: TextStyle(
-                      fontSize: 12,
-                      color: AppColors.textSecondary,
-                      decoration: TextDecoration.underline,
-                    ),
-                  ),
-                ),
-              ),
               const SizedBox(height: 8),
               if (_isLoading)
                 ...List.generate(3, (_) => _buildSkeletonCard())
@@ -781,6 +756,32 @@ class _RecipeRecommendationsScreenState
                   width: double.infinity,
                   child: _buildRecipeImage(recipe),
                 ),
+                Positioned(
+                  top: 8,
+                  left: 8,
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withValues(alpha: 0.65),
+                      borderRadius: BorderRadius.circular(16),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(Icons.flash_on, color: Colors.amber, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          'Tương thích ${recipe.matchPercentage}%',
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
                 if (recipe.ingredientsExpiringCount > 0)
                   Positioned(
                     top: 8,
@@ -822,6 +823,19 @@ class _RecipeRecommendationsScreenState
                     ),
                   ),
                   const SizedBox(height: 6),
+                  if (recipe.cuisines.isNotEmpty || recipe.dishTypes.isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 6),
+                      child: SingleChildScrollView(
+                        scrollDirection: Axis.horizontal,
+                        child: Row(
+                          children: [
+                            ...recipe.cuisines.map((c) => _buildBadge(c, const Color(0xFFFFE0B2))),
+                            ...recipe.dishTypes.take(2).map((t) => _buildBadge(t, const Color(0xFFE1F5FE))),
+                          ],
+                        ),
+                      ),
+                    ),
                   Row(
                     children: [
                       const Icon(
@@ -1028,6 +1042,25 @@ class _RecipeRecommendationsScreenState
       fit: BoxFit.cover,
       errorBuilder: (context, error, stackTrace) =>
           _buildRecipeImageFallback(recipe.name),
+    );
+  }
+
+  Widget _buildBadge(String label, Color color) {
+    return Container(
+      margin: const EdgeInsets.only(right: 6),
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: color,
+        borderRadius: BorderRadius.circular(6),
+      ),
+      child: Text(
+        label,
+        style: const TextStyle(
+          fontSize: 11,
+          fontWeight: FontWeight.w700,
+          color: Colors.black87,
+        ),
+      ),
     );
   }
 

@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${APP_DIR:-/root/bep-tro-ly}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="${APP_DIR:-$SCRIPT_DIR}"
 BRANCH="${BRANCH:-dev}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:5001/health}"
 HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
@@ -9,6 +10,17 @@ HEALTH_SLEEP_SECONDS="${HEALTH_SLEEP_SECONDS:-2}"
 
 echo "[1/5] Enter project directory: ${APP_DIR}"
 cd "${APP_DIR}"
+
+if [ ! -f .env ]; then
+  echo "Error: .env file not found in ${APP_DIR}."
+  echo "Please create one from .env.example before deploying."
+  exit 1
+fi
+
+if [ ! -f docker-compose.yml ]; then
+  echo "Error: docker-compose.yml not found in ${APP_DIR}."
+  exit 1
+fi
 
 echo "[2/5] Update source from origin/${BRANCH}"
 git fetch origin
