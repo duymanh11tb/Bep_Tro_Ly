@@ -307,5 +307,5 @@ app.MapGet("/debug/jwt", (JwtService jwt) =>
     }
 });
 
-// Lắng nghe trên tất cả các địa chỉ IP để điện thoại thật có thể kết nối
-app.Run("http://0.0.0.0:5186");
+// Tôn trọng ASPNETCORE_URLS / launchSettings để tránh lệch cổng giữa local và Docker.
+app.Run();

@@ -9,21 +9,29 @@ class AuthService {
   static const String _userKey = 'user_data';
 
   Future<Map<String, dynamic>> login(String email, String password) async {
-    final response = await ApiService.post('/api/v1/auth/login', {
-      'email': email,
-      'password': password,
-    });
+    try {
+      final response = await ApiService.post('/api/v1/auth/login', {
+        'email': email,
+        'password': password,
+      });
 
-    final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
-    if (response.statusCode == 200) {
-      final token = data['token'];
-      final user = data['user'];
+      if (response.statusCode == 200) {
+        final token = data['token'];
+        final user = data['user'];
 
-      await _saveAuthData(token, user);
-      return {'success': true, 'data': data};
-    } else {
-      return {'success': false, 'message': data['error'] ?? 'Login failed'};
+        await _saveAuthData(token, user);
+        return {'success': true, 'data': data};
+      } else {
+        return {'success': false, 'message': data['error'] ?? 'Login failed'};
+      }
+    } catch (e) {
+      debugPrint('AuthService: login error: $e');
+      return {
+        'success': false,
+        'message': 'Không kết nối được tới máy chủ. Hãy kiểm tra API_URL hoặc trạng thái server.',
+      };
     }
   }
 
@@ -32,24 +40,32 @@ class AuthService {
     String password, {
     String? displayName,
   }) async {
-    final response = await ApiService.post('/api/v1/auth/register', {
-      'email': email,
-      'password': password,
-      'display_name': displayName ?? email.split('@')[0],
-    });
+    try {
+      final response = await ApiService.post('/api/v1/auth/register', {
+        'email': email,
+        'password': password,
+        'display_name': displayName ?? email.split('@')[0],
+      });
 
-    final data = jsonDecode(response.body);
+      final data = jsonDecode(response.body);
 
-    if (response.statusCode == 201) {
-      final token = data['token'];
-      final user = data['user'];
+      if (response.statusCode == 201) {
+        final token = data['token'];
+        final user = data['user'];
 
-      await _saveAuthData(token, user);
-      return {'success': true, 'data': data};
-    } else {
+        await _saveAuthData(token, user);
+        return {'success': true, 'data': data};
+      } else {
+        return {
+          'success': false,
+          'message': data['error'] ?? 'Registration failed',
+        };
+      }
+    } catch (e) {
+      debugPrint('AuthService: register error: $e');
       return {
         'success': false,
-        'message': data['error'] ?? 'Registration failed',
+        'message': 'Không kết nối được tới máy chủ. Hãy kiểm tra API_URL hoặc trạng thái server.',
       };
     }
   }
