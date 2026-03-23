@@ -29,6 +29,9 @@ public class AIRecipeService
 
     private readonly string? _apiKey;
     private readonly string? _pexelsApiKey;
+    private readonly string _aiProvider;
+    private readonly string _ollamaBaseUrl;
+    private readonly string _ollamaModel;
     private readonly string _modelName;
     private readonly HttpClient _httpClient;
     private readonly AppDbContext _db;
@@ -38,6 +41,9 @@ public class AIRecipeService
     {
         _apiKey = configuration["Gemini:ApiKey"];
         _pexelsApiKey = configuration["Pexels:ApiKey"];
+        _aiProvider = (configuration["AI:Provider"] ?? "gemini").Trim().ToLowerInvariant();
+        _ollamaBaseUrl = (configuration["Ollama:BaseUrl"] ?? "http://localhost:11434/api").Trim().TrimEnd('/');
+        _ollamaModel = configuration["Ollama:Model"] ?? "qwen3:4b";
         _modelName = configuration["Gemini:Model"] ?? "gemini-2.5-flash";
         _httpClient = new HttpClient { Timeout = _geminiTimeout };
         _db = db;
@@ -413,9 +419,6 @@ public class AIRecipeService
         int limit,
         string historyText = "")
     {
-        if (string.IsNullOrEmpty(_apiKey))
-            throw new InvalidOperationException("Gemini API key chưa được cấu hình");
-
         preferences ??= new Dictionary<string, object>();
         var feedbackContext = string.IsNullOrEmpty(historyText)
             ? ""
@@ -566,6 +569,14 @@ public class AIRecipeService
 
             Sắp xếp theo thứ tự ưu tiên nhất lên đầu.
             """;
+
+        if (_aiProvider == "ollama")
+        {
+            return await GenerateOllamaSuggestionsAsync(prompt);
+        }
+
+        if (string.IsNullOrEmpty(_apiKey))
+            throw new InvalidOperationException("Gemini API key chưa được cấu hình");
 
         // Call Gemini REST API.
         // Public Gemini structured output fields like responseMimeType are documented on v1beta.
@@ -810,6 +821,79 @@ public class AIRecipeService
         }
 
         return null;
+    }
+
+    private async Task<List<object>> GenerateOllamaSuggestionsAsync(string prompt)
+    {
+        if (string.IsNullOrWhiteSpace(_ollamaModel))
+        {
+            throw new InvalidOperationException("Ollama model chưa được cấu hình");
+        }
+
+        var url = $"{_ollamaBaseUrl}/generate";
+        var requestBody = new
+        {
+            model = _ollamaModel,
+            prompt,
+            format = "json",
+            stream = false,
+            options = new
+            {
+                temperature = 0.35
+            }
+        };
+
+        var json = JsonSerializer.Serialize(requestBody);
+        var content = new StringContent(json, Encoding.UTF8, "application/json");
+        string responseText;
+        HttpResponseMessage response;
+
+        try
+        {
+            response = await _httpClient.PostAsync(url, content);
+            responseText = await response.Content.ReadAsStringAsync();
+        }
+        catch (TaskCanceledException ex)
+        {
+            throw new TimeoutException("Ollama phản hồi chậm, vui lòng thử lại sau ít phút.", ex);
+        }
+        catch (Exception ex)
+        {
+            throw new Exception($"Không thể kết nối Ollama tại {_ollamaBaseUrl}: {ex.Message}", ex);
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new Exception($"Ollama API error: {response.StatusCode} - {responseText}");
+        }
+
+        try
+        {
+            using var outerDoc = JsonDocument.Parse(responseText);
+            if (!outerDoc.RootElement.TryGetProperty("response", out var responseElement))
+            {
+                throw new Exception("Ollama không trả về trường response");
+            }
+
+            var text = responseElement.GetString()?.Trim() ?? string.Empty;
+            if (string.IsNullOrWhiteSpace(text))
+            {
+                throw new Exception("Ollama trả về nội dung rỗng");
+            }
+
+            using var resultDoc = JsonDocument.Parse(text);
+            if (!resultDoc.RootElement.TryGetProperty("recipes", out var recipes))
+            {
+                throw new Exception("Ollama không trả về danh sách recipes");
+            }
+
+            return JsonSerializer.Deserialize<List<object>>(recipes.GetRawText()) ?? new List<object>();
+        }
+        catch (JsonException ex)
+        {
+            _logger.LogError(ex, "Lỗi parse JSON trả về từ Ollama: {Response}", responseText);
+            throw new Exception("Không thể parse JSON từ Ollama");
+        }
     }
 
     private static bool TryExtractRetryDelay(string responseText, out TimeSpan retryDelay)
