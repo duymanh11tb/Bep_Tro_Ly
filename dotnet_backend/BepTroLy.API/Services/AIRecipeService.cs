@@ -477,16 +477,15 @@ public class AIRecipeService
             Sắp xếp theo thứ tự ưu tiên nhất lên đầu.
             """;
 
-        // Call Gemini REST API
-        // Use Gemini 2.5 Flash (free tier in current project)
+        // Call Gemini REST API.
+        // Public Gemini structured output fields like responseMimeType are documented on v1beta.
         if (IsCircuitOpen(out var retryAfter))
         {
             var waitSeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
             throw new InvalidOperationException($"AI đang quá tải, vui lòng thử lại sau {waitSeconds} giây.");
         }
 
-        // Dùng gemini-1.5-flash-latest hoặc gemini-pro để đảm bảo độ tương thích
-        var url = $"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={_apiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={_apiKey}";
 
         var requestBody = new
         {
