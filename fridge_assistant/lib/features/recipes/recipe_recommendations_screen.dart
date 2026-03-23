@@ -32,6 +32,7 @@ class _RecipeRecommendationsScreenState
   bool _isLoadingMore = false;
   String _selectedTab = _tabAll;
   String _searchQuery = '';
+  String? _loadError;
   int? _selectedFridgeId;
   int _limit = _batchSize;
   int _ingredientCount = 0;
@@ -57,7 +58,10 @@ class _RecipeRecommendationsScreenState
   }
 
   Future<void> _loadInitialData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
 
     // Get active fridge ID as default
     _selectedFridgeId = await FridgeService.getActiveFridgeId();
@@ -90,17 +94,23 @@ class _RecipeRecommendationsScreenState
   }
 
   Future<void> _refreshSuggestions({required int limit}) async {
-    final data = await PantryService.getAiSuggestions(
-      mode: _suggestionMode,
-      limit: limit,
-      fridgeId: _selectedFridgeId,
-      region: _selectedRegionCode,
-    );
-    if (!mounted) return;
+    try {
+      final data = await PantryService.getAiSuggestions(
+        mode: _suggestionMode,
+        limit: limit,
+        fridgeId: _selectedFridgeId,
+        region: _selectedRegionCode,
+      );
+      if (!mounted) return;
 
-    if (data.isNotEmpty) {
       setState(() {
         _replaceSuggestions(data);
+        _loadError = null;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loadError = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -111,36 +121,44 @@ class _RecipeRecommendationsScreenState
     setState(() => _isLoadingMore = true);
     final nextLimit = _limit + _batchSize;
     final excludes = _suggestions.map((e) => e.name).toList();
-    final data = await PantryService.getAiSuggestions(
-      mode: _suggestionMode,
-      limit: _batchSize,
-      fridgeId: _selectedFridgeId,
-      region: _selectedRegionCode,
-      refreshToken: DateTime.now().millisecondsSinceEpoch.toString(),
-      excludeRecipeNames: excludes,
-    );
-    if (!mounted) return;
+    try {
+      final data = await PantryService.getAiSuggestions(
+        mode: _suggestionMode,
+        limit: _batchSize,
+        fridgeId: _selectedFridgeId,
+        region: _selectedRegionCode,
+        refreshToken: DateTime.now().millisecondsSinceEpoch.toString(),
+        excludeRecipeNames: excludes,
+      );
+      if (!mounted) return;
 
-    int replaced = 0;
-    if (data.isNotEmpty) {
       setState(() {
         _replaceSuggestions(data);
-        replaced = data.length;
+        _limit = nextLimit;
+        _loadError = null;
       });
-    }
 
-    setState(() {
-      _limit = nextLimit;
-      _isLoadingMore = false;
-    });
-
-    if (replaced == 0) {
+      if (data.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('AI chưa có thêm món mới phù hợp lúc này.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      final message = e.toString().replaceFirst('Exception: ', '');
+      setState(() => _loadError = message);
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Hiện chưa có thêm món mới để gợi ý.'),
+        SnackBar(
+          content: Text(message),
           behavior: SnackBarBehavior.floating,
         ),
       );
+    } finally {
+      if (!mounted) return;
+      setState(() => _isLoadingMore = false);
     }
   }
 
@@ -156,6 +174,7 @@ class _RecipeRecommendationsScreenState
     setState(() {
       _suggestionMode = mode;
       _isLoading = true;
+      _loadError = null;
       _limit = _batchSize;
       _suggestions = [];
       _loadedRecipeKeys.clear();
@@ -187,6 +206,7 @@ class _RecipeRecommendationsScreenState
     setState(() {
       _selectedRegionCode = regionCode;
       _isLoading = true;
+      _loadError = null;
       _limit = _batchSize;
       _suggestions = [];
       _loadedRecipeKeys.clear();
@@ -352,6 +372,46 @@ class _RecipeRecommendationsScreenState
     return estimated;
   }
 
+  String _emptyStateMessage() {
+    if (_loadError != null && _loadError!.trim().isNotEmpty) {
+      return _loadError!;
+    }
+
+    if (_suggestionMode == RecipeSuggestionMode.pantry && _ingredientCount == 0) {
+      return 'Tủ lạnh đang trống. Hãy thêm nguyên liệu để AI gợi ý món ăn.';
+    }
+
+    if (_searchQuery.trim().isNotEmpty || _selectedTab != _tabAll) {
+      return 'Chưa có công thức phù hợp với bộ lọc hiện tại.';
+    }
+
+    return _suggestionMode == RecipeSuggestionMode.pantry
+        ? 'AI chưa tìm được món phù hợp với nguyên liệu đang có trong tủ.'
+        : 'AI chưa có gợi ý phù hợp cho vùng miền này.';
+  }
+
+  Widget _buildEmptyStateCard() {
+    final isError = _loadError != null && _loadError!.trim().isNotEmpty;
+    return Container(
+      margin: const EdgeInsets.only(top: 36),
+      padding: const EdgeInsets.all(18),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: isError ? AppColors.error.withValues(alpha: 0.25) : AppColors.divider,
+        ),
+      ),
+      child: Text(
+        _emptyStateMessage(),
+        textAlign: TextAlign.center,
+        style: TextStyle(
+          color: isError ? AppColors.error : AppColors.textSecondary,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final items = _filteredSuggestions;
@@ -398,6 +458,10 @@ class _RecipeRecommendationsScreenState
                     setState(() {
                       _selectedFridgeId = fridge.fridgeId;
                       _isLoading = true;
+                      _loadError = null;
+                      _limit = _batchSize;
+                      _suggestions = [];
+                      _loadedRecipeKeys.clear();
                     });
                     _refresh().then((_) {
                       if (mounted) setState(() => _isLoading = false);
@@ -489,20 +553,7 @@ class _RecipeRecommendationsScreenState
               if (_isLoading)
                 ...List.generate(3, (_) => _buildSkeletonCard())
               else if (items.isEmpty)
-                Container(
-                  margin: const EdgeInsets.only(top: 36),
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: AppColors.divider),
-                  ),
-                  child: const Text(
-                    'Chưa có công thức phù hợp với bộ lọc hiện tại.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: AppColors.textSecondary),
-                  ),
-                )
+                _buildEmptyStateCard()
               else
                 ...items.map(_buildRecipeCard),
             ],

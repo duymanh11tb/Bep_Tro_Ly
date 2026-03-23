@@ -48,7 +48,9 @@ public class AIRecipeService
         string? refreshToken = null,
         List<string>? excludeRecipeNames = null,
         int? userId = null,
-        int limit = 5)
+        int limit = 5,
+        bool allowTemplateFallback = true,
+        bool requirePantryIngredientMatch = false)
     {
         // If no ingredients, we enter "Discovery" mode
         ingredients ??= new List<string>();
@@ -77,6 +79,8 @@ public class AIRecipeService
                 .Distinct(StringComparer.OrdinalIgnoreCase)
                 .ToList();
         }
+        preferences["allow_template_fallback"] = allowTemplateFallback;
+        preferences["require_pantry_ingredient_match"] = requirePantryIngredientMatch;
         preferences["limit"] = limit;
 
         await ApplyUserPersonalizationAsync(preferences, userId);
@@ -133,19 +137,35 @@ public class AIRecipeService
             var rng = new Random(shuffleSeed);
             var shuffled = aiRecipes.OrderBy(_ => rng.Next()).ToList();
             var recipesWithImages = EnsureRecipeImages(shuffled);
+            var prioritizedRecipes = PrioritizePantryRelevantRecipes(
+                recipesWithImages,
+                ingredients,
+                requirePantryIngredientMatch
+            );
             var recentNames = GetRecentRecipeNames(userId);
             var finalRecipes = ApplyExcludeAndFillRecipes(
-                recipesWithImages,
+                prioritizedRecipes,
                 excludeRecipeNames,
                 ingredients,
                 region,
                 refreshToken,
                 recentNames,
                 preferences,
-                limit
+                limit,
+                allowTemplateFallback
             );
             if (finalRecipes.Count == 0)
             {
+                if (!allowTemplateFallback)
+                {
+                    return new Dictionary<string, object>
+                    {
+                        ["success"] = true,
+                        ["source"] = ingredients.Any() ? "ai_empty_pantry" : "ai_empty",
+                        ["recipes"] = new List<object>()
+                    };
+                }
+
                 finalRecipes = BuildLocalFallbackRecipes(
                     ingredients,
                     region,
@@ -179,6 +199,16 @@ public class AIRecipeService
         catch (Exception ex)
         {
             _logger.LogError(ex, "AI suggestion error");
+
+            if (!allowTemplateFallback)
+            {
+                return new Dictionary<string, object>
+                {
+                    ["success"] = false,
+                    ["error"] = $"Lỗi AI: {ex.Message}",
+                    ["recipes"] = new List<object>()
+                };
+            }
 
             var recentNames = GetRecentRecipeNames(userId);
             var fallbackRecipes = BuildLocalFallbackRecipes(
@@ -240,9 +270,29 @@ public class AIRecipeService
         }
 
         var pantryItems = await query.ToListAsync();
+        if (pantryItems.Count == 0)
+        {
+            return new Dictionary<string, object>
+            {
+                ["success"] = true,
+                ["source"] = "empty_pantry",
+                ["recipes"] = new List<object>(),
+                ["message"] = "Tủ lạnh hiện chưa có nguyên liệu để gợi ý."
+            };
+        }
 
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
-        return await SuggestRecipesAsync(ingredients, preferences, region, refreshToken, excludeRecipeNames, userId, limit);
+        return await SuggestRecipesAsync(
+            ingredients,
+            preferences,
+            region,
+            refreshToken,
+            excludeRecipeNames,
+            userId,
+            limit,
+            allowTemplateFallback: false,
+            requirePantryIngredientMatch: true
+        );
     }
 
     /// <summary>
@@ -256,7 +306,16 @@ public class AIRecipeService
         int? userId = null,
         int limit = 5)
     {
-        return await SuggestRecipesAsync(new List<string>(), preferences, region, refreshToken, excludeRecipeNames, userId, limit);
+        return await SuggestRecipesAsync(
+            new List<string>(),
+            preferences,
+            region,
+            refreshToken,
+            excludeRecipeNames,
+            userId,
+            limit,
+            allowTemplateFallback: false
+        );
     }
 
     private async Task<List<object>> GenerateAISuggestionsAsync(
@@ -355,11 +414,21 @@ public class AIRecipeService
         var statusText = ingredients.Any()
             ? $"CHẾ ĐỘ GỢI Ý: Dựa trên {ingredients.Count} nguyên liệu có sẵn: {string.Join(", ", ingredients)}."
             : $"CHẾ ĐỘ KHÁM PHÁ: Hãy gợi ý thực đơn hằng ngày phù hợp với vùng miền ưu tiên: {regionLabel}.";
+        var strictPantryText = ingredients.Any()
+            ? """
+            RÀNG BUỘC BẮT BUỘC CHO CHẾ ĐỘ THEO TỦ LẠNH:
+            - Mỗi món bắt buộc phải dùng ít nhất 1 nguyên liệu đang có trong tủ.
+            - Ưu tiên mạnh các món dùng từ 2 nguyên liệu có sẵn trở lên.
+            - Không được đề xuất món không liên quan tới danh sách nguyên liệu hiện có.
+            - Trường "ingredients_used" chỉ được liệt kê các nguyên liệu thực sự đang có trong tủ.
+            """
+            : "";
 
         var prompt = $$"""
             Bạn là một đầu bếp Việt Nam tài ba với kiến thức sâu rộng về ẩm thực 3 miền.
             
             {{statusText}}
+            {{strictPantryText}}
             Phong cách ẩm thực yêu thích: {{cuisine}}
             Vùng miền ưu tiên: {{regionLabel}}
             {{seasoningText}}
@@ -580,6 +649,59 @@ public class AIRecipeService
         return result;
     }
 
+    private List<object> PrioritizePantryRelevantRecipes(
+        List<object> recipes,
+        List<string> pantryIngredients,
+        bool requireMatch)
+    {
+        var normalizedPantry = pantryIngredients
+            .Select(NormalizeVietnameseText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .ToList();
+
+        if (normalizedPantry.Count == 0)
+        {
+            return recipes;
+        }
+
+        var ranked = new List<(Dictionary<string, object> Map, int Overlap, double Score)>();
+        foreach (var recipe in recipes)
+        {
+            var map = ToDictionary(recipe);
+            if (map == null) continue;
+
+            var usedIngredients = map.TryGetValue("ingredients_used", out var rawUsed)
+                ? ExtractStringList(rawUsed)
+                : new List<string>();
+
+            var overlap = CountIngredientOverlap(normalizedPantry, usedIngredients);
+            if (overlap == 0 && map.TryGetValue("name", out var rawName))
+            {
+                overlap = CountIngredientOverlap(normalizedPantry, new[] { rawName?.ToString() ?? string.Empty });
+            }
+
+            if (requireMatch && overlap == 0)
+            {
+                continue;
+            }
+
+            var score = GetDoubleValue(map.TryGetValue("match_score", out var rawScore) ? rawScore : null);
+            if (overlap > 0)
+            {
+                map["match_score"] = Math.Min(0.99, score + Math.Min(0.18, overlap * 0.06));
+            }
+
+            ranked.Add((map, overlap, GetDoubleValue(map["match_score"])));
+        }
+
+        return ranked
+            .OrderByDescending(x => x.Overlap)
+            .ThenByDescending(x => x.Score)
+            .Select(x => (object)x.Map)
+            .ToList();
+    }
+
     private Dictionary<string, object>? ToDictionary(object? value)
     {
         if (value == null) return null;
@@ -609,6 +731,101 @@ public class AIRecipeService
     {
         var query = Uri.EscapeDataString($"vietnamese food {recipeName}");
         return $"https://source.unsplash.com/1200x800/?{query}";
+    }
+
+    private static List<string> ExtractStringList(object? value)
+    {
+        if (value == null) return new List<string>();
+
+        if (value is JsonElement element)
+        {
+            if (element.ValueKind == JsonValueKind.Array)
+            {
+                return element
+                    .EnumerateArray()
+                    .Select(x => x.GetString() ?? string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .ToList();
+            }
+
+            if (element.ValueKind == JsonValueKind.String)
+            {
+                var single = element.GetString();
+                return string.IsNullOrWhiteSpace(single)
+                    ? new List<string>()
+                    : new List<string> { single };
+            }
+        }
+
+        if (value is IEnumerable<object> objectItems)
+        {
+            return objectItems
+                .Select(x => x?.ToString() ?? string.Empty)
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+        }
+
+        if (value is IEnumerable<string> stringItems)
+        {
+            return stringItems
+                .Where(x => !string.IsNullOrWhiteSpace(x))
+                .ToList();
+        }
+
+        var text = value.ToString();
+        return string.IsNullOrWhiteSpace(text)
+            ? new List<string>()
+            : new List<string> { text };
+    }
+
+    private static int CountIngredientOverlap(IEnumerable<string> pantryIngredients, IEnumerable<string> recipeIngredients)
+    {
+        var normalizedRecipe = recipeIngredients
+            .Select(NormalizeVietnameseText)
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .Distinct()
+            .ToList();
+
+        if (normalizedRecipe.Count == 0) return 0;
+
+        var matched = new HashSet<string>();
+        foreach (var pantryIngredient in pantryIngredients)
+        {
+            if (normalizedRecipe.Any(recipeIngredient =>
+                recipeIngredient.Contains(pantryIngredient) ||
+                pantryIngredient.Contains(recipeIngredient)))
+            {
+                matched.Add(pantryIngredient);
+            }
+        }
+
+        return matched.Count;
+    }
+
+    private static double GetDoubleValue(object? value)
+    {
+        try
+        {
+            if (value is JsonElement element)
+            {
+                if (element.ValueKind == JsonValueKind.Number && element.TryGetDouble(out var number))
+                {
+                    return number;
+                }
+
+                if (element.ValueKind == JsonValueKind.String &&
+                    double.TryParse(element.GetString(), out var parsed))
+                {
+                    return parsed;
+                }
+            }
+
+            return Convert.ToDouble(value);
+        }
+        catch
+        {
+            return 0;
+        }
     }
 
     private async Task<List<object>?> GetFromCacheAsync(string cacheKey)
@@ -1219,7 +1436,8 @@ public class AIRecipeService
         string? refreshToken,
         HashSet<string> recentNames,
         Dictionary<string, object>? preferences,
-        int limit)
+        int limit,
+        bool allowTemplateFallback)
     {
         var excludes = (excludeRecipeNames ?? new List<string>())
             .Select(NormalizeVietnameseText)
@@ -1247,6 +1465,7 @@ public class AIRecipeService
         }
 
         if (result.Count >= limit) return result;
+        if (!allowTemplateFallback) return result;
 
         var fallback = BuildLocalFallbackRecipes(
             ingredients,

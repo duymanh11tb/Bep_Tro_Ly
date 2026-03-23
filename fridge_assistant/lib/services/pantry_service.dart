@@ -6,7 +6,6 @@ import 'auth_service.dart';
 import 'fridge_service.dart';
 import 'region_preference_service.dart';
 import '../models/recipe_suggestion.dart';
-import '../repositories/recipe_repository.dart';
 
 enum RecipeSuggestionMode { pantry, region }
 
@@ -115,7 +114,7 @@ class CategoryStat {
 }
 
 class PantryService {
-  static const String _aiSuggestionsCachePrefix = 'pantry_ai_suggestions_v1_';
+  static const String _aiSuggestionsCachePrefix = 'pantry_ai_suggestions_v2_';
   static List<PantryItem> _cachedExpiringItems = [];
   static PantryStats? _cachedStats;
   static List<RecipeSuggestion> _cachedAiSuggestions = [];
@@ -369,7 +368,11 @@ class PantryService {
         'add_method': 'manual',
       };
       final resp = await ApiService.post('/api/v1/pantry', body, withAuth: true);
-      return resp.statusCode == 200;
+      final success = resp.statusCode == 200;
+      if (success) {
+        await clearCache(clearPersistent: true);
+      }
+      return success;
     } catch (e) {
       debugPrint('PantryService.addItem error: $e');
       return false;
@@ -380,7 +383,11 @@ class PantryService {
   static Future<bool> deleteItem(int id) async {
     try {
       final resp = await ApiService.delete('/api/v1/pantry/$id');
-      return resp.statusCode == 200;
+      final success = resp.statusCode == 200;
+      if (success) {
+        await clearCache(clearPersistent: true);
+      }
+      return success;
     } catch (e) {
       debugPrint('PantryService.deleteItem error: $e');
       return false;
@@ -397,8 +404,8 @@ class PantryService {
     List<String>? excludeRecipeNames,
     String? dietaryPreference,
   }) async {
+    final regionCode = await _resolveRegionCode(region);
     try {
-      final regionCode = await _resolveRegionCode(region);
       final endpoint = mode == RecipeSuggestionMode.region
           ? '/api/v1/recipes/suggest-by-region'
           : '/api/v1/recipes/suggest-from-pantry';
@@ -429,13 +436,27 @@ class PantryService {
         url,
         withAuth: true,
       );
-      if (resp.statusCode == 200) {
-        final data = jsonDecode(utf8.decode(resp.bodyBytes));
-        if (data['success'] == true && data['recipes'] != null) {
-          final List list = data['recipes'];
-          final suggestions = list
-              .map((e) => RecipeSuggestion.fromJson(e))
+
+      final responseText = utf8.decode(resp.bodyBytes);
+      Map<String, dynamic>? data;
+      if (responseText.isNotEmpty) {
+        try {
+          final decoded = jsonDecode(responseText);
+          if (decoded is Map<String, dynamic>) {
+            data = decoded;
+          } else if (decoded is Map) {
+            data = Map<String, dynamic>.from(decoded);
+          }
+        } catch (_) {}
+      }
+
+      if (resp.statusCode == 200 && data != null && data['success'] == true) {
+        final rawRecipes = data['recipes'];
+        if (rawRecipes is List) {
+          final suggestions = rawRecipes
+              .map((e) => RecipeSuggestion.fromJson(Map<String, dynamic>.from(e)))
               .toList();
+
           _cachedAiSuggestions = suggestions;
           await _persistAiSuggestions(
             suggestions,
@@ -443,52 +464,37 @@ class PantryService {
             fridgeId: fridgeId,
             region: regionCode,
           );
+
           return suggestions;
         }
       }
+
+      final message =
+          data?['error']?.toString() ??
+          data?['message']?.toString() ??
+          'Không lấy được gợi ý AI lúc này.';
+      throw Exception(message);
     } catch (e) {
       debugPrint('PantryService.getAiSuggestions error: $e');
-      
-      // NEW: Direct Gemini API fallback using RecipeRepository
-      try {
-        final items = await getItems(fridgeId: fridgeId);
-        final ingredients = items.map((e) => e.name).toList();
-        final expiring = items.where((e) => e.isExpiringSoon).map((e) => e.name).toList();
-        
-        if (ingredients.isNotEmpty) {
-          final suggestions = await RecipeRepository.getSuggestions(
-            ingredients: ingredients,
-            expiringIngredients: expiring,
-            limit: limit,
-          );
-          
-          if (suggestions.isNotEmpty) {
-            _cachedAiSuggestions = suggestions;
-            return suggestions;
-          }
-        }
-      } catch (geminiError) {
-        debugPrint('Gemini fallback also failed: $geminiError');
-      }
-    }
-    final regionCode = await _resolveRegionCode(region);
-    if (refreshToken != null && refreshToken.isNotEmpty) {
-      if (mode == RecipeSuggestionMode.region) {
-        return _regionFallbackRecipes(regionCode, limit, dietaryPreference);
-      }
-      return _pantryRefreshFallback(limit, refreshToken, dietaryPreference);
-    }
-    final cached = await getCachedAiSuggestions(
-      mode: mode,
-      fridgeId: fridgeId,
-      region: region,
-    );
-    if (cached.isNotEmpty) return cached;
 
-    if (mode == RecipeSuggestionMode.region) {
-      return _regionFallbackRecipes(regionCode, limit, dietaryPreference);
+      final canUseCachedFallback =
+          (refreshToken == null || refreshToken.isEmpty) &&
+          (excludeRecipeNames == null || excludeRecipeNames.isEmpty);
+      if (canUseCachedFallback) {
+        final cached = await getCachedAiSuggestions(
+          mode: mode,
+          fridgeId: fridgeId,
+          region: regionCode,
+        );
+        if (cached.isNotEmpty) return cached;
+      }
+
+      throw Exception(
+        e.toString().replaceFirst('Exception: ', '').trim().isEmpty
+            ? 'Không lấy được gợi ý AI lúc này.'
+            : e.toString().replaceFirst('Exception: ', ''),
+      );
     }
-    return [];
   }
 
   static Future<String> _resolveRegionCode(String? region) async {
@@ -515,259 +521,6 @@ class PantryService {
     return value;
   }
 
-  static List<RecipeSuggestion> _regionFallbackRecipes(
-    String regionCode,
-    int limit, [
-    String? dietaryPreference,
-  ]) {
-    final fallback = <String, List<RecipeSuggestion>>{
-      'north': [
-        RecipeSuggestion(
-          id: 'north_1',
-          name: 'Bún thang Hà Nội',
-          description: 'Món bún thanh vị, hợp bữa sáng hoặc trưa nhẹ.',
-          ingredientsUsed: const ['bún', 'trứng', 'gà'],
-          cookTimeMinutes: 30,
-          difficulty: 'medium',
-          matchScore: 0.82,
-        ),
-        RecipeSuggestion(
-          id: 'north_2',
-          name: 'Cá rô kho tộ',
-          description: 'Món kho đậm đà miền Bắc, ăn cùng cơm rất hợp.',
-          ingredientsUsed: const ['cá', 'hành', 'nước mắm'],
-          cookTimeMinutes: 28,
-          difficulty: 'easy',
-          matchScore: 0.8,
-        ),
-      ],
-      'central': [
-        RecipeSuggestion(
-          id: 'central_1',
-          name: 'Mì Quảng gà',
-          description: 'Sợi mì dai thơm, nước dùng đậm vừa phải đúng chất miền Trung.',
-          ingredientsUsed: const ['mì quảng', 'gà', 'đậu phộng'],
-          cookTimeMinutes: 35,
-          difficulty: 'medium',
-          matchScore: 0.83,
-        ),
-        RecipeSuggestion(
-          id: 'central_2',
-          name: 'Bún bò Huế',
-          description: 'Nước dùng thơm sả, vị đậm và cay nhẹ rất cuốn.',
-          ingredientsUsed: const ['bún', 'bò', 'sả'],
-          cookTimeMinutes: 40,
-          difficulty: 'medium',
-          matchScore: 0.81,
-        ),
-      ],
-      'south': [
-        RecipeSuggestion(
-          id: 'south_1',
-          name: 'Canh chua cá',
-          description: 'Canh chua ngọt hài hòa kiểu miền Nam, ăn là mát người.',
-          ingredientsUsed: const ['cá', 'dứa', 'cà chua'],
-          cookTimeMinutes: 25,
-          difficulty: 'easy',
-          matchScore: 0.82,
-        ),
-        RecipeSuggestion(
-          id: 'south_2',
-          name: 'Thịt kho tàu',
-          description: 'Món kho mặn ngọt đặc trưng miền Nam, hợp cơm gia đình.',
-          ingredientsUsed: const ['thịt ba chỉ', 'trứng', 'nước dừa'],
-          cookTimeMinutes: 40,
-          difficulty: 'easy',
-          matchScore: 0.84,
-        ),
-      ],
-    };
-
-    final dietaryFallback = _dietaryFallbackRecipes(dietaryPreference);
-    final recipes = dietaryFallback.isNotEmpty
-        ? dietaryFallback
-        : (fallback[regionCode] ?? fallback['south']!);
-    if (limit <= 0) return recipes;
-    if (recipes.length <= limit) return recipes;
-    return recipes.take(limit).toList();
-  }
-
-  static List<RecipeSuggestion> _pantryRefreshFallback(
-    int limit,
-    String refreshToken, [
-    String? dietaryPreference,
-  ]) {
-    final dietaryFallback = _dietaryFallbackRecipes(dietaryPreference);
-    final pool = dietaryFallback.isNotEmpty ? dietaryFallback : <RecipeSuggestion>[
-      RecipeSuggestion(
-        id: 'p_f_1',
-        name: 'Gà kho gừng',
-        description: 'Thơm ấm vị gừng, hợp bữa cơm gia đình.',
-        ingredientsUsed: const ['gà', 'gừng', 'hành tím'],
-        cookTimeMinutes: 28,
-        difficulty: 'easy',
-        matchScore: 0.78,
-      ),
-      RecipeSuggestion(
-        id: 'p_f_2',
-        name: 'Canh rau ngót thịt bằm',
-        description: 'Món canh thanh mát, nấu nhanh và dễ ăn.',
-        ingredientsUsed: const ['rau ngót', 'thịt bằm'],
-        cookTimeMinutes: 15,
-        difficulty: 'easy',
-        matchScore: 0.76,
-      ),
-      RecipeSuggestion(
-        id: 'p_f_3',
-        name: 'Cà tím xào thịt bằm',
-        description: 'Món xào mềm thơm, đậm vị, rất đưa cơm.',
-        ingredientsUsed: const ['cà tím', 'thịt bằm', 'tỏi'],
-        cookTimeMinutes: 18,
-        difficulty: 'easy',
-        matchScore: 0.74,
-      ),
-      RecipeSuggestion(
-        id: 'p_f_4',
-        name: 'Bò lúc lắc',
-        description: 'Thịt bò mềm thơm, có thể ăn với cơm hoặc salad.',
-        ingredientsUsed: const ['thịt bò', 'ớt chuông'],
-        cookTimeMinutes: 20,
-        difficulty: 'medium',
-        matchScore: 0.75,
-      ),
-      RecipeSuggestion(
-        id: 'p_f_5',
-        name: 'Mướp xào trứng',
-        description: 'Món dân dã nhanh gọn, vị ngọt tự nhiên.',
-        ingredientsUsed: const ['mướp', 'trứng'],
-        cookTimeMinutes: 12,
-        difficulty: 'easy',
-        matchScore: 0.73,
-      ),
-      RecipeSuggestion(
-        id: 'p_f_6',
-        name: 'Đậu que xào tỏi',
-        description: 'Rau giòn xanh, phù hợp bữa ăn nhẹ nhàng.',
-        ingredientsUsed: const ['đậu que', 'tỏi'],
-        cookTimeMinutes: 10,
-        difficulty: 'easy',
-        matchScore: 0.72,
-      ),
-    ];
-
-    final list = List<RecipeSuggestion>.from(pool);
-    final seed = refreshToken.hashCode;
-    final random = DateTime.fromMillisecondsSinceEpoch(seed.abs() % 2147483647)
-        .millisecondsSinceEpoch;
-    list.sort((a, b) => (a.id.hashCode ^ random).compareTo(b.id.hashCode ^ random));
-    final take = limit <= 0 ? 5 : limit;
-    if (list.length <= take) return list;
-    return list.take(take).toList();
-  }
-
-  static List<RecipeSuggestion> _dietaryFallbackRecipes(String? dietaryPreference) {
-    final normalized = dietaryPreference?.trim().toLowerCase();
-    if (normalized == null || normalized.isEmpty) return const [];
-
-    if (normalized == 'vegetarian' || normalized == 'an_chay') {
-      return [
-        RecipeSuggestion(
-          id: 'diet_veg_1',
-          name: 'Đậu hũ sốt nấm',
-          description: 'Món chay thanh vị, dễ nấu cho bữa hằng ngày.',
-          ingredientsUsed: ['đậu hũ', 'nấm', 'hành boa rô'],
-          cookTimeMinutes: 18,
-          difficulty: 'easy',
-          matchScore: 0.84,
-        ),
-        RecipeSuggestion(
-          id: 'diet_veg_2',
-          name: 'Canh bí đỏ đậu hũ',
-          description: 'Canh nhẹ bụng, ngọt tự nhiên và hợp bữa tối.',
-          ingredientsUsed: ['bí đỏ', 'đậu hũ'],
-          cookTimeMinutes: 20,
-          difficulty: 'easy',
-          matchScore: 0.82,
-        ),
-        RecipeSuggestion(
-          id: 'diet_veg_3',
-          name: 'Rau củ hấp chấm mè rang',
-          description: 'Ít dầu mỡ, giữ trọn vị ngọt tự nhiên của rau củ.',
-          ingredientsUsed: ['bông cải', 'cà rốt', 'bí ngòi'],
-          cookTimeMinutes: 15,
-          difficulty: 'easy',
-          matchScore: 0.8,
-        ),
-      ];
-    }
-
-    if (normalized == 'weight_loss' || normalized == 'giam_can') {
-      return [
-        RecipeSuggestion(
-          id: 'diet_fit_1',
-          name: 'Ức gà áp chảo rau củ',
-          description: 'Món ít dầu, giàu đạm và phù hợp chế độ giảm cân.',
-          ingredientsUsed: ['ức gà', 'rau củ'],
-          cookTimeMinutes: 20,
-          difficulty: 'easy',
-          matchScore: 0.85,
-        ),
-        RecipeSuggestion(
-          id: 'diet_fit_2',
-          name: 'Salad cá ngừ trứng luộc',
-          description: 'Nhẹ bụng, đủ chất và làm rất nhanh.',
-          ingredientsUsed: ['cá ngừ', 'xà lách', 'trứng'],
-          cookTimeMinutes: 15,
-          difficulty: 'easy',
-          matchScore: 0.83,
-        ),
-        RecipeSuggestion(
-          id: 'diet_fit_3',
-          name: 'Canh nấm ức gà',
-          description: 'Món canh thanh, ít calo, hợp bữa tối.',
-          ingredientsUsed: ['nấm', 'ức gà'],
-          cookTimeMinutes: 18,
-          difficulty: 'easy',
-          matchScore: 0.81,
-        ),
-      ];
-    }
-
-    if (normalized == 'eat_clean') {
-      return [
-        RecipeSuggestion(
-          id: 'diet_clean_1',
-          name: 'Cá hồi áp chảo măng tây',
-          description: 'Bữa ăn Eat Clean đủ đạm, rau và chất béo tốt.',
-          ingredientsUsed: ['cá hồi', 'măng tây'],
-          cookTimeMinutes: 18,
-          difficulty: 'easy',
-          matchScore: 0.85,
-        ),
-        RecipeSuggestion(
-          id: 'diet_clean_2',
-          name: 'Cơm gạo lứt bò xào rau',
-          description: 'Món Eat Clean cân bằng, phù hợp bữa trưa.',
-          ingredientsUsed: ['gạo lứt', 'thịt bò', 'rau củ'],
-          cookTimeMinutes: 25,
-          difficulty: 'medium',
-          matchScore: 0.83,
-        ),
-        RecipeSuggestion(
-          id: 'diet_clean_3',
-          name: 'Tôm hấp bí ngòi',
-          description: 'Thanh nhẹ, ít dầu mỡ và giữ vị tự nhiên.',
-          ingredientsUsed: ['tôm', 'bí ngòi'],
-          cookTimeMinutes: 16,
-          difficulty: 'easy',
-          matchScore: 0.8,
-        ),
-      ];
-    }
-
-    return [];
-  }
-
   /// Tự động cleanup sản phẩm hết hạn
   static Future<List<String>> cleanupExpiredItems() async {
     try {
@@ -781,6 +534,7 @@ class PantryService {
         final int count = data['cleaned_count'] ?? 0;
         if (count > 0) {
           final List items = data['items'] ?? [];
+          await clearCache(clearPersistent: true);
           return items.map((e) => e.toString()).toList();
         }
       }
