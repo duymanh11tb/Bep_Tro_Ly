@@ -317,7 +317,7 @@ public class SpoonacularRecipeProvider : IRecipeCatalogProvider
             return null;
         }
 
-        var id = detail.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out var parsedId)
+        var id = TryGetInt32(detail, "id", out var parsedId)
             ? parsedId
             : candidate?.Id ?? 0;
         var title = detail.TryGetProperty("title", out var titleElement)
@@ -330,13 +330,13 @@ public class SpoonacularRecipeProvider : IRecipeCatalogProvider
             ? BuildDescription(summaryElement.GetString())
             : $"Món {title} được lấy từ catalog công thức.";
 
-        var prepTime = detail.TryGetProperty("preparationMinutes", out var prepElement) && prepElement.TryGetInt32(out var prepValue)
+        var prepTime = TryGetInt32(detail, "preparationMinutes", out var prepValue)
             ? prepValue
             : 0;
-        var cookTime = detail.TryGetProperty("cookingMinutes", out var cookElement) && cookElement.TryGetInt32(out var cookValue)
+        var cookTime = TryGetInt32(detail, "cookingMinutes", out var cookValue)
             ? cookValue
             : 0;
-        var readyInMinutes = detail.TryGetProperty("readyInMinutes", out var readyElement) && readyElement.TryGetInt32(out var readyValue)
+        var readyInMinutes = TryGetInt32(detail, "readyInMinutes", out var readyValue)
             ? readyValue
             : 0;
 
@@ -349,7 +349,7 @@ public class SpoonacularRecipeProvider : IRecipeCatalogProvider
             cookTime = Math.Max(0, readyInMinutes - prepTime);
         }
 
-        var servings = detail.TryGetProperty("servings", out var servingsElement) && servingsElement.TryGetInt32(out var servingsValue)
+        var servings = TryGetInt32(detail, "servings", out var servingsValue)
             ? servingsValue
             : 2;
 
@@ -407,6 +407,28 @@ public class SpoonacularRecipeProvider : IRecipeCatalogProvider
             _logger.LogWarning(ex, "Cannot parse Spoonacular response for {Path}", path);
             return null;
         }
+    }
+
+    private static bool TryGetInt32(JsonElement element, string propertyName, out int value)
+    {
+        value = 0;
+
+        if (!element.TryGetProperty(propertyName, out var property))
+        {
+            return false;
+        }
+
+        if (property.ValueKind == JsonValueKind.Number)
+        {
+            return property.TryGetInt32(out value);
+        }
+
+        if (property.ValueKind == JsonValueKind.String)
+        {
+            return int.TryParse(property.GetString(), out value);
+        }
+
+        return false;
     }
 
     private string BuildUri(string path, Dictionary<string, string?> query)

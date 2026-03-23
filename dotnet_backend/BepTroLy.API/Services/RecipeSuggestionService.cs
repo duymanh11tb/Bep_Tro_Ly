@@ -132,12 +132,10 @@ public class RecipeSuggestionService
                     _spoonacularBaseUrl);
             }
 
-            var historyText = string.Join(", ", recentNames.Take(10));
-            var catalogRecipes = await FetchRecipesFromSpoonacularAsync(
+            var catalogRecipes = await _catalogProvider.SuggestRecipesAsync(
                 ingredients,
                 preferences,
-                limit,
-                historyText);
+                limit);
 
             var prioritizedCatalogRecipes = PrioritizePantryRelevantRecipes(
                 catalogRecipes,
