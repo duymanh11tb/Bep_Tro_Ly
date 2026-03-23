@@ -70,8 +70,8 @@ public class AIRecipeService
         }
         else
         {
-            // Refresh suggestions automatically every 2 hours even without explicit user action.
-            var timeSlot = DateTime.UtcNow.Ticks / TimeSpan.TicksPerHour / 2;
+            // Refresh suggestions automatically once per day unless the user explicitly asks for a new batch.
+            var timeSlot = DateTime.UtcNow.Ticks / TimeSpan.TicksPerDay;
             preferences["_auto_refresh_slot"] = timeSlot;
         }
         if (excludeRecipeNames != null && excludeRecipeNames.Count > 0)
@@ -527,11 +527,22 @@ public class AIRecipeService
 
         if (!response.IsSuccessStatusCode)
         {
-            if (ShouldTripCircuit(response.StatusCode))
+            if (response.StatusCode == (HttpStatusCode)429)
+            {
+                if (TryExtractRetryDelay(responseText, out var retryDelay))
+                {
+                    OpenCircuitFor(retryDelay);
+                }
+                else
+                {
+                    RecordGeminiFailure();
+                }
+            }
+            else if (ShouldTripCircuit(response.StatusCode))
             {
                 RecordGeminiFailure();
             }
-            throw new Exception($"Gemini API error: {response.StatusCode} - {responseText}");
+            throw new Exception(BuildGeminiErrorMessage(response.StatusCode, responseText));
         }
 
         // Parse response
@@ -617,11 +628,154 @@ public class AIRecipeService
     {
         var code = (int)statusCode;
         return statusCode == HttpStatusCode.RequestTimeout ||
-               code == 429 ||
                code == 500 ||
                code == 502 ||
                code == 503 ||
                code == 504;
+    }
+
+    private static void OpenCircuitFor(TimeSpan retryDelay)
+    {
+        lock (_circuitLock)
+        {
+            var wait = retryDelay <= TimeSpan.Zero ? _circuitOpenDuration : retryDelay;
+            _circuitOpenUntilUtc = DateTime.UtcNow.Add(wait);
+            _consecutiveGeminiFailures = 0;
+        }
+    }
+
+    private static string BuildGeminiErrorMessage(HttpStatusCode statusCode, string responseText)
+    {
+        var apiMessage = ExtractGeminiApiMessage(responseText);
+        if (statusCode == (HttpStatusCode)429)
+        {
+            var modelName = ExtractGeminiQuotaModel(responseText);
+            var retrySuffix = TryExtractRetryDelay(responseText, out var retryDelay)
+                ? $" Vui lòng thử lại sau {Math.Max(1, (int)Math.Ceiling(retryDelay.TotalSeconds))} giây."
+                : string.Empty;
+            var quotaScope = string.IsNullOrWhiteSpace(modelName)
+                ? "của project hiện tại"
+                : $"cho model {modelName}";
+            return $"Gemini đã chạm quota {quotaScope}.{retrySuffix}".Trim();
+        }
+
+        if (!string.IsNullOrWhiteSpace(apiMessage))
+        {
+            return $"Gemini API error: {apiMessage}";
+        }
+
+        return $"Gemini API error: {statusCode}";
+    }
+
+    private static string? ExtractGeminiApiMessage(string responseText)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseText);
+            if (doc.RootElement.TryGetProperty("error", out var error) &&
+                error.TryGetProperty("message", out var message))
+            {
+                return message.GetString();
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static string? ExtractGeminiQuotaModel(string responseText)
+    {
+        try
+        {
+            using var doc = JsonDocument.Parse(responseText);
+            if (!doc.RootElement.TryGetProperty("error", out var error) ||
+                !error.TryGetProperty("details", out var details) ||
+                details.ValueKind != JsonValueKind.Array)
+            {
+                return null;
+            }
+
+            foreach (var detail in details.EnumerateArray())
+            {
+                if (!detail.TryGetProperty("@type", out var typeElement) ||
+                    typeElement.GetString() != "type.googleapis.com/google.rpc.QuotaFailure" ||
+                    !detail.TryGetProperty("violations", out var violations) ||
+                    violations.ValueKind != JsonValueKind.Array)
+                {
+                    continue;
+                }
+
+                foreach (var violation in violations.EnumerateArray())
+                {
+                    if (violation.TryGetProperty("quotaDimensions", out var dimensions) &&
+                        dimensions.ValueKind == JsonValueKind.Object &&
+                        dimensions.TryGetProperty("model", out var model))
+                    {
+                        return model.GetString();
+                    }
+                }
+            }
+        }
+        catch
+        {
+        }
+
+        return null;
+    }
+
+    private static bool TryExtractRetryDelay(string responseText, out TimeSpan retryDelay)
+    {
+        retryDelay = TimeSpan.Zero;
+
+        try
+        {
+            using var doc = JsonDocument.Parse(responseText);
+            if (!doc.RootElement.TryGetProperty("error", out var error) ||
+                !error.TryGetProperty("details", out var details) ||
+                details.ValueKind != JsonValueKind.Array)
+            {
+                return false;
+            }
+
+            foreach (var detail in details.EnumerateArray())
+            {
+                if (!detail.TryGetProperty("@type", out var typeElement) ||
+                    typeElement.GetString() != "type.googleapis.com/google.rpc.RetryInfo" ||
+                    !detail.TryGetProperty("retryDelay", out var delayElement))
+                {
+                    continue;
+                }
+
+                var rawDelay = delayElement.GetString();
+                if (string.IsNullOrWhiteSpace(rawDelay))
+                {
+                    continue;
+                }
+
+                retryDelay = ParseRetryDelay(rawDelay);
+                return retryDelay > TimeSpan.Zero;
+            }
+        }
+        catch
+        {
+        }
+
+        return false;
+    }
+
+    private static TimeSpan ParseRetryDelay(string rawDelay)
+    {
+        var match = Regex.Match(rawDelay, @"^(?<seconds>\d+(?:\.\d+)?)s$");
+        if (!match.Success)
+        {
+            return TimeSpan.Zero;
+        }
+
+        return double.TryParse(match.Groups["seconds"].Value, out var seconds)
+            ? TimeSpan.FromSeconds(seconds)
+            : TimeSpan.Zero;
     }
 
     private string GenerateCacheKey(List<string> ingredients, Dictionary<string, object>? preferences)

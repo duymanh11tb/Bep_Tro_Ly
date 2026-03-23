@@ -170,11 +170,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() => _isLoadingSuggestions = true);
     }
     try {
-      final excludes = _suggestions.map((e) => e.name).toList();
       final suggestions = await PantryService.getAiSuggestions(
         limit: 10,
-        refreshToken: DateTime.now().millisecondsSinceEpoch.toString(),
-        excludeRecipeNames: excludes,
       );
       if (mounted) {
         setState(() {

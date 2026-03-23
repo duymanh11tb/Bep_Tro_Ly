@@ -563,7 +563,9 @@ class _RecipeRecommendationsScreenState
           right: 14,
           bottom: 12,
           child: ElevatedButton.icon(
-            onPressed: _isLoadingMore ? null : _loadMoreSuggestions,
+            onPressed: (_isLoadingMore || PantryService.hasActiveAiCooldown)
+                ? null
+                : _loadMoreSuggestions,
             icon: _isLoadingMore
                 ? const SizedBox(
                     width: 14,

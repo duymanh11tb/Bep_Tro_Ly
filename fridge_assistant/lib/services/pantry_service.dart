@@ -118,6 +118,7 @@ class PantryService {
   static List<PantryItem> _cachedExpiringItems = [];
   static PantryStats? _cachedStats;
   static List<RecipeSuggestion> _cachedAiSuggestions = [];
+  static DateTime? _aiCooldownUntil;
 
   static Future<String> _getUserCacheSuffix() async {
     final authService = AuthService();
@@ -232,6 +233,7 @@ class PantryService {
     _cachedExpiringItems = [];
     _cachedStats = null;
     _cachedAiSuggestions = [];
+    _aiCooldownUntil = null;
 
     if (!clearPersistent) return;
 
@@ -405,6 +407,23 @@ class PantryService {
     String? dietaryPreference,
   }) async {
     final regionCode = await _resolveRegionCode(region);
+    final canUseCachedFallback =
+        (refreshToken == null || refreshToken.isEmpty) &&
+        (excludeRecipeNames == null || excludeRecipeNames.isEmpty);
+
+    final cooldownMessage = _currentAiCooldownMessage();
+    if (cooldownMessage != null) {
+      if (canUseCachedFallback) {
+        final cached = await getCachedAiSuggestions(
+          mode: mode,
+          fridgeId: fridgeId,
+          region: regionCode,
+        );
+        if (cached.isNotEmpty) return cached;
+      }
+      throw Exception(cooldownMessage);
+    }
+
     try {
       final endpoint = mode == RecipeSuggestionMode.region
           ? '/api/v1/recipes/suggest-by-region'
@@ -473,13 +492,16 @@ class PantryService {
           data?['error']?.toString() ??
           data?['message']?.toString() ??
           'Không lấy được gợi ý AI lúc này.';
+      _applyAiCooldownFromMessage(message);
       throw Exception(message);
     } catch (e) {
       debugPrint('PantryService.getAiSuggestions error: $e');
 
-      final canUseCachedFallback =
-          (refreshToken == null || refreshToken.isEmpty) &&
-          (excludeRecipeNames == null || excludeRecipeNames.isEmpty);
+      final cleanedMessage = e.toString().replaceFirst('Exception: ', '').trim().isEmpty
+          ? 'Không lấy được gợi ý AI lúc này.'
+          : e.toString().replaceFirst('Exception: ', '');
+      _applyAiCooldownFromMessage(cleanedMessage);
+
       if (canUseCachedFallback) {
         final cached = await getCachedAiSuggestions(
           mode: mode,
@@ -489,11 +511,33 @@ class PantryService {
         if (cached.isNotEmpty) return cached;
       }
 
-      throw Exception(
-        e.toString().replaceFirst('Exception: ', '').trim().isEmpty
-            ? 'Không lấy được gợi ý AI lúc này.'
-            : e.toString().replaceFirst('Exception: ', ''),
-      );
+      throw Exception(cleanedMessage);
+    }
+  }
+
+  static bool get hasActiveAiCooldown =>
+      _aiCooldownUntil != null && _aiCooldownUntil!.isAfter(DateTime.now());
+
+  static String? _currentAiCooldownMessage() {
+    if (!hasActiveAiCooldown) return null;
+    final remaining = _aiCooldownUntil!.difference(DateTime.now()).inSeconds;
+    final safeSeconds = remaining <= 0 ? 1 : remaining;
+    return 'Gemini đang tạm nghỉ để tránh vượt quota. Vui lòng thử lại sau $safeSeconds giây.';
+  }
+
+  static void _applyAiCooldownFromMessage(String message) {
+    final retryMatch = RegExp(
+      r'thử lại sau\s+(\d+)\s*giây',
+      caseSensitive: false,
+    ).firstMatch(message);
+    if (retryMatch == null) return;
+
+    final retrySeconds = int.tryParse(retryMatch.group(1) ?? '');
+    if (retrySeconds == null || retrySeconds <= 0) return;
+
+    final retryUntil = DateTime.now().add(Duration(seconds: retrySeconds));
+    if (_aiCooldownUntil == null || retryUntil.isAfter(_aiCooldownUntil!)) {
+      _aiCooldownUntil = retryUntil;
     }
   }
 
