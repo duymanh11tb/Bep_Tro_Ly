@@ -384,7 +384,12 @@ class _RecipeRecommendationsScreenState
 
   bool _isCooldownError(String? message) {
     if (message == null) return false;
-    return message.contains('Gemini đang tạm nghỉ để tránh vượt quota');
+    final normalized = message.toLowerCase();
+    return normalized.contains('gemini') &&
+        normalized.contains('thử lại sau') &&
+        (normalized.contains('vượt quota') ||
+            normalized.contains('chạm quota') ||
+            normalized.contains('resource_exhausted'));
   }
 
   void _syncCooldownTicker() {
