@@ -26,7 +26,7 @@ public class RecipeController : ControllerBase
     /// <summary>Gợi ý món ăn dựa trên nguyên liệu.</summary>
     [HttpPost("suggest")]
     [Authorize]
-    [EnableRateLimiting("ai-heavy")]
+    [EnableRateLimiting("recipe-heavy")]
     public async Task<IActionResult> SuggestRecipes([FromBody] SuggestRecipesRequest request)
     {
         var result = await _aiService.SuggestRecipesAsync(
@@ -46,7 +46,7 @@ public class RecipeController : ControllerBase
     /// <summary>Gợi ý món ăn từ nguyên liệu trong tủ lạnh (POST).</summary>
     [HttpPost("suggest-from-pantry")]
     [Authorize]
-    [EnableRateLimiting("ai-heavy")]
+    [EnableRateLimiting("recipe-heavy")]
     public async Task<IActionResult> SuggestFromPantry([FromBody] SuggestFromPantryRequest request)
     {
         var userId = GetCurrentUserId();
@@ -69,7 +69,7 @@ public class RecipeController : ControllerBase
     /// <summary>Gợi ý món ăn từ nguyên liệu trong tủ lạnh (GET — dùng bởi Flutter).</summary>
     [HttpGet("suggest-from-pantry")]
     [Authorize]
-    [EnableRateLimiting("ai-heavy")]
+    [EnableRateLimiting("recipe-heavy")]
     public async Task<IActionResult> SuggestFromPantryGet(
         [FromQuery] int? fridgeId,
         [FromQuery] int limit = 5,
@@ -100,7 +100,7 @@ public class RecipeController : ControllerBase
     /// <summary>Gợi ý món theo vùng miền (GET).</summary>
     [HttpGet("suggest-by-region")]
     [Authorize]
-    [EnableRateLimiting("ai-heavy")]
+    [EnableRateLimiting("recipe-heavy")]
     public async Task<IActionResult> SuggestByRegionGet(
         [FromQuery] string? region,
         [FromQuery] int limit = 5,

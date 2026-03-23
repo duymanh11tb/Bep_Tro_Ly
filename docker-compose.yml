@@ -35,6 +35,8 @@ services:
       - Ollama__BaseUrl=${OLLAMA_BASE_URL:-http://host.docker.internal:11434/api}
       - Ollama__Model=${OLLAMA_MODEL:-qwen3:4b}
       - Pexels__ApiKey=${PEXELS_API_KEY}
+      - Spoonacular__ApiKey=${SPOONACULAR_API_KEY}
+      - Spoonacular__BaseUrl=${SPOONACULAR_BASE_URL:-https://api.spoonacular.com}
       - Database__ServerVersion=8.0.36-mysql
       - ASPNETCORE_ENVIRONMENT=Production
     depends_on:

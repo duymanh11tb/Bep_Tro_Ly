@@ -34,10 +34,15 @@ public class AIRecipeService
     private readonly string _ollamaModel;
     private readonly string _modelName;
     private readonly HttpClient _httpClient;
+    private readonly IRecipeCatalogProvider _catalogProvider;
     private readonly AppDbContext _db;
     private readonly ILogger<AIRecipeService> _logger;
 
-    public AIRecipeService(IConfiguration configuration, AppDbContext db, ILogger<AIRecipeService> logger)
+    public AIRecipeService(
+        IConfiguration configuration,
+        AppDbContext db,
+        IRecipeCatalogProvider catalogProvider,
+        ILogger<AIRecipeService> logger)
     {
         _apiKey = configuration["Gemini:ApiKey"];
         _pexelsApiKey = configuration["Pexels:ApiKey"];
@@ -46,6 +51,7 @@ public class AIRecipeService
         _ollamaModel = configuration["Ollama:Model"] ?? "qwen3:4b";
         _modelName = configuration["Gemini:Model"] ?? "gemini-2.5-flash";
         _httpClient = new HttpClient { Timeout = _geminiTimeout };
+        _catalogProvider = catalogProvider;
         _db = db;
         _logger = logger;
     }
@@ -64,6 +70,8 @@ public class AIRecipeService
         bool allowTemplateFallback = true,
         bool requirePantryIngredientMatch = false)
     {
+        limit = Math.Clamp(limit, 1, 20);
+
         // If no ingredients, we enter "Discovery" mode
         ingredients ??= new List<string>();
 
@@ -117,6 +125,8 @@ public class AIRecipeService
 
         try
         {
+            var recentNames = GetRecentRecipeNames(userId);
+
             // Re-check cache after acquiring lock because another request may have filled it.
             cached = await GetFromCacheAsync(cacheKey);
             if (cached != null)
@@ -130,33 +140,18 @@ public class AIRecipeService
                 };
             }
 
-            var historyText = "";
-            if (userId.HasValue)
-            {
-                var history = await _db.SuggestedRecipes
-                    .Where(r => r.UserId == userId.Value && r.Status != "hidden")
-                    .OrderByDescending(r => r.SuggestedAt)
-                    .Take(15)
-                    .ToListAsync();
-                if (history.Any())
-                {
-                    historyText = string.Join("\n", history.Select(h => $"- {h.RecipeName}: {h.Status}"));
-                }
-            }
+            var catalogRecipes = await _catalogProvider.SuggestRecipesAsync(
+                ingredients,
+                preferences,
+                Math.Max(limit * 2, limit));
 
-            var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit * 2, historyText);
-            var shuffleSeed = BuildShuffleSeed(preferences);
-            var rng = new Random(shuffleSeed);
-            var shuffled = aiRecipes.OrderBy(_ => rng.Next()).ToList();
-            var recipesWithImages = await EnsureRecipeImagesAsync(shuffled);
-            var prioritizedRecipes = PrioritizePantryRelevantRecipes(
-                recipesWithImages,
+            var prioritizedCatalogRecipes = PrioritizePantryRelevantRecipes(
+                catalogRecipes,
                 ingredients,
                 requirePantryIngredientMatch
             );
-            var recentNames = GetRecentRecipeNames(userId);
             var finalRecipes = ApplyExcludeAndFillRecipes(
-                prioritizedRecipes,
+                prioritizedCatalogRecipes,
                 excludeRecipeNames,
                 ingredients,
                 region,
@@ -188,54 +183,92 @@ public class AIRecipeService
                     preferences
                 );
             }
-            await SaveToCacheAsync(cacheKey, finalRecipes);
-            RecordRecentRecipeNames(userId, finalRecipes);
-            
-            if (userId.HasValue)
+
+            var source = "spoonacular";
+            var ttlHours = 1;
+
+            if (finalRecipes.Count == 0)
             {
-                var contextData = new { 
-                    time = GetTimeOfDayContext(), 
-                    season = GetSeasonContext(),
-                    weather = preferences.TryGetValue("weather", out var w) ? w?.ToString() : "normal"
-                };
-                await SaveSuggestedRecipesAsync(userId.Value, finalRecipes, JsonSerializer.Serialize(contextData));
+                if (!allowTemplateFallback)
+                {
+                    return new Dictionary<string, object>
+                    {
+                        ["success"] = true,
+                        ["source"] = ingredients.Any() ? "catalog_empty_pantry" : "catalog_empty",
+                        ["recipes"] = new List<object>()
+                    };
+                }
+
+                var localRecipes = BuildLocalFallbackRecipes(
+                    ingredients,
+                    region,
+                    excludeRecipeNames,
+                    limit,
+                    refreshToken,
+                    recentNames,
+                    preferences
+                );
+
+                localRecipes = PrioritizePantryRelevantRecipes(
+                    localRecipes,
+                    ingredients,
+                    requirePantryIngredientMatch
+                );
+
+                finalRecipes = localRecipes
+                    .Take(limit)
+                    .ToList();
+
+                source = "local_fallback";
+                ttlHours = 2;
             }
+
+            await FinalizeSuggestionResultAsync(
+                cacheKey,
+                finalRecipes,
+                userId,
+                preferences,
+                ttlHours: ttlHours);
 
             return new Dictionary<string, object>
             {
                 ["success"] = true,
-                ["source"] = "ai",
+                ["source"] = source,
                 ["recipes"] = finalRecipes
             };
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "AI suggestion error");
+            _logger.LogError(ex, "Recipe catalog suggestion error");
 
             if (!allowTemplateFallback)
             {
                 return new Dictionary<string, object>
                 {
                     ["success"] = false,
-                    ["error"] = $"Lỗi AI: {ex.Message}",
+                    ["error"] = $"Lỗi recipe catalog: {ex.Message}",
                     ["recipes"] = new List<object>()
                 };
             }
 
-            var recentNames = GetRecentRecipeNames(userId);
+            var fallbackRecentNames = GetRecentRecipeNames(userId);
             var fallbackRecipes = BuildLocalFallbackRecipes(
                 ingredients,
                 region,
                 excludeRecipeNames,
                 limit,
                 refreshToken,
-                recentNames,
+                fallbackRecentNames,
                 preferences
             );
             if (fallbackRecipes.Count > 0)
             {
-                await SaveToCacheAsync(cacheKey, fallbackRecipes, ttlHours: 2);
-                RecordRecentRecipeNames(userId, fallbackRecipes);
+                await FinalizeSuggestionResultAsync(
+                    cacheKey,
+                    fallbackRecipes,
+                    userId,
+                    preferences,
+                    ttlHours: 2);
                 return new Dictionary<string, object>
                 {
                     ["success"] = true,
@@ -247,7 +280,7 @@ public class AIRecipeService
             return new Dictionary<string, object>
             {
                 ["success"] = false,
-                ["error"] = $"Lỗi AI: {ex.Message}",
+                ["error"] = $"Lỗi recipe catalog: {ex.Message}",
                 ["recipes"] = new List<object>()
             };
         }
@@ -294,23 +327,6 @@ public class AIRecipeService
         }
 
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
-        if (string.IsNullOrWhiteSpace(refreshToken))
-        {
-            var localResult = await BuildLocalFirstResponseAsync(
-                ingredients,
-                preferences,
-                region,
-                excludeRecipeNames,
-                userId,
-                limit,
-                requirePantryIngredientMatch: true);
-
-            if (localResult != null)
-            {
-                return localResult;
-            }
-        }
-
         return await SuggestRecipesAsync(
             ingredients,
             preferences,
@@ -319,7 +335,7 @@ public class AIRecipeService
             excludeRecipeNames,
             userId,
             limit,
-            allowTemplateFallback: false,
+            allowTemplateFallback: true,
             requirePantryIngredientMatch: true
         );
     }
@@ -335,23 +351,6 @@ public class AIRecipeService
         int? userId = null,
         int limit = 5)
     {
-        if (string.IsNullOrWhiteSpace(refreshToken))
-        {
-            var localResult = await BuildLocalFirstResponseAsync(
-                new List<string>(),
-                preferences,
-                region,
-                excludeRecipeNames,
-                userId,
-                limit,
-                requirePantryIngredientMatch: false);
-
-            if (localResult != null)
-            {
-                return localResult;
-            }
-        }
-
         return await SuggestRecipesAsync(
             new List<string>(),
             preferences,
@@ -360,8 +359,32 @@ public class AIRecipeService
             excludeRecipeNames,
             userId,
             limit,
-            allowTemplateFallback: false
+            allowTemplateFallback: true
         );
+    }
+
+    private async Task FinalizeSuggestionResultAsync(
+        string cacheKey,
+        List<object> recipes,
+        int? userId,
+        Dictionary<string, object> preferences,
+        int ttlHours)
+    {
+        await SaveToCacheAsync(cacheKey, recipes, ttlHours);
+        RecordRecentRecipeNames(userId, recipes);
+
+        if (!userId.HasValue)
+        {
+            return;
+        }
+
+        var contextData = new
+        {
+            time = GetTimeOfDayContext(),
+            season = GetSeasonContext(),
+            weather = preferences.TryGetValue("weather", out var w) ? w?.ToString() : "normal"
+        };
+        await SaveSuggestedRecipesAsync(userId.Value, recipes, JsonSerializer.Serialize(contextData));
     }
 
     private async Task<Dictionary<string, object>?> BuildLocalFirstResponseAsync(

@@ -105,7 +105,7 @@ builder.Services.AddRateLimiter(options =>
             });
     });
 
-    options.AddPolicy("ai-heavy", httpContext =>
+    options.AddPolicy("recipe-heavy", httpContext =>
     {
         var userKey = httpContext.User.FindFirst("user_id")?.Value;
         var ipKey = httpContext.Connection.RemoteIpAddress?.ToString();
@@ -156,6 +156,10 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 
 // Custom services
 builder.Services.AddSingleton<JwtService>();
+builder.Services.AddHttpClient<IRecipeCatalogProvider, SpoonacularRecipeProvider>(client =>
+{
+    client.Timeout = TimeSpan.FromSeconds(20);
+});
 builder.Services.AddScoped<AIRecipeService>();
 
 // CORS (cho Flutter app)
