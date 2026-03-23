@@ -1,6 +1,7 @@
 import 'dart:async';
 
 import 'package:fridge_assistant/core/localization/app_material.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
@@ -257,6 +258,11 @@ class _RecipeRecommendationsScreenState
       default:
         return 'Miền Nam';
     }
+  }
+
+  Future<void> _openPexelsCredit() async {
+    final uri = Uri.parse('https://www.pexels.com');
+    await launchUrl(uri, mode: LaunchMode.externalApplication);
   }
 
   void _replaceSuggestions(List<RecipeSuggestion> data) {
@@ -607,6 +613,25 @@ class _RecipeRecommendationsScreenState
                 style: const TextStyle(
                   fontSize: 13,
                   color: AppColors.textSecondary,
+                ),
+              ),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: TextButton(
+                  onPressed: _openPexelsCredit,
+                  style: TextButton.styleFrom(
+                    padding: EdgeInsets.zero,
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: const Text(
+                    'Ảnh minh họa từ Pexels khi có sẵn',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: AppColors.textSecondary,
+                      decoration: TextDecoration.underline,
+                    ),
+                  ),
                 ),
               ),
               const SizedBox(height: 8),

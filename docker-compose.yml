@@ -29,6 +29,7 @@ services:
       - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database=Bep_Tro_Ly;Uid=root;Pwd=${DB_PASSWORD};
       - Jwt__SecretKey=${JWT_SECRET}
       - Gemini__ApiKey=${GEMINI_API_KEY}
+      - Pexels__ApiKey=${PEXELS_API_KEY}
       - Database__ServerVersion=8.0.36-mysql
       - ASPNETCORE_ENVIRONMENT=Production
     depends_on:
