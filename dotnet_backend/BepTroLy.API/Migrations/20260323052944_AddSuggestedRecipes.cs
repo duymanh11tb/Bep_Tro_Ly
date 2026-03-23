@@ -12,114 +12,105 @@ namespace BepTroLy.API.Migrations
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_pantry_items_fridges_fridge_id",
-                table: "pantry_items");
+            migrationBuilder.Sql(@"
+                CREATE TABLE IF NOT EXISTS `suggested_recipes` (
+                    `suggestion_id` bigint NOT NULL AUTO_INCREMENT,
+                    `user_id` int NOT NULL,
+                    `recipe_name` varchar(255) NOT NULL,
+                    `recipe_data` json NOT NULL,
+                    `suggested_at` datetime(6) NOT NULL,
+                    `status` varchar(20) NOT NULL,
+                    `context_data` json NULL,
+                    PRIMARY KEY (`suggestion_id`),
+                    KEY `IX_suggested_recipes_user_id` (`user_id`),
+                    CONSTRAINT `FK_suggested_recipes_users_user_id`
+                        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`) ON DELETE CASCADE
+                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+            ");
 
-            migrationBuilder.AddColumn<string>(
-                name: "status",
-                table: "chat_messages",
-                type: "longtext",
-                nullable: false)
-                .Annotation("MySql:CharSet", "utf8mb4");
+            migrationBuilder.Sql(@"
+                DROP PROCEDURE IF EXISTS RecreatePantryFridgeFk;
+                CREATE PROCEDURE RecreatePantryFridgeFk()
+                BEGIN
+                    DECLARE existing_fk VARCHAR(255);
 
-            migrationBuilder.CreateTable(
-                name: "chat_message_reads",
-                columns: table => new
-                {
-                    message_id = table.Column<int>(type: "int", nullable: false),
-                    user_id = table.Column<int>(type: "int", nullable: false),
-                    read_at = table.Column<DateTime>(type: "datetime(6)", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_chat_message_reads", x => new { x.message_id, x.user_id });
-                    table.ForeignKey(
-                        name: "FK_chat_message_reads_chat_messages_message_id",
-                        column: x => x.message_id,
-                        principalTable: "chat_messages",
-                        principalColumn: "message_id",
-                        onDelete: ReferentialAction.Cascade);
-                    table.ForeignKey(
-                        name: "FK_chat_message_reads_users_user_id",
-                        column: x => x.user_id,
-                        principalTable: "users",
-                        principalColumn: "user_id",
-                        onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySql:CharSet", "utf8mb4");
+                    SELECT CONSTRAINT_NAME INTO existing_fk
+                    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'pantry_items'
+                      AND COLUMN_NAME = 'fridge_id'
+                      AND REFERENCED_TABLE_NAME = 'fridges'
+                      AND REFERENCED_COLUMN_NAME = 'fridge_id'
+                    LIMIT 1;
 
-            migrationBuilder.CreateTable(
-                name: "suggested_recipes",
-                columns: table => new
-                {
-                    suggestion_id = table.Column<long>(type: "bigint", nullable: false)
-                        .Annotation("MySql:ValueGenerationStrategy", MySqlValueGenerationStrategy.IdentityColumn),
-                    user_id = table.Column<int>(type: "int", nullable: false),
-                    recipe_name = table.Column<string>(type: "varchar(255)", maxLength: 255, nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    recipe_data = table.Column<string>(type: "json", nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    suggested_at = table.Column<DateTime>(type: "datetime(6)", nullable: false),
-                    status = table.Column<string>(type: "varchar(20)", maxLength: 20, nullable: false)
-                        .Annotation("MySql:CharSet", "utf8mb4"),
-                    context_data = table.Column<string>(type: "json", nullable: true)
-                        .Annotation("MySql:CharSet", "utf8mb4")
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_suggested_recipes", x => x.suggestion_id);
-                    table.ForeignKey(
-                        name: "FK_suggested_recipes_users_user_id",
-                        column: x => x.user_id,
-                        principalTable: "users",
-                        principalColumn: "user_id",
-                        onDelete: ReferentialAction.Cascade);
-                })
-                .Annotation("MySql:CharSet", "utf8mb4");
+                    IF existing_fk IS NOT NULL AND existing_fk <> '' THEN
+                        SET @drop_fk_sql = CONCAT(
+                            'ALTER TABLE `pantry_items` DROP FOREIGN KEY `',
+                            existing_fk,
+                            '`'
+                        );
+                        PREPARE drop_fk_stmt FROM @drop_fk_sql;
+                        EXECUTE drop_fk_stmt;
+                        DEALLOCATE PREPARE drop_fk_stmt;
+                    END IF;
 
-            migrationBuilder.CreateIndex(
-                name: "IX_chat_message_reads_user_id",
-                table: "chat_message_reads",
-                column: "user_id");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_suggested_recipes_user_id",
-                table: "suggested_recipes",
-                column: "user_id");
-
-            migrationBuilder.AddForeignKey(
-                name: "FK_pantry_items_fridges_fridge_id",
-                table: "pantry_items",
-                column: "fridge_id",
-                principalTable: "fridges",
-                principalColumn: "fridge_id",
-                onDelete: ReferentialAction.Cascade);
+                    IF NOT EXISTS (
+                        SELECT 1
+                        FROM INFORMATION_SCHEMA.TABLE_CONSTRAINTS
+                        WHERE CONSTRAINT_SCHEMA = DATABASE()
+                          AND TABLE_NAME = 'pantry_items'
+                          AND CONSTRAINT_NAME = 'FK_pantry_items_fridges_fridge_id'
+                          AND CONSTRAINT_TYPE = 'FOREIGN KEY'
+                    ) THEN
+                        ALTER TABLE `pantry_items`
+                            ADD CONSTRAINT `FK_pantry_items_fridges_fridge_id`
+                            FOREIGN KEY (`fridge_id`) REFERENCES `fridges` (`fridge_id`)
+                            ON DELETE CASCADE;
+                    END IF;
+                END;
+            ");
+            migrationBuilder.Sql("CALL RecreatePantryFridgeFk();");
+            migrationBuilder.Sql("DROP PROCEDURE RecreatePantryFridgeFk;");
         }
 
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            migrationBuilder.DropForeignKey(
-                name: "FK_pantry_items_fridges_fridge_id",
-                table: "pantry_items");
+            migrationBuilder.Sql(@"
+                DROP PROCEDURE IF EXISTS RestorePantryFridgeFk;
+                CREATE PROCEDURE RestorePantryFridgeFk()
+                BEGIN
+                    DECLARE existing_fk VARCHAR(255);
 
-            migrationBuilder.DropTable(
-                name: "chat_message_reads");
+                    SELECT CONSTRAINT_NAME INTO existing_fk
+                    FROM INFORMATION_SCHEMA.KEY_COLUMN_USAGE
+                    WHERE TABLE_SCHEMA = DATABASE()
+                      AND TABLE_NAME = 'pantry_items'
+                      AND COLUMN_NAME = 'fridge_id'
+                      AND REFERENCED_TABLE_NAME = 'fridges'
+                      AND REFERENCED_COLUMN_NAME = 'fridge_id'
+                    LIMIT 1;
 
-            migrationBuilder.DropTable(
-                name: "suggested_recipes");
+                    IF existing_fk IS NOT NULL AND existing_fk <> '' THEN
+                        SET @drop_fk_sql = CONCAT(
+                            'ALTER TABLE `pantry_items` DROP FOREIGN KEY `',
+                            existing_fk,
+                            '`'
+                        );
+                        PREPARE drop_fk_stmt FROM @drop_fk_sql;
+                        EXECUTE drop_fk_stmt;
+                        DEALLOCATE PREPARE drop_fk_stmt;
+                    END IF;
 
-            migrationBuilder.DropColumn(
-                name: "status",
-                table: "chat_messages");
+                    ALTER TABLE `pantry_items`
+                        ADD CONSTRAINT `FK_pantry_items_fridges_fridge_id`
+                        FOREIGN KEY (`fridge_id`) REFERENCES `fridges` (`fridge_id`);
+                END;
+            ");
+            migrationBuilder.Sql("CALL RestorePantryFridgeFk();");
+            migrationBuilder.Sql("DROP PROCEDURE RestorePantryFridgeFk;");
 
-            migrationBuilder.AddForeignKey(
-                name: "FK_pantry_items_fridges_fridge_id",
-                table: "pantry_items",
-                column: "fridge_id",
-                principalTable: "fridges",
-                principalColumn: "fridge_id");
+            migrationBuilder.Sql("DROP TABLE IF EXISTS `suggested_recipes`;");
         }
     }
 }
