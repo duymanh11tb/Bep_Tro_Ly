@@ -4,6 +4,8 @@ set -euo pipefail
 APP_DIR="${APP_DIR:-/root/bep-tro-ly}"
 BRANCH="${BRANCH:-dev}"
 HEALTH_URL="${HEALTH_URL:-http://127.0.0.1:5001/health}"
+HEALTH_RETRIES="${HEALTH_RETRIES:-30}"
+HEALTH_SLEEP_SECONDS="${HEALTH_SLEEP_SECONDS:-2}"
 
 echo "[1/5] Enter project directory: ${APP_DIR}"
 cd "${APP_DIR}"
@@ -20,11 +22,19 @@ echo "[4/5] Show compose status"
 docker compose ps
 
 echo "[5/5] Health check: ${HEALTH_URL}"
-if curl -fsS "${HEALTH_URL}"; then
+for attempt in $(seq 1 "${HEALTH_RETRIES}"); do
+  if curl -fsS "${HEALTH_URL}"; then
+    echo
+    echo "Deploy completed successfully."
+    exit 0
+  fi
+
   echo
-  echo "Deploy completed successfully."
-else
-  echo
-  echo "Health check failed. Run: docker compose logs -f api"
-  exit 1
-fi
+  echo "Health check attempt ${attempt}/${HEALTH_RETRIES} failed. Waiting ${HEALTH_SLEEP_SECONDS}s..."
+  sleep "${HEALTH_SLEEP_SECONDS}"
+done
+
+echo
+echo "Health check failed after ${HEALTH_RETRIES} attempts. Recent API logs:"
+docker compose logs --tail 200 api || true
+exit 1
