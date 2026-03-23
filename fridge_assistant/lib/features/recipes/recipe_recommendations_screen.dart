@@ -75,7 +75,7 @@ class _RecipeRecommendationsScreenState
     final profile = await RegionPreferenceService.getProfile();
     _selectedRegionCode = _regionCodeFromProfile(profile);
 
-    final cached = await PantryService.getCachedAiSuggestions(
+    final cached = await PantryService.getCachedRecipeSuggestions(
       mode: _suggestionMode,
       fridgeId: _selectedFridgeId,
       region: _selectedRegionCode,
@@ -102,7 +102,7 @@ class _RecipeRecommendationsScreenState
 
   Future<void> _refreshSuggestions({required int limit}) async {
     try {
-      final data = await PantryService.getAiSuggestions(
+      final data = await PantryService.getRecipeSuggestions(
         mode: _suggestionMode,
         limit: limit,
         fridgeId: _selectedFridgeId,
@@ -131,7 +131,7 @@ class _RecipeRecommendationsScreenState
     final nextLimit = _limit + _batchSize;
     final excludes = _suggestions.map((e) => e.name).toList();
     try {
-      final data = await PantryService.getAiSuggestions(
+      final data = await PantryService.getRecipeSuggestions(
         mode: _suggestionMode,
         limit: _batchSize,
         fridgeId: _selectedFridgeId,
@@ -142,7 +142,7 @@ class _RecipeRecommendationsScreenState
       if (!mounted) return;
 
       setState(() {
-        _replaceSuggestions(data);
+        _appendSuggestions(data);
         _limit = nextLimit;
         _loadError = null;
       });
@@ -151,7 +151,7 @@ class _RecipeRecommendationsScreenState
       if (data.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
-            content: Text('AI chưa có thêm món mới phù hợp lúc này.'),
+            content: Text('Hiện chưa có thêm công thức mới phù hợp lúc này.'),
             behavior: SnackBarBehavior.floating,
           ),
         );
@@ -197,7 +197,7 @@ class _RecipeRecommendationsScreenState
       setState(() => _ingredientCount = 0);
     }
 
-    final cached = await PantryService.getCachedAiSuggestions(
+    final cached = await PantryService.getCachedRecipeSuggestions(
       mode: _suggestionMode,
       fridgeId: _selectedFridgeId,
       region: _selectedRegionCode,
@@ -223,7 +223,7 @@ class _RecipeRecommendationsScreenState
       _loadedRecipeKeys.clear();
     });
 
-    final cached = await PantryService.getCachedAiSuggestions(
+    final cached = await PantryService.getCachedRecipeSuggestions(
       mode: _suggestionMode,
       fridgeId: _selectedFridgeId,
       region: _selectedRegionCode,
@@ -391,15 +391,14 @@ class _RecipeRecommendationsScreenState
   bool _isCooldownError(String? message) {
     if (message == null) return false;
     final normalized = message.toLowerCase();
-    return normalized.contains('gemini') &&
-        normalized.contains('thử lại sau') &&
+    return normalized.contains('thử lại sau') &&
         (normalized.contains('vượt quota') ||
             normalized.contains('chạm quota') ||
             normalized.contains('resource_exhausted'));
   }
 
   void _syncCooldownTicker() {
-    if (!PantryService.hasActiveAiCooldown) {
+    if (!PantryService.hasActiveRecipeCooldown) {
       _cooldownTicker?.cancel();
       _cooldownTicker = null;
       return;
@@ -412,7 +411,7 @@ class _RecipeRecommendationsScreenState
         return;
       }
 
-      if (!PantryService.hasActiveAiCooldown) {
+      if (!PantryService.hasActiveRecipeCooldown) {
         timer.cancel();
         _cooldownTicker = null;
         setState(() {
@@ -429,7 +428,7 @@ class _RecipeRecommendationsScreenState
 
   String? _displayLoadError() {
     if (_isCooldownError(_loadError)) {
-      return PantryService.currentAiCooldownMessage ?? _loadError;
+      return PantryService.currentRecipeCooldownMessage ?? _loadError;
     }
     return _loadError;
   }
@@ -441,7 +440,7 @@ class _RecipeRecommendationsScreenState
     }
 
     if (_suggestionMode == RecipeSuggestionMode.pantry && _ingredientCount == 0) {
-      return 'Tủ lạnh đang trống. Hãy thêm nguyên liệu để AI gợi ý món ăn.';
+      return 'Tủ lạnh đang trống. Hãy thêm nguyên liệu để nhận gợi ý công thức.';
     }
 
     if (_searchQuery.trim().isNotEmpty || _selectedTab != _tabAll) {
@@ -449,8 +448,8 @@ class _RecipeRecommendationsScreenState
     }
 
     return _suggestionMode == RecipeSuggestionMode.pantry
-        ? 'AI chưa tìm được món phù hợp với nguyên liệu đang có trong tủ.'
-        : 'AI chưa có gợi ý phù hợp cho vùng miền này.';
+        ? 'Chưa tìm được công thức phù hợp với nguyên liệu đang có trong tủ.'
+        : 'Chưa có công thức phù hợp cho vùng miền này.';
   }
 
   Widget _buildEmptyStateCard() {
@@ -479,7 +478,7 @@ class _RecipeRecommendationsScreenState
   @override
   Widget build(BuildContext context) {
     final items = _filteredSuggestions;
-    final cooldownSeconds = PantryService.aiCooldownRemainingSeconds;
+    final cooldownSeconds = PantryService.recipeCooldownRemainingSeconds;
     final isCooldownActive = cooldownSeconds > 0;
 
     return Scaffold(
@@ -617,8 +616,8 @@ class _RecipeRecommendationsScreenState
               ),
               Text(
                 _suggestionMode == RecipeSuggestionMode.pantry
-                    ? 'Ứng dụng ưu tiên món phù hợp từ kho hiện có trước, sau đó bạn có thể xin thêm gợi ý AI.'
-                    : 'Ứng dụng ưu tiên món gợi ý nhanh theo vùng miền, sau đó bạn có thể xin thêm gợi ý AI.',
+                    ? 'Ứng dụng ưu tiên công thức phù hợp từ nguyên liệu hiện có và tự động lấy thêm từ nguồn recipe khi cần.'
+                    : 'Ứng dụng ưu tiên công thức vùng miền từ nguồn recipe để bạn chọn nhanh cho bữa cơm hằng ngày.',
                 style: const TextStyle(
                   fontSize: 12,
                   color: AppColors.textSecondary,
@@ -676,7 +675,7 @@ class _RecipeRecommendationsScreenState
             label: Text(
               isCooldownActive
                   ? 'Thử lại sau ${cooldownSeconds}s'
-                  : 'Gợi ý AI mới',
+                  : 'Xem thêm công thức',
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,

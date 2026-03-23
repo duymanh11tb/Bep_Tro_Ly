@@ -114,11 +114,14 @@ class CategoryStat {
 }
 
 class PantryService {
-  static const String _aiSuggestionsCachePrefix = 'pantry_ai_suggestions_v2_';
+  static const String _recipeSuggestionsCachePrefix =
+      'pantry_recipe_suggestions_v3_';
+  static const String _legacyAiSuggestionsCachePrefix =
+      'pantry_ai_suggestions_v2_';
   static List<PantryItem> _cachedExpiringItems = [];
   static PantryStats? _cachedStats;
-  static List<RecipeSuggestion> _cachedAiSuggestions = [];
-  static DateTime? _aiCooldownUntil;
+  static List<RecipeSuggestion> _cachedRecipeSuggestions = [];
+  static DateTime? _catalogCooldownUntil;
 
   static Future<String> _getUserCacheSuffix() async {
     final authService = AuthService();
@@ -142,7 +145,7 @@ class PantryService {
     return mode == RecipeSuggestionMode.region ? 'region' : 'pantry';
   }
 
-  static Future<String> _getAiSuggestionsCacheKey({
+  static Future<String> _getRecipeSuggestionsCacheKey({
     RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
     String? region,
@@ -153,10 +156,10 @@ class PantryService {
         ? '_r${_normalizeRegionCode(region)}'
         : '';
     final fridgeSuffix = fridgeId != null ? '_f$fridgeId' : '';
-    return '$_aiSuggestionsCachePrefix${suffix}$modeSuffix$regionSuffix$fridgeSuffix';
+    return '$_recipeSuggestionsCachePrefix${suffix}$modeSuffix$regionSuffix$fridgeSuffix';
   }
 
-  static Future<void> _persistAiSuggestions(
+  static Future<void> _persistRecipeSuggestions(
     List<RecipeSuggestion> suggestions, {
     RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
@@ -164,7 +167,7 @@ class PantryService {
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheKey = await _getAiSuggestionsCacheKey(
+      final cacheKey = await _getRecipeSuggestionsCacheKey(
         mode: mode,
         fridgeId: fridgeId,
         region: region,
@@ -172,23 +175,27 @@ class PantryService {
       final payload = jsonEncode(suggestions.map((e) => e.toJson()).toList());
       await prefs.setString(cacheKey, payload);
     } catch (e) {
-      debugPrint('PantryService._persistAiSuggestions error: $e');
+      debugPrint('PantryService._persistRecipeSuggestions error: $e');
     }
   }
 
-  static Future<List<RecipeSuggestion>> _loadPersistedAiSuggestions({
+  static Future<List<RecipeSuggestion>> _loadPersistedRecipeSuggestions({
     RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
     String? region,
   }) async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      final cacheKey = await _getAiSuggestionsCacheKey(
+      final cacheKey = await _getRecipeSuggestionsCacheKey(
         mode: mode,
         fridgeId: fridgeId,
         region: region,
       );
-      final raw = prefs.getString(cacheKey);
+      final legacyCacheKey = cacheKey.replaceFirst(
+        _recipeSuggestionsCachePrefix,
+        _legacyAiSuggestionsCachePrefix,
+      );
+      final raw = prefs.getString(cacheKey) ?? prefs.getString(legacyCacheKey);
       if (raw == null || raw.isEmpty) return [];
 
       final decoded = jsonDecode(raw);
@@ -199,7 +206,7 @@ class PantryService {
           .map((e) => RecipeSuggestion.fromJson(Map<String, dynamic>.from(e)))
           .toList();
     } catch (e) {
-      debugPrint('PantryService._loadPersistedAiSuggestions error: $e');
+      debugPrint('PantryService._loadPersistedRecipeSuggestions error: $e');
       return [];
     }
   }
@@ -212,28 +219,40 @@ class PantryService {
     return _cachedStats;
   }
 
-  static Future<List<RecipeSuggestion>> getCachedAiSuggestions({
+  static Future<List<RecipeSuggestion>> getCachedRecipeSuggestions({
     RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
     String? region,
   }) async {
-    final persisted = await _loadPersistedAiSuggestions(
+    final persisted = await _loadPersistedRecipeSuggestions(
       mode: mode,
       fridgeId: fridgeId,
       region: region,
     );
     if (persisted.isNotEmpty) {
-      _cachedAiSuggestions = persisted;
+      _cachedRecipeSuggestions = persisted;
     }
 
     return persisted;
   }
 
+  static Future<List<RecipeSuggestion>> getCachedAiSuggestions({
+    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
+    int? fridgeId,
+    String? region,
+  }) {
+    return getCachedRecipeSuggestions(
+      mode: mode,
+      fridgeId: fridgeId,
+      region: region,
+    );
+  }
+
   static Future<void> clearCache({bool clearPersistent = false}) async {
     _cachedExpiringItems = [];
     _cachedStats = null;
-    _cachedAiSuggestions = [];
-    _aiCooldownUntil = null;
+    _cachedRecipeSuggestions = [];
+    _catalogCooldownUntil = null;
 
     if (!clearPersistent) return;
 
@@ -241,7 +260,11 @@ class PantryService {
       final prefs = await SharedPreferences.getInstance();
       final keysToRemove = prefs
           .getKeys()
-          .where((k) => k.startsWith(_aiSuggestionsCachePrefix))
+          .where(
+            (k) =>
+                k.startsWith(_recipeSuggestionsCachePrefix) ||
+                k.startsWith(_legacyAiSuggestionsCachePrefix),
+          )
           .toList();
       for (final key in keysToRemove) {
         await prefs.remove(key);
@@ -396,8 +419,8 @@ class PantryService {
     }
   }
 
-  /// Lấy gợi ý món ăn theo luồng thông minh: local-first, AI khi cần
-  static Future<List<RecipeSuggestion>> getAiSuggestions({
+  /// Lấy gợi ý công thức theo luồng: recipe catalog -> cache fallback
+  static Future<List<RecipeSuggestion>> getRecipeSuggestions({
     RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
     String? region,
@@ -411,10 +434,10 @@ class PantryService {
         (refreshToken == null || refreshToken.isEmpty) &&
         (excludeRecipeNames == null || excludeRecipeNames.isEmpty);
 
-    final cooldownMessage = _currentAiCooldownMessage();
+    final cooldownMessage = _currentCatalogCooldownMessage();
     if (cooldownMessage != null) {
       if (canUseCachedFallback) {
-        final cached = await getCachedAiSuggestions(
+        final cached = await getCachedRecipeSuggestions(
           mode: mode,
           fridgeId: fridgeId,
           region: regionCode,
@@ -476,8 +499,8 @@ class PantryService {
               .map((e) => RecipeSuggestion.fromJson(Map<String, dynamic>.from(e)))
               .toList();
 
-          _cachedAiSuggestions = suggestions;
-          await _persistAiSuggestions(
+          _cachedRecipeSuggestions = suggestions;
+          await _persistRecipeSuggestions(
             suggestions,
             mode: mode,
             fridgeId: fridgeId,
@@ -491,19 +514,19 @@ class PantryService {
       final message =
           data?['error']?.toString() ??
           data?['message']?.toString() ??
-          'Không lấy được gợi ý AI lúc này.';
-      _applyAiCooldownFromMessage(message);
+          'Không lấy được gợi ý công thức lúc này.';
+      _applyCatalogCooldownFromMessage(message);
       throw Exception(message);
     } catch (e) {
-      debugPrint('PantryService.getAiSuggestions error: $e');
+      debugPrint('PantryService.getRecipeSuggestions error: $e');
 
       final cleanedMessage = e.toString().replaceFirst('Exception: ', '').trim().isEmpty
-          ? 'Không lấy được gợi ý AI lúc này.'
+          ? 'Không lấy được gợi ý công thức lúc này.'
           : e.toString().replaceFirst('Exception: ', '');
-      _applyAiCooldownFromMessage(cleanedMessage);
+      _applyCatalogCooldownFromMessage(cleanedMessage);
 
       if (canUseCachedFallback) {
-        final cached = await getCachedAiSuggestions(
+        final cached = await getCachedRecipeSuggestions(
           mode: mode,
           fridgeId: fridgeId,
           region: regionCode,
@@ -515,23 +538,52 @@ class PantryService {
     }
   }
 
-  static bool get hasActiveAiCooldown =>
-      _aiCooldownUntil != null && _aiCooldownUntil!.isAfter(DateTime.now());
+  static Future<List<RecipeSuggestion>> getAiSuggestions({
+    RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
+    int? fridgeId,
+    String? region,
+    int limit = 15,
+    String? refreshToken,
+    List<String>? excludeRecipeNames,
+    String? dietaryPreference,
+  }) {
+    return getRecipeSuggestions(
+      mode: mode,
+      fridgeId: fridgeId,
+      region: region,
+      limit: limit,
+      refreshToken: refreshToken,
+      excludeRecipeNames: excludeRecipeNames,
+      dietaryPreference: dietaryPreference,
+    );
+  }
 
-  static int get aiCooldownRemainingSeconds {
-    if (!hasActiveAiCooldown) return 0;
-    final remaining = _aiCooldownUntil!.difference(DateTime.now()).inSeconds;
+  static bool get hasActiveRecipeCooldown =>
+      _catalogCooldownUntil != null &&
+      _catalogCooldownUntil!.isAfter(DateTime.now());
+
+  static int get recipeCooldownRemainingSeconds {
+    if (!hasActiveRecipeCooldown) return 0;
+    final remaining =
+        _catalogCooldownUntil!.difference(DateTime.now()).inSeconds;
     return remaining <= 0 ? 1 : remaining;
   }
 
-  static String? get currentAiCooldownMessage => _currentAiCooldownMessage();
+  static String? get currentRecipeCooldownMessage =>
+      _currentCatalogCooldownMessage();
 
-  static String? _currentAiCooldownMessage() {
-    if (!hasActiveAiCooldown) return null;
-    return 'Gemini đang tạm nghỉ để tránh vượt quota. Vui lòng thử lại sau $aiCooldownRemainingSeconds giây.';
+  static bool get hasActiveAiCooldown => hasActiveRecipeCooldown;
+
+  static int get aiCooldownRemainingSeconds => recipeCooldownRemainingSeconds;
+
+  static String? get currentAiCooldownMessage => currentRecipeCooldownMessage;
+
+  static String? _currentCatalogCooldownMessage() {
+    if (!hasActiveRecipeCooldown) return null;
+    return 'Nguồn công thức đang tạm nghỉ để tránh vượt quota. Vui lòng thử lại sau $recipeCooldownRemainingSeconds giây.';
   }
 
-  static void _applyAiCooldownFromMessage(String message) {
+  static void _applyCatalogCooldownFromMessage(String message) {
     final retryMatch = RegExp(
       r'thử lại sau\s+(\d+)\s*giây',
       caseSensitive: false,
@@ -542,8 +594,9 @@ class PantryService {
     if (retrySeconds == null || retrySeconds <= 0) return;
 
     final retryUntil = DateTime.now().add(Duration(seconds: retrySeconds));
-    if (_aiCooldownUntil == null || retryUntil.isAfter(_aiCooldownUntil!)) {
-      _aiCooldownUntil = retryUntil;
+    if (_catalogCooldownUntil == null ||
+        retryUntil.isAfter(_catalogCooldownUntil!)) {
+      _catalogCooldownUntil = retryUntil;
     }
   }
 

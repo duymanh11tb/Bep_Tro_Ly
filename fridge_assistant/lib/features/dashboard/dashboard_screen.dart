@@ -110,7 +110,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       final results = await Future.wait([
         PantryService.getCachedExpiringItems(),
         PantryService.getCachedStats(),
-        PantryService.getCachedAiSuggestions(),
+        PantryService.getCachedRecipeSuggestions(),
       ]);
 
       if (mounted) {
@@ -154,7 +154,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
         });
       }
 
-      // Load AI suggestions independently (slow, don't block UI)
+      // Load recipe suggestions independently (slow, don't block UI)
       _loadAiSuggestions();
     } catch (e) {
       if (mounted) {
@@ -170,7 +170,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       setState(() => _isLoadingSuggestions = true);
     }
     try {
-      final suggestions = await PantryService.getAiSuggestions(
+      final suggestions = await PantryService.getRecipeSuggestions(
         limit: 10,
       );
       if (mounted) {
@@ -423,7 +423,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
             const SizedBox(height: 4),
             const Text(
-              'Hãy thử thêm nguyên liệu hoặc nhấn làm mới để AI bắt đầu gợi ý món ăn cho bạn nhé!',
+              'Hãy thử thêm nguyên liệu hoặc nhấn làm mới để ứng dụng gợi ý thêm công thức phù hợp cho bạn nhé!',
               textAlign: TextAlign.center,
               style: TextStyle(fontSize: 12, color: AppColors.textSecondary),
             ),
