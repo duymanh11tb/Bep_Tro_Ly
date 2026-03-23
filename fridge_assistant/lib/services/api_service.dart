@@ -353,7 +353,12 @@ class ApiService {
         throw Exception('No response from Gemini');
       }
 
-      return _parseGeminiRecipes(text);
+      final recipes = _parseGeminiRecipes(text);
+      if (recipes.isEmpty) {
+        throw Exception('Gemini returned no parseable recipes');
+      }
+
+      return recipes;
     } catch (e) {
       debugPrint('Gemini API error: $e');
 
@@ -362,6 +367,7 @@ class ApiService {
         return await _getRecipesFromBackend(
           availableIngredients: availableIngredients,
           expiringIngredients: expiringIngredients,
+          numberOfRecipes: numberOfRecipes,
         );
       } catch (backendError) {
         debugPrint('Backend fallback error: $backendError');
@@ -445,13 +451,15 @@ TRẢ VỀ JSON CHÍNH XÁC (không text khác):
   static Future<List<Map<String, dynamic>>> _getRecipesFromBackend({
     required List<String> availableIngredients,
     List<String>? expiringIngredients,
+    required int numberOfRecipes,
   }) async {
     try {
       final response = await ApiService.post(
-        '/api/recipes/suggest',
+        '/api/v1/recipes/suggest',
         {
           'ingredients': availableIngredients,
           'expiring_ingredients': expiringIngredients ?? [],
+          'limit': numberOfRecipes,
         },
         withAuth: true,
       );

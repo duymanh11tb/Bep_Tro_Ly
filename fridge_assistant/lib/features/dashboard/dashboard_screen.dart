@@ -18,8 +18,6 @@ import '../pantry/virtual_fridge_screen.dart';
 import '../fridge/fridge_management_screen.dart';
 import '../recipes/recipe_detail_screen.dart';
 import '../recipes/recipe_recommendations_screen.dart';
-import '../recipes/recipe_suggestion_screen.dart';
-
 import '../scan/scan_ingredient_screen.dart';
 import '../settings/settings_screen.dart';
 
@@ -248,18 +246,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
       return;
     }
 
-    final ingredients = itemsToUse.map((e) => e.name).toList();
-    final expiring = itemsToUse
-        .where((e) => e.daysUntilExpiry <= 3)
-        .map((e) => e.name)
-        .toList();
-
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (_) => RecipeSuggestionScreen(
-          ingredients: ingredients,
-          expiringIngredients: expiring,
-        ),
+        builder: (_) => const RecipeRecommendationsScreen(),
       ),
     );
   }

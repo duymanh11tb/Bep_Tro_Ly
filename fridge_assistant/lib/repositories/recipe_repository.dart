@@ -12,12 +12,20 @@ class RecipeRepository {
     int limit = 5,
   }) async {
     try {
+      if (ingredients.isEmpty) {
+        return [];
+      }
+
       // Gọi Gemini API qua ApiService
       final recipesData = await ApiService.suggestRecipesWithImages(
         availableIngredients: ingredients,
         expiringIngredients: expiringIngredients,
         numberOfRecipes: limit,
       );
+
+      if (recipesData.isEmpty) {
+        throw Exception('AI không trả về gợi ý hợp lệ');
+      }
       
       // Convert sang RecipeSuggestion objects
       final suggestions = <RecipeSuggestion>[];
@@ -43,7 +51,7 @@ class RecipeRepository {
       return suggestions;
     } catch (e) {
       debugPrint('RecipeRepository error: $e');
-      return [];
+      throw Exception('Không lấy được gợi ý món ăn lúc này. Vui lòng thử lại.');
     }
   }
   
