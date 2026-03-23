@@ -1,4 +1,5 @@
 using System.Security.Cryptography;
+using System.Net;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -484,7 +485,7 @@ public class AIRecipeService
         if (IsCircuitOpen(out var retryAfter))
         {
             var waitSeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
-            throw new InvalidOperationException($"AI đang quá tải, vui lòng thử lại sau {waitSeconds} giây.");
+            throw new InvalidOperationException($"Gemini đang tạm bị ngắt sau nhiều lỗi liên tiếp. Vui lòng thử lại sau {waitSeconds} giây.");
         }
 
         var url = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(_modelName)}:generateContent?key={_apiKey}";
@@ -526,7 +527,10 @@ public class AIRecipeService
 
         if (!response.IsSuccessStatusCode)
         {
-            RecordGeminiFailure();
+            if (ShouldTripCircuit(response.StatusCode))
+            {
+                RecordGeminiFailure();
+            }
             throw new Exception($"Gemini API error: {response.StatusCode} - {responseText}");
         }
 
@@ -607,6 +611,17 @@ public class AIRecipeService
                 _consecutiveGeminiFailures = 0;
             }
         }
+    }
+
+    private static bool ShouldTripCircuit(HttpStatusCode statusCode)
+    {
+        var code = (int)statusCode;
+        return statusCode == HttpStatusCode.RequestTimeout ||
+               code == 429 ||
+               code == 500 ||
+               code == 502 ||
+               code == 503 ||
+               code == 504;
     }
 
     private string GenerateCacheKey(List<string> ingredients, Dictionary<string, object>? preferences)
