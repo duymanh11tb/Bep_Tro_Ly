@@ -26,6 +26,7 @@ public class AIRecipeService
     private static readonly ConcurrentDictionary<int, LinkedList<string>> _recentRecipeNamesByUser = new();
 
     private readonly string? _apiKey;
+    private readonly string _modelName;
     private readonly HttpClient _httpClient;
     private readonly AppDbContext _db;
     private readonly ILogger<AIRecipeService> _logger;
@@ -33,6 +34,7 @@ public class AIRecipeService
     public AIRecipeService(IConfiguration configuration, AppDbContext db, ILogger<AIRecipeService> logger)
     {
         _apiKey = configuration["Gemini:ApiKey"];
+        _modelName = configuration["Gemini:Model"] ?? "gemini-2.0-flash-001";
         _httpClient = new HttpClient { Timeout = _geminiTimeout };
         _db = db;
         _logger = logger;
@@ -485,7 +487,7 @@ public class AIRecipeService
             throw new InvalidOperationException($"AI đang quá tải, vui lòng thử lại sau {waitSeconds} giây.");
         }
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key={_apiKey}";
+        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(_modelName)}:generateContent?key={_apiKey}";
 
         var requestBody = new
         {
