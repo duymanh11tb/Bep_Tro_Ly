@@ -109,7 +109,7 @@ builder.Services.AddRateLimiter(options =>
     {
         var userKey = httpContext.User.FindFirst("user_id")?.Value;
         var ipKey = httpContext.Connection.RemoteIpAddress?.ToString();
-        var key = userKey != null ? $"ai-user:{userKey}" : $"ai-ip:{ipKey ?? "unknown"}";
+        var key = userKey != null ? $"recipe-user:{userKey}" : $"recipe-ip:{ipKey ?? "unknown"}";
 
         return RateLimitPartition.GetFixedWindowLimiter(
             partitionKey: key,
@@ -160,7 +160,7 @@ builder.Services.AddHttpClient<IRecipeCatalogProvider, SpoonacularRecipeProvider
 {
     client.Timeout = TimeSpan.FromSeconds(20);
 });
-builder.Services.AddScoped<AIRecipeService>();
+builder.Services.AddScoped<RecipeSuggestionService>();
 
 // CORS (cho Flutter app)
 builder.Services.AddCors(options =>

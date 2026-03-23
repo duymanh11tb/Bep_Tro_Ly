@@ -3,12 +3,12 @@ import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../models/recipe_suggestion.dart';
 
-class AiSuggestionCarousel extends StatefulWidget {
+class RecipeSuggestionCarousel extends StatefulWidget {
   final List<RecipeSuggestion> suggestions;
   final Duration autoScrollDuration;
   final Function(RecipeSuggestion)? onViewRecipeTap;
 
-  const AiSuggestionCarousel({
+  const RecipeSuggestionCarousel({
     super.key,
     required this.suggestions,
     this.autoScrollDuration = const Duration(seconds: 7),
@@ -16,10 +16,12 @@ class AiSuggestionCarousel extends StatefulWidget {
   });
 
   @override
-  State<AiSuggestionCarousel> createState() => _AiSuggestionCarouselState();
+  State<RecipeSuggestionCarousel> createState() =>
+      _RecipeSuggestionCarouselState();
 }
 
-class _AiSuggestionCarouselState extends State<AiSuggestionCarousel> {
+class _RecipeSuggestionCarouselState
+    extends State<RecipeSuggestionCarousel> {
   late PageController _pageController;
   int _currentPage = 0;
   Timer? _autoScrollTimer;

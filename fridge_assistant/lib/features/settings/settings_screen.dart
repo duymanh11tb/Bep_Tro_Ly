@@ -30,12 +30,13 @@ class _SettingsScreenState extends State<SettingsScreen> {
 
   Future<void> _loadPreferences() async {
     final showExpired = await PantryService.getShowExpiredPreference();
-    final showAi = await PantryService.getShowAiSuggestionsPreference();
+    final showRecipeSuggestions =
+        await PantryService.getShowRecipeSuggestionsPreference();
     final languageCode = await AppPreferencesService.getPreferredLanguageCode();
     if (mounted) {
       setState(() {
         _expiryNotification = showExpired;
-        _dailyRecipeNotification = showAi;
+        _dailyRecipeNotification = showRecipeSuggestions;
         _languageCode = languageCode;
       });
     }
@@ -132,12 +133,15 @@ class _SettingsScreenState extends State<SettingsScreen> {
               _buildSwitchItem(
                 icon: Icons.lightbulb_outline,
                 title: 'Gợi ý công thức hàng ngày',
-                subtitle: 'Hiển thị các công thức gợi ý bởi AI trên trang chủ',
+                subtitle:
+                    'Hiển thị các công thức gợi ý trên trang chủ từ nguồn recipe',
                 value: _dailyRecipeNotification,
                 onChanged: (val) {
-                  debugPrint('[Settings] setShowAiSuggestionsPreference: $val');
+                  debugPrint(
+                    '[Settings] setShowRecipeSuggestionsPreference: $val',
+                  );
                   setState(() => _dailyRecipeNotification = val);
-                  PantryService.setShowAiSuggestionsPreference(val);
+                  PantryService.setShowRecipeSuggestionsPreference(val);
                 },
               ),
             ]),

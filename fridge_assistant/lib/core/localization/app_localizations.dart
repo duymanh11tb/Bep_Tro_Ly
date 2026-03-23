@@ -186,8 +186,8 @@ class AppLocalizations {
     'Hiển thị nguyên liệu đã hết hạn trên trang chủ':
         'Show expired ingredients on the dashboard',
     'Gợi ý công thức hàng ngày': 'Daily recipe suggestions',
-    'Hiển thị các công thức gợi ý bởi AI trên trang chủ':
-        'Show AI recipe suggestions on the dashboard',
+    'Hiển thị các công thức gợi ý trên trang chủ từ nguồn recipe':
+        'Show recipe suggestions from the recipe source on the dashboard',
     'Ngôn ngữ': 'Language',
     'Trợ giúp & Phản hồi': 'Help & Feedback',
     'Về Bếp Trợ Lý': 'About Kitchen Assistant',

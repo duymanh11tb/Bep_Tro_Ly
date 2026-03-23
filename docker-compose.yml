@@ -30,10 +30,6 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database=Bep_Tro_Ly;Uid=root;Pwd=${DB_PASSWORD};
       - Jwt__SecretKey=${JWT_SECRET}
-      - AI__Provider=${AI_PROVIDER:-gemini}
-      - Gemini__ApiKey=${GEMINI_API_KEY}
-      - Ollama__BaseUrl=${OLLAMA_BASE_URL:-http://host.docker.internal:11434/api}
-      - Ollama__Model=${OLLAMA_MODEL:-qwen3:4b}
       - Pexels__ApiKey=${PEXELS_API_KEY}
       - Spoonacular__ApiKey=${SPOONACULAR_API_KEY}
       - Spoonacular__BaseUrl=${SPOONACULAR_BASE_URL:-https://api.spoonacular.com}

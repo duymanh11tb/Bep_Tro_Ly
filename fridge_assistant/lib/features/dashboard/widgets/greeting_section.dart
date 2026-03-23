@@ -5,14 +5,14 @@ class GreetingSection extends StatelessWidget {
   final String userName;
   final String? statusMessage;
   final String? avatarUrl;
-  final VoidCallback? onAiSuggestTap;
+  final VoidCallback? onRecipeSuggestTap;
 
   const GreetingSection({
     super.key,
     required this.userName,
     this.statusMessage,
     this.avatarUrl,
-    this.onAiSuggestTap,
+    this.onRecipeSuggestTap,
   });
 
   @override
@@ -65,10 +65,10 @@ class GreetingSection extends StatelessWidget {
               ],
             ),
           ),
-          // AI Suggest Button (Prominent as requested)
-          if (onAiSuggestTap != null)
+          // Recipe suggestion button
+          if (onRecipeSuggestTap != null)
             ElevatedButton.icon(
-              onPressed: onAiSuggestTap,
+              onPressed: onRecipeSuggestTap,
               icon: const Icon(Icons.auto_awesome, size: 16),
               label: const Text(
                 'GỢI Ý',

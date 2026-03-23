@@ -56,7 +56,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
       final user = await _authService.refreshCurrentUser() ?? await _authService.getUser();
       final languageCode = await AppPreferencesService.getPreferredLanguageCode();
       final showExpired = await PantryService.getShowExpiredPreference();
-      final showAi = await PantryService.getShowAiSuggestionsPreference();
+      final showRecipeSuggestions =
+          await PantryService.getShowRecipeSuggestionsPreference();
       final summary = await _loadProfileSummary();
 
       if (!mounted) return;
@@ -68,7 +69,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       setState(() {
         _languageCode = languageCode;
         _expiryNotifications = showExpired;
-        _dishSuggestions = showAi;
+        _dishSuggestions = showRecipeSuggestions;
         _cookedCount = summary.cookedCount;
         _pantryItems = summary.pantryItems;
         _expiringSoonCount = summary.expiringSoonCount;
@@ -474,7 +475,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Future<void> _handleSuggestionsToggle(bool value) async {
     setState(() => _dishSuggestions = value);
-    await PantryService.setShowAiSuggestionsPreference(value);
+    await PantryService.setShowRecipeSuggestionsPreference(value);
   }
 
   Future<void> _handleLanguageSelection() async {

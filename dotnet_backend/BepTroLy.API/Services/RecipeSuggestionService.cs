@@ -1,8 +1,6 @@
 using System.Security.Cryptography;
-using System.Net;
 using System.Text;
 using System.Text.Json;
-using System.Text.RegularExpressions;
 using System.Collections.Concurrent;
 using BepTroLy.API.Data;
 using BepTroLy.API.Models;
@@ -11,46 +9,29 @@ using Microsoft.EntityFrameworkCore;
 namespace BepTroLy.API.Services;
 
 /// <summary>
-/// AI Recipe Suggestion Service using Google Gemini API.
-/// Mirrors Python's AIRecipeService.
+/// Recipe suggestion service backed by Spoonacular, cache, and local fallbacks.
 /// </summary>
-public class AIRecipeService
+public class RecipeSuggestionService
 {
     private static readonly ConcurrentDictionary<string, SemaphoreSlim> _cacheKeyLocks = new();
     private static readonly ConcurrentDictionary<string, string> _recipeImageCache = new();
-    private static readonly object _circuitLock = new();
-    private static int _consecutiveGeminiFailures;
-    private static DateTime _circuitOpenUntilUtc = DateTime.MinValue;
-    private static readonly TimeSpan _geminiTimeout = TimeSpan.FromSeconds(20);
-    private static readonly TimeSpan _circuitOpenDuration = TimeSpan.FromSeconds(45);
-    private const int GeminiFailureThreshold = 5;
     private const int RecentSuggestionsPerUser = 40;
     private static readonly ConcurrentDictionary<int, LinkedList<string>> _recentRecipeNamesByUser = new();
 
-    private readonly string? _apiKey;
     private readonly string? _pexelsApiKey;
-    private readonly string _aiProvider;
-    private readonly string _ollamaBaseUrl;
-    private readonly string _ollamaModel;
-    private readonly string _modelName;
     private readonly HttpClient _httpClient;
     private readonly IRecipeCatalogProvider _catalogProvider;
     private readonly AppDbContext _db;
-    private readonly ILogger<AIRecipeService> _logger;
+    private readonly ILogger<RecipeSuggestionService> _logger;
 
-    public AIRecipeService(
+    public RecipeSuggestionService(
         IConfiguration configuration,
         AppDbContext db,
         IRecipeCatalogProvider catalogProvider,
-        ILogger<AIRecipeService> logger)
+        ILogger<RecipeSuggestionService> logger)
     {
-        _apiKey = configuration["Gemini:ApiKey"];
         _pexelsApiKey = configuration["Pexels:ApiKey"];
-        _aiProvider = (configuration["AI:Provider"] ?? "gemini").Trim().ToLowerInvariant();
-        _ollamaBaseUrl = (configuration["Ollama:BaseUrl"] ?? "http://localhost:11434/api").Trim().TrimEnd('/');
-        _ollamaModel = configuration["Ollama:Model"] ?? "qwen3:4b";
-        _modelName = configuration["Gemini:Model"] ?? "gemini-2.5-flash";
-        _httpClient = new HttpClient { Timeout = _geminiTimeout };
+        _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         _catalogProvider = catalogProvider;
         _db = db;
         _logger = logger;
@@ -119,7 +100,7 @@ public class AIRecipeService
             };
         }
 
-        // Prevent thundering herd: same cache key should generate AI only once at a time.
+        // Prevent thundering herd: same cache key should generate suggestions only once at a time.
         var keyLock = _cacheKeyLocks.GetOrAdd(cacheKey, _ => new SemaphoreSlim(1, 1));
         await keyLock.WaitAsync();
 
@@ -168,7 +149,7 @@ public class AIRecipeService
                     return new Dictionary<string, object>
                     {
                         ["success"] = true,
-                        ["source"] = ingredients.Any() ? "ai_empty_pantry" : "ai_empty",
+                        ["source"] = ingredients.Any() ? "catalog_empty_pantry" : "catalog_empty",
                         ["recipes"] = new List<object>()
                     };
                 }
@@ -385,591 +366,6 @@ public class AIRecipeService
             weather = preferences.TryGetValue("weather", out var w) ? w?.ToString() : "normal"
         };
         await SaveSuggestedRecipesAsync(userId.Value, recipes, JsonSerializer.Serialize(contextData));
-    }
-
-    private async Task<Dictionary<string, object>?> BuildLocalFirstResponseAsync(
-        List<string> ingredients,
-        Dictionary<string, object>? preferences,
-        string? region,
-        List<string>? excludeRecipeNames,
-        int? userId,
-        int limit,
-        bool requirePantryIngredientMatch)
-    {
-        preferences ??= new Dictionary<string, object>();
-        await ApplyUserPersonalizationAsync(preferences, userId);
-        ApplyRegionalPreferences(preferences, region);
-
-        var recentNames = GetRecentRecipeNames(userId);
-        var localRecipes = BuildLocalFallbackRecipes(
-            ingredients,
-            region,
-            excludeRecipeNames,
-            limit,
-            refreshToken: null,
-            recentRecipeNames: recentNames,
-            preferences: preferences);
-
-        if (requirePantryIngredientMatch && ingredients.Count > 0)
-        {
-            localRecipes = PrioritizePantryRelevantRecipes(
-                localRecipes,
-                ingredients,
-                requireMatch: true);
-        }
-
-        if (localRecipes.Count == 0)
-        {
-            return null;
-        }
-
-        var recipesWithImages = await EnsureRecipeImagesAsync(localRecipes);
-        var finalRecipes = recipesWithImages.Take(Math.Max(1, limit)).ToList();
-        RecordRecentRecipeNames(userId, finalRecipes);
-
-        return new Dictionary<string, object>
-        {
-            ["success"] = true,
-            ["source"] = "local_primary",
-            ["message"] = "Đề xuất nhanh từ kho nguyên liệu hiện có.",
-            ["recipes"] = finalRecipes
-        };
-    }
-
-    private async Task<List<object>> GenerateAISuggestionsAsync(
-        List<string> ingredients,
-        Dictionary<string, object>? preferences,
-        int limit,
-        string historyText = "")
-    {
-        preferences ??= new Dictionary<string, object>();
-        var feedbackContext = string.IsNullOrEmpty(historyText)
-            ? ""
-            : $"\nLỊCH SỬ PHẢN HỒI CỦA NGƯỜI DÙNG (Hãy ưu tiên món 'liked' và tránh món 'disliked'):\n{historyText}";
-
-        var dietary = preferences.TryGetValue("dietary_restrictions", out var d) ? d?.ToString() ?? "" : "";
-        var cuisine = preferences.TryGetValue("cuisine", out var c) ? c?.ToString() ?? "Việt Nam" : "Việt Nam";
-        var difficulty = preferences.TryGetValue("difficulty", out var diff) ? diff?.ToString() ?? "any" : "any";
-        var regionLabel = preferences.TryGetValue("region_label", out var r) ? r?.ToString() ?? "Toàn quốc" : "Toàn quốc";
-        var seasoningStyle = preferences.TryGetValue("seasoning_preference", out var s) ? s?.ToString() ?? "" : "";
-        var refreshToken = preferences.TryGetValue("refresh_token", out var rt) ? rt?.ToString() ?? "" : "";
-        var excludedRecipeNames = ExtractExcludeRecipeNames(preferences);
-        var skillLevel = preferences.TryGetValue("user_skill_level", out var us) ? us?.ToString() ?? "beginner" : "beginner";
-        var userCuisineFocus = preferences.TryGetValue("user_cuisine_focus", out var uc) ? uc?.ToString() ?? "" : "";
-        var userAvoidText = preferences.TryGetValue("user_avoid_ingredients", out var ua) ? ua?.ToString() ?? "" : "";
-        var userFlavorProfile = preferences.TryGetValue("user_flavor_profile", out var uf) ? uf?.ToString() ?? "" : "";
-        var userVariantHint = preferences.TryGetValue("user_variant_hint", out var uv) ? uv?.ToString() ?? "" : "";
-        var creativityToken = preferences.TryGetValue("creativity_token", out var ct) ? ct?.ToString() ?? Guid.NewGuid().ToString("N") : Guid.NewGuid().ToString("N");
-
-        var dietaryText = !string.IsNullOrEmpty(dietary) ? $"Chế độ ăn đặc biệt: {dietary}" : "";
-        var difficultyText = difficulty != "any" ? $"Độ khó: {difficulty}" : "";
-        var seasoningText = !string.IsNullOrEmpty(seasoningStyle) ? $"Khẩu vị vùng miền ưu tiên: {seasoningStyle}" : "";
-        var refreshHintText = !string.IsNullOrWhiteSpace(refreshToken)
-            ? $"Yêu cầu làm mới phiên gợi ý: {refreshToken}. Hãy ưu tiên danh sách đa dạng, hạn chế lặp lại các món quá phổ biến."
-            : "";
-        var excludedText = excludedRecipeNames.Count > 0
-            ? $"KHÔNG ĐƯỢC gợi ý lại các món sau: {string.Join(", ", excludedRecipeNames)}."
-            : "";
-        var userCuisineText = !string.IsNullOrWhiteSpace(userCuisineFocus)
-            ? $"Người dùng thường ưu tiên các nhóm món: {userCuisineFocus}."
-            : "";
-        var userAvoidIngredientsText = !string.IsNullOrWhiteSpace(userAvoidText)
-            ? $"Tránh ưu tiên các nguyên liệu sau nếu không thật sự cần: {userAvoidText}."
-            : "";
-        var userFlavorText = !string.IsNullOrWhiteSpace(userFlavorProfile)
-            ? $"Hồ sơ khẩu vị cá nhân: {userFlavorProfile}."
-            : "";
-        var userVariantText = !string.IsNullOrWhiteSpace(userVariantHint)
-            ? $"Biến thể cá nhân hóa cho user này: {userVariantHint}."
-            : "";
-        var diversityConstraint = $$"""
-            RÀNG BUỘC ĐA DẠNG BẮT BUỘC (cực kỳ quan trọng):
-            - Phải có ÍT NHẤT 3 PHƯƠNG THỨC NẤU khác nhau trong danh sách:
-              xào / kho / canh / hấp / chiên / nướng / luộc / salad / súp / lẩu.
-            - Phải có ÍT NHẤT 2 LOẠI NGUYÊN LIỆU CHÍNH khác nhau:
-              thịt heo / thịt bò / thịt gà / hải sản / trứng / đậu hũ / rau củ.
-            - TUYỆT ĐỐI không đề xuất 2 món có cùng tên gần giống nhau.
-            - Creativity token: {{creativityToken}}
-            """;
-
-        var timeOfDay = GetTimeOfDayContext();
-        var season = GetSeasonContext();
-        var weather = preferences.TryGetValue("weather", out var w) ? w?.ToString() ?? "bình thường" : "bình thường";
-
-        var contextText = $"- Thời gian: {timeOfDay}\n- Mùa vụ: {season}\n- Thời tiết: {weather}";
-
-        var fewShotExamples = """
-            VÍ DỤ GỢI Ý CHUẨN (Mẫu JSON):
-            Example 1:
-            {
-                "name": "Thịt kho tàu nước dừa",
-                "description": "Món ăn quốc hồn quốc túy với miếng thịt mềm béo, trứng vịt thấm đẫm nước dừa ngọt thanh.",
-                "difficulty": "medium",
-                "prep_time": 20, "cook_time": 60, "servings": 4,
-                "ingredients_used": ["thịt ba chỉ", "trứng vịt"],
-                "ingredients_missing": ["nước dừa tươi", "hành tím"],
-                "match_score": 0.95,
-                "instructions": ["Sơ chế thịt và trứng", "Thắng nước màu", "Kho nhỏ lửa với nước dừa"],
-                "tips": "Nên dùng nước dừa xiêm để nước kho có màu đẹp tự nhiên."
-            }
-            Example 2:
-            {
-                "name": "Canh chua cá lóc",
-                "description": "Vị chua thanh của me, ngọt từ cá tươi và thơm nồng của ngò gai, rau ngổ.",
-                "difficulty": "medium",
-                "prep_time": 15, "cook_time": 15, "servings": 3,
-                "ingredients_used": ["cá lóc", "cà chua"],
-                "ingredients_missing": ["me", "bạc hà", "đậu bắp"],
-                "match_score": 0.88,
-                "instructions": ["Chiên sơ cá", "Nấu nước dùng me", "Cho rau vào sau cùng"],
-                "tips": "Cho một ít tỏi phi vào bát canh trước khi ăn để tăng hương vị."
-            }
-            """;
-
-        var statusText = ingredients.Any()
-            ? $"CHẾ ĐỘ GỢI Ý: Dựa trên {ingredients.Count} nguyên liệu có sẵn: {string.Join(", ", ingredients)}."
-            : $"CHẾ ĐỘ KHÁM PHÁ: Hãy gợi ý thực đơn hằng ngày phù hợp với vùng miền ưu tiên: {regionLabel}.";
-        var strictPantryText = ingredients.Any()
-            ? """
-            RÀNG BUỘC BẮT BUỘC CHO CHẾ ĐỘ THEO TỦ LẠNH:
-            - Mỗi món bắt buộc phải dùng ít nhất 1 nguyên liệu đang có trong tủ.
-            - Ưu tiên mạnh các món dùng từ 2 nguyên liệu có sẵn trở lên.
-            - Không được đề xuất món không liên quan tới danh sách nguyên liệu hiện có.
-            - Trường "ingredients_used" chỉ được liệt kê các nguyên liệu thực sự đang có trong tủ.
-            """
-            : "";
-
-        var prompt = $$"""
-            Bạn là một đầu bếp Việt Nam tài ba với kiến thức sâu rộng về ẩm thực 3 miền.
-            
-            {{statusText}}
-            {{strictPantryText}}
-            Phong cách ẩm thực yêu thích: {{cuisine}}
-            Vùng miền ưu tiên: {{regionLabel}}
-            {{seasoningText}}
-            {{dietaryText}}
-            Trình độ nấu ăn của người dùng: {{skillLevel}}
-            {{userCuisineText}}
-            {{userAvoidIngredientsText}}
-            {{userFlavorText}}
-            {{userVariantText}}
-            {{difficultyText}}
-            {{refreshHintText}}
-            {{excludedText}}
-            {{diversityConstraint}}
-            {{feedbackContext}}
-
-            {{fewShotExamples}}
-
-            NHIỆM VỤ: Đề xuất {{limit * 2}} món ăn phù hợp với {{timeOfDay}} và {{season}} nhất.
-            - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất.
-            - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy đề xuất những mâm cơm nhà hoặc món ăn đa dạng, đúng mùa vụ.
-
-            QUY ĐỊNH TRẢ VỀ (CHỈ TRẢ VỀ JSON THUẦN, KHÔNG CÓ MARKDOWN, KHÔNG DÙNG ```):
-            {
-                "recipes": [
-                    {
-                        "name": "Tên món ăn hấp dẫn",
-                        "description": "Mô tả ngắn gọn khiến người dùng muốn ăn ngay (1-2 câu, thân thiện, gần gũi người Việt)",
-                        "image_url": "Để null nếu không có URL ảnh thật đáng tin cậy, backend sẽ tự tìm ảnh minh họa",
-                        "image_query": "Từ khóa ngắn để backend tìm ảnh stock phù hợp món ăn, ưu tiên mô tả món bằng tiếng Anh đơn giản",
-                        "difficulty": "easy hoặc medium hoặc hard",
-                        "prep_time": thời gian chuẩn bị (phút),
-                        "cook_time": thời gian nấu (phút),
-                        "servings": cho mấy người ăn (nguyên số),
-                        "ingredients_used": ["những thứ đã có trong tủ"],
-                        "ingredients_missing": ["những thứ cần mua thêm"],
-                        "match_score": độ phù hợp từ 0.0 đến 1.0 (float),
-                        "instructions": [
-                           "Bước 1: Sơ chế...",
-                           "Bước 2: Chế biến...",
-                           "Bước 3: Hoàn thiện..."
-                        ],
-                        "tips": "Bí quyết nấu món này ngon nhất"
-                    }
-                ]
-            }
-
-            Sắp xếp theo thứ tự ưu tiên nhất lên đầu.
-            """;
-
-        if (_aiProvider == "ollama")
-        {
-            return await GenerateOllamaSuggestionsAsync(prompt);
-        }
-
-        if (string.IsNullOrEmpty(_apiKey))
-            throw new InvalidOperationException("Gemini API key chưa được cấu hình");
-
-        // Call Gemini REST API.
-        // Public Gemini structured output fields like responseMimeType are documented on v1beta.
-        if (IsCircuitOpen(out var retryAfter))
-        {
-            var waitSeconds = Math.Max(1, (int)Math.Ceiling(retryAfter.TotalSeconds));
-            throw new InvalidOperationException($"Gemini đang tạm bị ngắt sau nhiều lỗi liên tiếp. Vui lòng thử lại sau {waitSeconds} giây.");
-        }
-
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/{Uri.EscapeDataString(_modelName)}:generateContent?key={_apiKey}";
-
-        var requestBody = new
-        {
-            contents = new[]
-            {
-                new { parts = new[] { new { text = prompt } } }
-            },
-            generationConfig = new
-            {
-                responseMimeType = "application/json",
-                temperature = 0.95,
-                topP = 0.95
-            }
-        };
-
-        var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        string responseText;
-        HttpResponseMessage response;
-
-        try
-        {
-            response = await _httpClient.PostAsync(url, content);
-            responseText = await response.Content.ReadAsStringAsync();
-        }
-        catch (TaskCanceledException ex)
-        {
-            RecordGeminiFailure();
-            throw new TimeoutException("AI phản hồi chậm, vui lòng thử lại sau ít phút.", ex);
-        }
-        catch (Exception)
-        {
-            RecordGeminiFailure();
-            throw;
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            if (response.StatusCode == (HttpStatusCode)429)
-            {
-                if (TryExtractRetryDelay(responseText, out var retryDelay))
-                {
-                    OpenCircuitFor(retryDelay);
-                }
-                else
-                {
-                    RecordGeminiFailure();
-                }
-            }
-            else if (ShouldTripCircuit(response.StatusCode))
-            {
-                RecordGeminiFailure();
-            }
-            throw new Exception(BuildGeminiErrorMessage(response.StatusCode, responseText));
-        }
-
-        // Parse response
-        using var doc = JsonDocument.Parse(responseText);
-        var text = doc.RootElement
-            .GetProperty("candidates")[0]
-            .GetProperty("content")
-            .GetProperty("parts")[0]
-            .GetProperty("text")
-            .GetString() ?? "";
-
-        // Remove markdown stripping since generationConfig handles it
-        text = text.Trim();
-
-        // Parse JSON
-        try
-        {
-            using var resultDoc = JsonDocument.Parse(text);
-            var recipes = resultDoc.RootElement.GetProperty("recipes");
-            var parsed = JsonSerializer.Deserialize<List<object>>(recipes.GetRawText()) ?? new List<object>();
-            RecordGeminiSuccess();
-            return parsed;
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Lỗi parse JSON trả về từ AI: {Text}", text);
-            
-            // Try regex extraction
-            var match = Regex.Match(text, @"\{[\s\S]*\}");
-            if (match.Success)
-            {
-                using var resultDoc = JsonDocument.Parse(match.Value);
-                var recipes = resultDoc.RootElement.GetProperty("recipes");
-                var parsed = JsonSerializer.Deserialize<List<object>>(recipes.GetRawText()) ?? new List<object>();
-                RecordGeminiSuccess();
-                return parsed;
-            }
-
-            RecordGeminiFailure();
-            throw new Exception("Không thể parse AI response");
-        }
-    }
-
-    private static bool IsCircuitOpen(out TimeSpan retryAfter)
-    {
-        lock (_circuitLock)
-        {
-            var now = DateTime.UtcNow;
-            if (_circuitOpenUntilUtc > now)
-            {
-                retryAfter = _circuitOpenUntilUtc - now;
-                return true;
-            }
-
-            retryAfter = TimeSpan.Zero;
-            return false;
-        }
-    }
-
-    private static void RecordGeminiSuccess()
-    {
-        lock (_circuitLock)
-        {
-            _consecutiveGeminiFailures = 0;
-            _circuitOpenUntilUtc = DateTime.MinValue;
-        }
-    }
-
-    private static void RecordGeminiFailure()
-    {
-        lock (_circuitLock)
-        {
-            _consecutiveGeminiFailures += 1;
-            if (_consecutiveGeminiFailures >= GeminiFailureThreshold)
-            {
-                _circuitOpenUntilUtc = DateTime.UtcNow.Add(_circuitOpenDuration);
-                _consecutiveGeminiFailures = 0;
-            }
-        }
-    }
-
-    private static bool ShouldTripCircuit(HttpStatusCode statusCode)
-    {
-        var code = (int)statusCode;
-        return statusCode == HttpStatusCode.RequestTimeout ||
-               code == 500 ||
-               code == 502 ||
-               code == 503 ||
-               code == 504;
-    }
-
-    private static void OpenCircuitFor(TimeSpan retryDelay)
-    {
-        lock (_circuitLock)
-        {
-            var wait = retryDelay <= TimeSpan.Zero ? _circuitOpenDuration : retryDelay;
-            _circuitOpenUntilUtc = DateTime.UtcNow.Add(wait);
-            _consecutiveGeminiFailures = 0;
-        }
-    }
-
-    private static string BuildGeminiErrorMessage(HttpStatusCode statusCode, string responseText)
-    {
-        var apiMessage = ExtractGeminiApiMessage(responseText);
-        if (statusCode == (HttpStatusCode)429)
-        {
-            var modelName = ExtractGeminiQuotaModel(responseText);
-            var retrySuffix = TryExtractRetryDelay(responseText, out var retryDelay)
-                ? $" Vui lòng thử lại sau {Math.Max(1, (int)Math.Ceiling(retryDelay.TotalSeconds))} giây."
-                : string.Empty;
-            var quotaScope = string.IsNullOrWhiteSpace(modelName)
-                ? "của project hiện tại"
-                : $"cho model {modelName}";
-            return $"Gemini đã chạm quota {quotaScope}.{retrySuffix}".Trim();
-        }
-
-        if (!string.IsNullOrWhiteSpace(apiMessage))
-        {
-            return $"Gemini API error: {apiMessage}";
-        }
-
-        return $"Gemini API error: {statusCode}";
-    }
-
-    private static string? ExtractGeminiApiMessage(string responseText)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(responseText);
-            if (doc.RootElement.TryGetProperty("error", out var error) &&
-                error.TryGetProperty("message", out var message))
-            {
-                return message.GetString();
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
-    }
-
-    private static string? ExtractGeminiQuotaModel(string responseText)
-    {
-        try
-        {
-            using var doc = JsonDocument.Parse(responseText);
-            if (!doc.RootElement.TryGetProperty("error", out var error) ||
-                !error.TryGetProperty("details", out var details) ||
-                details.ValueKind != JsonValueKind.Array)
-            {
-                return null;
-            }
-
-            foreach (var detail in details.EnumerateArray())
-            {
-                if (!detail.TryGetProperty("@type", out var typeElement) ||
-                    typeElement.GetString() != "type.googleapis.com/google.rpc.QuotaFailure" ||
-                    !detail.TryGetProperty("violations", out var violations) ||
-                    violations.ValueKind != JsonValueKind.Array)
-                {
-                    continue;
-                }
-
-                foreach (var violation in violations.EnumerateArray())
-                {
-                    if (violation.TryGetProperty("quotaDimensions", out var dimensions) &&
-                        dimensions.ValueKind == JsonValueKind.Object &&
-                        dimensions.TryGetProperty("model", out var model))
-                    {
-                        return model.GetString();
-                    }
-                }
-            }
-        }
-        catch
-        {
-        }
-
-        return null;
-    }
-
-    private async Task<List<object>> GenerateOllamaSuggestionsAsync(string prompt)
-    {
-        if (string.IsNullOrWhiteSpace(_ollamaModel))
-        {
-            throw new InvalidOperationException("Ollama model chưa được cấu hình");
-        }
-
-        var url = $"{_ollamaBaseUrl}/generate";
-        var requestBody = new
-        {
-            model = _ollamaModel,
-            prompt,
-            format = "json",
-            stream = false,
-            options = new
-            {
-                temperature = 0.35
-            }
-        };
-
-        var json = JsonSerializer.Serialize(requestBody);
-        var content = new StringContent(json, Encoding.UTF8, "application/json");
-        string responseText;
-        HttpResponseMessage response;
-
-        try
-        {
-            response = await _httpClient.PostAsync(url, content);
-            responseText = await response.Content.ReadAsStringAsync();
-        }
-        catch (TaskCanceledException ex)
-        {
-            throw new TimeoutException("Ollama phản hồi chậm, vui lòng thử lại sau ít phút.", ex);
-        }
-        catch (Exception ex)
-        {
-            throw new Exception($"Không thể kết nối Ollama tại {_ollamaBaseUrl}: {ex.Message}", ex);
-        }
-
-        if (!response.IsSuccessStatusCode)
-        {
-            throw new Exception($"Ollama API error: {response.StatusCode} - {responseText}");
-        }
-
-        try
-        {
-            using var outerDoc = JsonDocument.Parse(responseText);
-            if (!outerDoc.RootElement.TryGetProperty("response", out var responseElement))
-            {
-                throw new Exception("Ollama không trả về trường response");
-            }
-
-            var text = responseElement.GetString()?.Trim() ?? string.Empty;
-            if (string.IsNullOrWhiteSpace(text))
-            {
-                throw new Exception("Ollama trả về nội dung rỗng");
-            }
-
-            using var resultDoc = JsonDocument.Parse(text);
-            if (!resultDoc.RootElement.TryGetProperty("recipes", out var recipes))
-            {
-                throw new Exception("Ollama không trả về danh sách recipes");
-            }
-
-            return JsonSerializer.Deserialize<List<object>>(recipes.GetRawText()) ?? new List<object>();
-        }
-        catch (JsonException ex)
-        {
-            _logger.LogError(ex, "Lỗi parse JSON trả về từ Ollama: {Response}", responseText);
-            throw new Exception("Không thể parse JSON từ Ollama");
-        }
-    }
-
-    private static bool TryExtractRetryDelay(string responseText, out TimeSpan retryDelay)
-    {
-        retryDelay = TimeSpan.Zero;
-
-        try
-        {
-            using var doc = JsonDocument.Parse(responseText);
-            if (!doc.RootElement.TryGetProperty("error", out var error) ||
-                !error.TryGetProperty("details", out var details) ||
-                details.ValueKind != JsonValueKind.Array)
-            {
-                return false;
-            }
-
-            foreach (var detail in details.EnumerateArray())
-            {
-                if (!detail.TryGetProperty("@type", out var typeElement) ||
-                    typeElement.GetString() != "type.googleapis.com/google.rpc.RetryInfo" ||
-                    !detail.TryGetProperty("retryDelay", out var delayElement))
-                {
-                    continue;
-                }
-
-                var rawDelay = delayElement.GetString();
-                if (string.IsNullOrWhiteSpace(rawDelay))
-                {
-                    continue;
-                }
-
-                retryDelay = ParseRetryDelay(rawDelay);
-                return retryDelay > TimeSpan.Zero;
-            }
-        }
-        catch
-        {
-        }
-
-        return false;
-    }
-
-    private static TimeSpan ParseRetryDelay(string rawDelay)
-    {
-        var match = Regex.Match(rawDelay, @"^(?<seconds>\d+(?:\.\d+)?)s$");
-        if (!match.Success)
-        {
-            return TimeSpan.Zero;
-        }
-
-        return double.TryParse(match.Groups["seconds"].Value, out var seconds)
-            ? TimeSpan.FromSeconds(seconds)
-            : TimeSpan.Zero;
     }
 
     private string GenerateCacheKey(List<string> ingredients, Dictionary<string, object>? preferences)
@@ -1362,14 +758,14 @@ public class AIRecipeService
     {
         try
         {
-            var entry = await _db.AICache.FirstOrDefaultAsync(c => c.CacheKey == cacheKey);
+            var entry = await _db.RecipeSuggestionCaches.FirstOrDefaultAsync(c => c.CacheKey == cacheKey);
             if (entry != null && entry.ExpiresAt > DateTime.UtcNow)
             {
                 return JsonSerializer.Deserialize<List<object>>(entry.ResponseData);
             }
             if (entry != null)
             {
-                _db.AICache.Remove(entry);
+                _db.RecipeSuggestionCaches.Remove(entry);
                 await _db.SaveChangesAsync();
             }
             return null;
@@ -1381,10 +777,10 @@ public class AIRecipeService
     {
         try
         {
-            var existing = await _db.AICache.FirstOrDefaultAsync(c => c.CacheKey == cacheKey);
-            if (existing != null) _db.AICache.Remove(existing);
+            var existing = await _db.RecipeSuggestionCaches.FirstOrDefaultAsync(c => c.CacheKey == cacheKey);
+            if (existing != null) _db.RecipeSuggestionCaches.Remove(existing);
 
-            _db.AICache.Add(new AICache
+            _db.RecipeSuggestionCaches.Add(new RecipeSuggestionCache
             {
                 CacheKey = cacheKey,
                 ResponseData = JsonSerializer.Serialize(recipes),
@@ -2137,7 +1533,7 @@ public class AIRecipeService
             if (cookedNames.Any())
             {
                 preferences["user_recent_cooked"] = string.Join(", ", cookedNames);
-                // Hint AI to avoid these for variety
+                // Hint the suggestion generator to avoid these for variety
                 preferences["refresh_token"] = (preferences.TryGetValue("refresh_token", out var rt) ? rt?.ToString() ?? "" : "") 
                     + " avoid:" + string.Join(",", cookedNames);
             }
@@ -2204,37 +1600,6 @@ public class AIRecipeService
         }
 
         return new List<string>();
-    }
-
-    private static string BuildFlavorProfile(User user, List<string> cuisines, List<string> dietary)
-    {
-        var parts = new List<string>();
-
-        if (user.SkillLevel == "beginner")
-        {
-            parts.Add("uu tien mon de nau, it buoc");
-        }
-        else if (user.SkillLevel == "advanced")
-        {
-            parts.Add("co the thu mon cau ky hon");
-        }
-
-        if (cuisines.Any())
-        {
-            parts.Add($"thich {string.Join(", ", cuisines.Take(2))}");
-        }
-
-        if (dietary.Any())
-        {
-            parts.Add($"uu tien che do {string.Join(", ", dietary.Take(2))}");
-        }
-
-        var variant = user.UserId % 3;
-        if (variant == 0) parts.Add("nghieng ve vi thanh va mon canh");
-        if (variant == 1) parts.Add("nghieng ve mon xao kho dua com");
-        if (variant == 2) parts.Add("nghieng ve mon nhanh gon cho bua hang ngay");
-
-        return string.Join("; ", parts);
     }
 
     private static string BuildUserVariantHint(int userId)

@@ -22,7 +22,7 @@ public class AppDbContext : DbContext
     public DbSet<ActivityLog> ActivityLogs { get; set; }
     public DbSet<UserFavorite> UserFavorites { get; set; }
     public DbSet<UserRating> UserRatings { get; set; }
-    public DbSet<AICache> AICache { get; set; }
+    public DbSet<RecipeSuggestionCache> RecipeSuggestionCaches { get; set; }
     public DbSet<Fridge> Fridges { get; set; }
     public DbSet<FridgeMember> FridgeMembers { get; set; }
     public DbSet<ChatMessage> ChatMessages { get; set; }

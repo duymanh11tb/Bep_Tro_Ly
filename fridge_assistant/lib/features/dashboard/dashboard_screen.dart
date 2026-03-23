@@ -8,7 +8,7 @@ import 'widgets/dashboard_header.dart';
 import 'widgets/greeting_section.dart';
 import 'widgets/stat_cards.dart';
 import 'widgets/quick_actions.dart';
-import 'widgets/ai_suggestion_carousel.dart';
+import 'widgets/recipe_suggestion_carousel.dart';
 import 'widgets/fridge_stats.dart';
 import '../shopping/shopping_list_screen.dart';
 import '../../models/recipe_suggestion.dart';
@@ -43,7 +43,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   PantryStats? _stats;
   List<RecipeSuggestion> _suggestions = [];
   bool _showExpired = true;
-  bool _showAiSuggestions = false;
+  bool _showRecipeSuggestions = false;
 
   List<String> _cleanedItems = [];
 
@@ -57,12 +57,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Future<void> _initSequence() async {
     // 0. Load toggle preference
     final showExpired = await PantryService.getShowExpiredPreference();
-    final showAi = await PantryService.getShowAiSuggestionsPreference();
-    debugPrint('[Dashboard] initSequence: showExpired = $showExpired, showAi = $showAi');
+    final showRecipeSuggestions =
+        await PantryService.getShowRecipeSuggestionsPreference();
+    debugPrint(
+      '[Dashboard] initSequence: showExpired = $showExpired, showRecipeSuggestions = $showRecipeSuggestions',
+    );
     if (mounted) {
       setState(() {
         _showExpired = showExpired;
-        _showAiSuggestions = showAi;
+        _showRecipeSuggestions = showRecipeSuggestions;
       });
     }
     // 1. Tải thông tin user & dữ liệu cache ngay lập tức
@@ -155,7 +158,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       }
 
       // Load recipe suggestions independently (slow, don't block UI)
-      _loadAiSuggestions();
+      _loadRecipeSuggestions();
     } catch (e) {
       if (mounted) {
         setState(() => _isLoading = false);
@@ -163,8 +166,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
-  Future<void> _loadAiSuggestions() async {
-    if (!_showAiSuggestions) return; // Skip if disabled
+  Future<void> _loadRecipeSuggestions() async {
+    if (!_showRecipeSuggestions) return;
     
     if (mounted && _suggestions.isEmpty) {
       setState(() => _isLoadingSuggestions = true);
@@ -190,7 +193,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _loadPantryData(isBackground: false);
   }
 
-  Future<void> _handleAiSuggest() async {
+  Future<void> _handleRecipeSuggest() async {
     final activeFridgeId = await FridgeService.getActiveFridgeId();
     if (activeFridgeId == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -322,7 +325,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ? '${_stats!.expiringSoon} sản phẩm sắp hết hạn!'
                   : 'Tủ lạnh của bạn đang ổn định!',
               avatarUrl: _avatarUrl,
-              onAiSuggestTap: _handleAiSuggest, // Link behavior
+              onRecipeSuggestTap: _handleRecipeSuggest,
             ),
             const SizedBox(height: 20),
 
@@ -355,12 +358,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 await Navigator.pushNamed(context, '/fridge-management');
                 _refresh(); // Refresh when back from fridge management
               },
-              onAiSuggestTap: _handleAiSuggest, // Connect to AI suggest flow
+              onRecipeSuggestTap: _handleRecipeSuggest,
             ),
             const SizedBox(height: 24),
 
-            // AI Suggestions / Discovery
-            if (_showAiSuggestions) ...[
+            // Recipe suggestions / Discovery
+            if (_showRecipeSuggestions) ...[
               _isLoadingSuggestions && _suggestions.isEmpty
                   ? const Padding(
                       padding: EdgeInsets.symmetric(vertical: 20),
@@ -372,7 +375,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     )
                   : _suggestions.isEmpty
                   ? _buildEmptySuggestions()
-                  : AiSuggestionCarousel(
+                  : RecipeSuggestionCarousel(
                       suggestions: _suggestions,
                       autoScrollDuration: const Duration(seconds: 7),
                       onViewRecipeTap: (recipe) {
@@ -418,7 +421,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
             const Icon(Icons.auto_awesome, color: AppColors.primary, size: 32),
             const SizedBox(height: 8),
             const Text(
-              'Chưa có gợi ý nào',
+              'Chưa có công thức gợi ý nào',
               style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
             ),
             const SizedBox(height: 4),
@@ -442,21 +445,23 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _reloadExpiredPreference() async {
     final val = await PantryService.getShowExpiredPreference();
-    final aiVal = await PantryService.getShowAiSuggestionsPreference();
-    debugPrint('[Dashboard] reloadExpiredPreference: val=$val, current=$_showExpired, aiVal=$aiVal, aiCurrent=$_showAiSuggestions');
+    final recipeVal = await PantryService.getShowRecipeSuggestionsPreference();
+    debugPrint(
+      '[Dashboard] reloadExpiredPreference: val=$val, current=$_showExpired, recipeVal=$recipeVal, recipeCurrent=$_showRecipeSuggestions',
+    );
     if (mounted) {
       bool needRefresh = false;
       if (val != _showExpired) {
         _showExpired = val;
         needRefresh = true;
       }
-      if (aiVal != _showAiSuggestions) {
-        _showAiSuggestions = aiVal;
+      if (recipeVal != _showRecipeSuggestions) {
+        _showRecipeSuggestions = recipeVal;
         needRefresh = true;
         
         // If it was just turned on, load the suggestions
-        if (_showAiSuggestions && _suggestions.isEmpty) {
-          _loadAiSuggestions();
+        if (_showRecipeSuggestions && _suggestions.isEmpty) {
+          _loadRecipeSuggestions();
         }
       }
       if (needRefresh) setState(() {});

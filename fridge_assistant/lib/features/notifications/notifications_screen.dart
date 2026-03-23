@@ -314,7 +314,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'expiry_alert':
         accentColor = const Color(0xFFEF4444);
         iconData = Icons.warning_amber_rounded;
-        buttonText = 'Gợi ý món ăn';
+        buttonText = 'Xem công thức';
         break;
       case 'recipe_suggestion':
         accentColor = const Color(0xFF10B981);
@@ -443,7 +443,7 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       const SizedBox(height: 10),
                       InkWell(
                         onTap: () {
-                          if (buttonText == 'Gợi ý món ăn') {
+                          if (buttonText == 'Xem công thức') {
                             Navigator.push(
                               context,
                               MaterialPageRoute(

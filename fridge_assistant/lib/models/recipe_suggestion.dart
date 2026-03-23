@@ -378,28 +378,6 @@ class RecipeSuggestion {
     };
   }
 
-  /// Tạo từ dữ liệu Gemini
-  static RecipeSuggestion fromGeminiData(
-    Map<String, dynamic> data, {
-    String? imageUrl,
-  }) {
-    return RecipeSuggestion(
-      id: DateTime.now().millisecondsSinceEpoch.toString(),
-      name: data['name'] ?? '',
-      imageUrl: imageUrl ?? data['image_url'],
-      description: data['description'] ?? '',
-      ingredientsUsed: List<String>.from(data['ingredients_used'] ?? []),
-      ingredientsMissing: List<String>.from(data['ingredients_missing'] ?? []),
-      prepTimeMinutes: data['prep_time'] ?? 0,
-      cookTimeMinutes: data['cook_time'] ?? 0,
-      difficulty: data['difficulty'] ?? 'easy',
-      matchScore: (data['match_score'] ?? 0.0).toDouble(),
-      instructions: List<String>.from(data['instructions'] ?? []),
-      tips: data['tips'],
-      ingredientsExpiringCount: 0, // Sẽ tính sau
-    );
-  }
-
   /// Tính số nguyên liệu sắp hết được sử dụng
   static int countExpiringIngredients(
     List<String> usedIngredients,

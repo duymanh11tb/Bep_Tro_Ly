@@ -4,7 +4,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 namespace BepTroLy.API.Models;
 
 [Table("ai_recipe_cache")]
-public class AICache
+public class RecipeSuggestionCache
 {
     [Key]
     [DatabaseGenerated(DatabaseGeneratedOption.Identity)]

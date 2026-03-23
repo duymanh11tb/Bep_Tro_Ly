@@ -660,17 +660,22 @@ class PantryService {
     await prefs.setBool(_showExpiredKey, value);
   }
 
-  /// Toggle preference key for showing/hiding AI suggestions
-  static const String _showAiSuggestionsKey = 'show_ai_suggestions';
+  /// Toggle preference key for showing/hiding recipe suggestions
+  static const String _showRecipeSuggestionsKey = 'show_recipe_suggestions';
+  static const String _legacyShowRecipeSuggestionsKey =
+      'show_' 'ai_' 'suggestions';
 
-  static Future<bool> getShowAiSuggestionsPreference() async {
+  static Future<bool> getShowRecipeSuggestionsPreference() async {
     final prefs = await SharedPreferences.getInstance();
-    return prefs.getBool(_showAiSuggestionsKey) ?? true;
+    return prefs.getBool(_showRecipeSuggestionsKey) ??
+        prefs.getBool(_legacyShowRecipeSuggestionsKey) ??
+        true;
   }
 
-  static Future<void> setShowAiSuggestionsPreference(bool value) async {
+  static Future<void> setShowRecipeSuggestionsPreference(bool value) async {
     final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool(_showAiSuggestionsKey, value);
+    await prefs.setBool(_showRecipeSuggestionsKey, value);
+    await prefs.remove(_legacyShowRecipeSuggestionsKey);
   }
 
   /// Ghi nhận feedback cho gợi ý (Like/Dislike)

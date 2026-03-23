@@ -14,12 +14,12 @@ namespace BepTroLy.API.Controllers;
 [Route("api/v1/recipes")]
 public class RecipeController : ControllerBase
 {
-    private readonly AIRecipeService _aiService;
+    private readonly RecipeSuggestionService _recipeService;
     private readonly AppDbContext _db;
 
-    public RecipeController(AIRecipeService aiService, AppDbContext db)
+    public RecipeController(RecipeSuggestionService recipeService, AppDbContext db)
     {
-        _aiService = aiService;
+        _recipeService = recipeService;
         _db = db;
     }
 
@@ -29,7 +29,7 @@ public class RecipeController : ControllerBase
     [EnableRateLimiting("recipe-heavy")]
     public async Task<IActionResult> SuggestRecipes([FromBody] SuggestRecipesRequest request)
     {
-        var result = await _aiService.SuggestRecipesAsync(
+        var result = await _recipeService.SuggestRecipesAsync(
             request.Ingredients ?? new List<string>(),
             request.Preferences,
             request.Region,
@@ -52,7 +52,7 @@ public class RecipeController : ControllerBase
         var userId = GetCurrentUserId();
         if (userId == null) return Unauthorized();
 
-        var result = await _aiService.SuggestFromPantryAsync(
+        var result = await _recipeService.SuggestFromPantryAsync(
             userId.Value,
             request.FridgeId,
             request.Preferences,
@@ -83,7 +83,7 @@ public class RecipeController : ControllerBase
         var excludes = ParseExcludeRecipeNames(excludeRecipeNames);
         var preferences = BuildQueryPreferences(dietary);
 
-        var result = await _aiService.SuggestFromPantryAsync(
+        var result = await _recipeService.SuggestFromPantryAsync(
             userId.Value,
             fridgeId,
             preferences,
@@ -110,7 +110,7 @@ public class RecipeController : ControllerBase
     {
         var excludes = ParseExcludeRecipeNames(excludeRecipeNames);
         var preferences = BuildQueryPreferences(dietary);
-        var result = await _aiService.SuggestByRegionAsync(
+        var result = await _recipeService.SuggestByRegionAsync(
             region,
             preferences,
             refreshToken,
@@ -235,7 +235,7 @@ public class RecipeController : ControllerBase
         suggestion.Status = request.Feedback; // "liked", "disliked", "hidden"
         await _db.SaveChangesAsync();
 
-        // If disliked, add to activity log to help AI learn
+        // If disliked, add to activity log to help future recipe ranking
         if (request.Feedback == "disliked")
         {
             await LogDislikeActivityAsync(userId.Value, request.RecipeName);
