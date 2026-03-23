@@ -1228,7 +1228,6 @@ public class RecipeSuggestionService
             })
             .ToList();
 
-        IEnumerable<dynamic> selected;
         if (!string.IsNullOrWhiteSpace(refreshToken))
         {
             var topCandidates = candidates
@@ -1238,40 +1237,44 @@ public class RecipeSuggestionService
                 .ToList();
             var seed = refreshToken.GetHashCode();
             var rng = new Random(seed);
-            selected = topCandidates.OrderBy(_ => rng.Next()).Take(Math.Max(1, limit));
-        }
-        else
-        {
-            selected = candidates
-                .OrderByDescending(x => x.Score)
-                .ThenBy(x => x.Template.Prep + x.Template.Cook)
-                .Take(Math.Max(1, limit));
+
+            return topCandidates
+                .OrderBy(_ => rng.Next())
+                .Take(Math.Max(1, limit))
+                .Select(x => (object)BuildLocalFallbackRecipeMap(x.Template, x.Used, x.Missing, x.Score))
+                .ToList();
         }
 
-        var ranked = selected
-            .Select(x =>
-            {
-                var recipe = new Dictionary<string, object>
-                {
-                    ["name"] = x.Template.Name,
-                    ["description"] = x.Template.Description,
-                    ["image_url"] = string.Empty,
-                    ["difficulty"] = x.Template.Difficulty,
-                    ["prep_time"] = x.Template.Prep,
-                    ["cook_time"] = x.Template.Cook,
-                    ["servings"] = 2,
-                    ["ingredients_used"] = x.Used,
-                    ["ingredients_missing"] = x.Missing,
-                    ["match_score"] = x.Score,
-                    ["instructions"] = x.Template.Steps,
-                    ["tips"] = x.Template.Tips,
-                    ["ingredients_expiring_count"] = 0
-                };
-                return (object)recipe;
-            })
+        return candidates
+            .OrderByDescending(x => x.Score)
+            .ThenBy(x => x.Template.Prep + x.Template.Cook)
+            .Take(Math.Max(1, limit))
+            .Select(x => (object)BuildLocalFallbackRecipeMap(x.Template, x.Used, x.Missing, x.Score))
             .ToList();
+    }
 
-        return ranked;
+    private static Dictionary<string, object> BuildLocalFallbackRecipeMap(
+        (string Name, string Description, string Difficulty, int Prep, int Cook, string[] Ingredients, string[] Steps, string Tips) template,
+        List<string> used,
+        List<string> missing,
+        double score)
+    {
+        return new Dictionary<string, object>
+        {
+            ["name"] = template.Name,
+            ["description"] = template.Description,
+            ["image_url"] = string.Empty,
+            ["difficulty"] = template.Difficulty,
+            ["prep_time"] = template.Prep,
+            ["cook_time"] = template.Cook,
+            ["servings"] = 2,
+            ["ingredients_used"] = used,
+            ["ingredients_missing"] = missing,
+            ["match_score"] = score,
+            ["instructions"] = template.Steps,
+            ["tips"] = template.Tips,
+            ["ingredients_expiring_count"] = 0
+        };
     }
 
     private static int BuildShuffleSeed(Dictionary<string, object> preferences)

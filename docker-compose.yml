@@ -30,9 +30,10 @@ services:
     environment:
       - ConnectionStrings__DefaultConnection=Server=db;Port=3306;Database=Bep_Tro_Ly;Uid=root;Pwd=${DB_PASSWORD};
       - Jwt__SecretKey=${JWT_SECRET}
-      - Pexels__ApiKey=${PEXELS_API_KEY}
       - Spoonacular__ApiKey=${SPOONACULAR_API_KEY}
       - Spoonacular__BaseUrl=${SPOONACULAR_BASE_URL:-https://api.spoonacular.com}
+      - Gemini__ApiKey=${GEMINI_API_KEY}
+      - GoogleAuth__ClientId=${GOOGLE_CLIENT_ID}
       - Database__ServerVersion=8.0.36-mysql
       - ASPNETCORE_ENVIRONMENT=Production
     depends_on:
