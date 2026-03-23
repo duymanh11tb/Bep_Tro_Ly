@@ -12,19 +12,19 @@ class ApiService {
   static String get baseUrl {
     final configured = ApiConfig.apiUrl.trim();
     if (!kIsWeb) {
-      return (configured.isEmpty)
-          ? 'http://localhost:5001'
-          : configured;
+      return _sanitizeBaseUrl(
+        configured.isEmpty ? 'http://localhost:5001' : configured,
+      );
     }
 
     final configuredWeb = ApiConfig.apiUrlWeb.trim();
+    if (!_isDevelopingLocally) {
+      return _resolveProductionWebBaseUrl(configuredWeb);
+    }
+
     if (configuredWeb.isEmpty || configuredWeb == 'auto') {
-      // If we are on localhost/dev, prefer the configured API_URL (if any) 
-      // instead of self-origin, to allow testing against remote servers.
-      if (_isDevelopingLocally) {
-        final remote = ApiConfig.apiUrl.trim();
-        if (remote.isNotEmpty) return remote;
-      }
+      final remote = ApiConfig.apiUrl.trim();
+      if (remote.isNotEmpty) return _sanitizeBaseUrl(remote);
       return _resolveWebBaseUrl(null);
     }
 
@@ -66,24 +66,61 @@ class ApiService {
         page.host == '0.0.0.0';
   }
 
+  static String _sanitizeBaseUrl(String value) {
+    final trimmed = value.trim();
+    if (trimmed.endsWith('/')) {
+      return trimmed.substring(0, trimmed.length - 1);
+    }
+    return trimmed;
+  }
+
+  static String _resolveProductionWebBaseUrl(String configuredWeb) {
+    final pageOrigin = Uri.base.origin;
+    if (configuredWeb.isEmpty || configuredWeb == 'auto') {
+      return _sanitizeBaseUrl(pageOrigin);
+    }
+
+    final parsed = Uri.tryParse(configuredWeb);
+    if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
+      return _sanitizeBaseUrl(pageOrigin);
+    }
+
+    // Production web should prefer same-origin to avoid mixed-content and
+    // cross-origin fetch failures behind domains/reverse proxies.
+    final page = Uri.base;
+    if (page.scheme == 'https' && parsed.scheme != 'https') {
+      return _sanitizeBaseUrl(pageOrigin);
+    }
+
+    final sameOrigin =
+        parsed.scheme == page.scheme &&
+        parsed.host == page.host &&
+        parsed.port == page.port;
+    if (!sameOrigin) {
+      return _sanitizeBaseUrl(pageOrigin);
+    }
+
+    return _sanitizeBaseUrl(configuredWeb);
+  }
+
   static String _resolveWebBaseUrl(String? configured) {
     final page = Uri.base;
     final pageOrigin = page.origin;
     final isLocalWebHost = _isDevelopingLocally;
 
     if (configured == null || configured.isEmpty) {
-      return pageOrigin;
+      return _sanitizeBaseUrl(pageOrigin);
     }
 
     final parsed = Uri.tryParse(configured);
     if (parsed == null || !parsed.hasScheme || parsed.host.isEmpty) {
-      return pageOrigin;
+      return _sanitizeBaseUrl(pageOrigin);
     }
 
     // In production web deployments, prefer same-origin so the app stays
     // aligned with reverse proxies and avoids cross-origin/mixed-content issues.
     if (!isLocalWebHost) {
-      return pageOrigin;
+      return _sanitizeBaseUrl(pageOrigin);
     }
 
     final runningSecure = page.scheme == 'https';
@@ -91,13 +128,13 @@ class ApiService {
       // On web, https pages cannot fetch insecure http APIs.
       // Prefer same-origin when deployed behind a reverse proxy.
       if (!isLocalWebHost) {
-        return pageOrigin;
+        return _sanitizeBaseUrl(pageOrigin);
       }
 
-      return parsed.replace(scheme: 'https').toString();
+      return _sanitizeBaseUrl(parsed.replace(scheme: 'https').toString());
     }
 
-    return configured;
+    return _sanitizeBaseUrl(configured);
   }
 
   static Future<Map<String, String>> getHeaders({bool withAuth = false}) async {
@@ -282,13 +319,38 @@ class ApiService {
         );
       } catch (e) {
         if (attempt >= _maxRetries) {
-          throw Exception('Connection error: $e');
+          throw Exception(_buildConnectionErrorMessage(e));
         }
         await Future.delayed(_computeBackoff(attempt: attempt));
       }
 
       attempt += 1;
     }
+  }
+
+  static String _buildConnectionErrorMessage(Object error) {
+    if (!kIsWeb) {
+      return 'Connection error: $error';
+    }
+
+    final page = Uri.base;
+    final api = Uri.tryParse(baseUrl);
+    if (api != null) {
+      final isMixedContent = page.scheme == 'https' && api.scheme == 'http';
+      if (isMixedContent) {
+        return 'Không thể kết nối API vì ứng dụng web đang chạy HTTPS nhưng backend đang dùng HTTP. Hãy dùng cùng domain hoặc reverse proxy HTTPS.';
+      }
+
+      final sameOrigin =
+          api.scheme == page.scheme &&
+          api.host == page.host &&
+          api.port == page.port;
+      if (!_isDevelopingLocally && !sameOrigin) {
+        return 'Không thể kết nối API do web đang gọi khác origin. Hãy cấu hình web dùng cùng domain hoặc reverse proxy API.';
+      }
+    }
+
+    return 'Không kết nối được tới máy chủ. Hãy kiểm tra backend, domain và cổng truy cập.';
   }
 
   static bool _shouldRetryStatus(int statusCode) {
