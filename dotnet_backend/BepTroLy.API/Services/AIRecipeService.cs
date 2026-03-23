@@ -35,7 +35,7 @@ public class AIRecipeService
     public AIRecipeService(IConfiguration configuration, AppDbContext db, ILogger<AIRecipeService> logger)
     {
         _apiKey = configuration["Gemini:ApiKey"];
-        _modelName = configuration["Gemini:Model"] ?? "gemini-2.0-flash-001";
+        _modelName = configuration["Gemini:Model"] ?? "gemini-2.5-flash";
         _httpClient = new HttpClient { Timeout = _geminiTimeout };
         _db = db;
         _logger = logger;
