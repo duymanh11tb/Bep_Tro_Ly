@@ -518,11 +518,17 @@ class PantryService {
   static bool get hasActiveAiCooldown =>
       _aiCooldownUntil != null && _aiCooldownUntil!.isAfter(DateTime.now());
 
+  static int get aiCooldownRemainingSeconds {
+    if (!hasActiveAiCooldown) return 0;
+    final remaining = _aiCooldownUntil!.difference(DateTime.now()).inSeconds;
+    return remaining <= 0 ? 1 : remaining;
+  }
+
+  static String? get currentAiCooldownMessage => _currentAiCooldownMessage();
+
   static String? _currentAiCooldownMessage() {
     if (!hasActiveAiCooldown) return null;
-    final remaining = _aiCooldownUntil!.difference(DateTime.now()).inSeconds;
-    final safeSeconds = remaining <= 0 ? 1 : remaining;
-    return 'Gemini đang tạm nghỉ để tránh vượt quota. Vui lòng thử lại sau $safeSeconds giây.';
+    return 'Gemini đang tạm nghỉ để tránh vượt quota. Vui lòng thử lại sau $aiCooldownRemainingSeconds giây.';
   }
 
   static void _applyAiCooldownFromMessage(String message) {

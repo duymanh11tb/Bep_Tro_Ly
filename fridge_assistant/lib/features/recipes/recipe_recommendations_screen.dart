@@ -1,4 +1,7 @@
+import 'dart:async';
+
 import 'package:fridge_assistant/core/localization/app_material.dart';
+
 import '../../core/theme/app_colors.dart';
 import '../../models/recipe_suggestion.dart';
 import '../../services/pantry_service.dart';
@@ -39,6 +42,7 @@ class _RecipeRecommendationsScreenState
   RecipeSuggestionMode _suggestionMode = RecipeSuggestionMode.pantry;
   String _selectedRegionCode = 'south';
   late final AnimationController _shimmerController;
+  Timer? _cooldownTicker;
 
   @override
   void initState() {
@@ -47,11 +51,13 @@ class _RecipeRecommendationsScreenState
       vsync: this,
       duration: const Duration(milliseconds: 1300),
     )..repeat();
+    _syncCooldownTicker();
     _loadInitialData();
   }
 
   @override
   void dispose() {
+    _cooldownTicker?.cancel();
     _searchController.dispose();
     _shimmerController.dispose();
     super.dispose();
@@ -107,11 +113,13 @@ class _RecipeRecommendationsScreenState
         _replaceSuggestions(data);
         _loadError = null;
       });
+      _syncCooldownTicker();
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _loadError = e.toString().replaceFirst('Exception: ', '');
       });
+      _syncCooldownTicker();
     }
   }
 
@@ -137,6 +145,7 @@ class _RecipeRecommendationsScreenState
         _limit = nextLimit;
         _loadError = null;
       });
+      _syncCooldownTicker();
 
       if (data.isEmpty) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -150,6 +159,7 @@ class _RecipeRecommendationsScreenState
       if (!mounted) return;
       final message = e.toString().replaceFirst('Exception: ', '');
       setState(() => _loadError = message);
+      _syncCooldownTicker();
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(message),
@@ -372,9 +382,51 @@ class _RecipeRecommendationsScreenState
     return estimated;
   }
 
+  bool _isCooldownError(String? message) {
+    if (message == null) return false;
+    return message.contains('Gemini đang tạm nghỉ để tránh vượt quota');
+  }
+
+  void _syncCooldownTicker() {
+    if (!PantryService.hasActiveAiCooldown) {
+      _cooldownTicker?.cancel();
+      _cooldownTicker = null;
+      return;
+    }
+
+    _cooldownTicker ??= Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) {
+        timer.cancel();
+        _cooldownTicker = null;
+        return;
+      }
+
+      if (!PantryService.hasActiveAiCooldown) {
+        timer.cancel();
+        _cooldownTicker = null;
+        setState(() {
+          if (_isCooldownError(_loadError)) {
+            _loadError = null;
+          }
+        });
+        return;
+      }
+
+      setState(() {});
+    });
+  }
+
+  String? _displayLoadError() {
+    if (_isCooldownError(_loadError)) {
+      return PantryService.currentAiCooldownMessage ?? _loadError;
+    }
+    return _loadError;
+  }
+
   String _emptyStateMessage() {
-    if (_loadError != null && _loadError!.trim().isNotEmpty) {
-      return _loadError!;
+    final displayError = _displayLoadError();
+    if (displayError != null && displayError.trim().isNotEmpty) {
+      return displayError;
     }
 
     if (_suggestionMode == RecipeSuggestionMode.pantry && _ingredientCount == 0) {
@@ -391,7 +443,8 @@ class _RecipeRecommendationsScreenState
   }
 
   Widget _buildEmptyStateCard() {
-    final isError = _loadError != null && _loadError!.trim().isNotEmpty;
+    final displayError = _displayLoadError();
+    final isError = displayError != null && displayError.trim().isNotEmpty;
     return Container(
       margin: const EdgeInsets.only(top: 36),
       padding: const EdgeInsets.all(18),
@@ -403,7 +456,7 @@ class _RecipeRecommendationsScreenState
         ),
       ),
       child: Text(
-        _emptyStateMessage(),
+        isError ? displayError! : _emptyStateMessage(),
         textAlign: TextAlign.center,
         style: TextStyle(
           color: isError ? AppColors.error : AppColors.textSecondary,
@@ -415,6 +468,8 @@ class _RecipeRecommendationsScreenState
   @override
   Widget build(BuildContext context) {
     final items = _filteredSuggestions;
+    final cooldownSeconds = PantryService.aiCooldownRemainingSeconds;
+    final isCooldownActive = cooldownSeconds > 0;
 
     return Scaffold(
       body: Stack(
@@ -563,7 +618,7 @@ class _RecipeRecommendationsScreenState
           right: 14,
           bottom: 12,
           child: ElevatedButton.icon(
-            onPressed: (_isLoadingMore || PantryService.hasActiveAiCooldown)
+            onPressed: (_isLoadingMore || isCooldownActive)
                 ? null
                 : _loadMoreSuggestions,
             icon: _isLoadingMore
@@ -575,8 +630,15 @@ class _RecipeRecommendationsScreenState
                       valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                     ),
                   )
-                : const Icon(Icons.auto_awesome, size: 16),
-            label: const Text('Gợi ý mới'),
+                : Icon(
+                    isCooldownActive ? Icons.timer_outlined : Icons.auto_awesome,
+                    size: 16,
+                  ),
+            label: Text(
+              isCooldownActive
+                  ? 'Thử lại sau ${cooldownSeconds}s'
+                  : 'Gợi ý mới',
+            ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,
               foregroundColor: Colors.white,
