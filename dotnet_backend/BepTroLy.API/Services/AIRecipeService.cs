@@ -123,7 +123,7 @@ public class AIRecipeService
             {
                 var history = await _db.SuggestedRecipes
                     .Where(r => r.UserId == userId.Value && r.Status != "hidden")
-                    .OrderByDescending(r => r.CreatedAt)
+                    .OrderByDescending(r => r.SuggestedAt)
                     .Take(15)
                     .ToListAsync();
                 if (history.Any())
