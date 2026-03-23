@@ -288,6 +288,23 @@ public class AIRecipeService
         }
 
         var ingredients = pantryItems.Select(p => p.NameVi).ToList();
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            var localResult = await BuildLocalFirstResponseAsync(
+                ingredients,
+                preferences,
+                region,
+                excludeRecipeNames,
+                userId,
+                limit,
+                requirePantryIngredientMatch: true);
+
+            if (localResult != null)
+            {
+                return localResult;
+            }
+        }
+
         return await SuggestRecipesAsync(
             ingredients,
             preferences,
@@ -312,6 +329,23 @@ public class AIRecipeService
         int? userId = null,
         int limit = 5)
     {
+        if (string.IsNullOrWhiteSpace(refreshToken))
+        {
+            var localResult = await BuildLocalFirstResponseAsync(
+                new List<string>(),
+                preferences,
+                region,
+                excludeRecipeNames,
+                userId,
+                limit,
+                requirePantryIngredientMatch: false);
+
+            if (localResult != null)
+            {
+                return localResult;
+            }
+        }
+
         return await SuggestRecipesAsync(
             new List<string>(),
             preferences,
@@ -322,6 +356,55 @@ public class AIRecipeService
             limit,
             allowTemplateFallback: false
         );
+    }
+
+    private async Task<Dictionary<string, object>?> BuildLocalFirstResponseAsync(
+        List<string> ingredients,
+        Dictionary<string, object>? preferences,
+        string? region,
+        List<string>? excludeRecipeNames,
+        int? userId,
+        int limit,
+        bool requirePantryIngredientMatch)
+    {
+        preferences ??= new Dictionary<string, object>();
+        await ApplyUserPersonalizationAsync(preferences, userId);
+        ApplyRegionalPreferences(preferences, region);
+
+        var recentNames = GetRecentRecipeNames(userId);
+        var localRecipes = BuildLocalFallbackRecipes(
+            ingredients,
+            region,
+            excludeRecipeNames,
+            limit,
+            refreshToken: null,
+            recentRecipeNames: recentNames,
+            preferences: preferences);
+
+        if (requirePantryIngredientMatch && ingredients.Count > 0)
+        {
+            localRecipes = PrioritizePantryRelevantRecipes(
+                localRecipes,
+                ingredients,
+                requireMatch: true);
+        }
+
+        if (localRecipes.Count == 0)
+        {
+            return null;
+        }
+
+        var recipesWithImages = await EnsureRecipeImagesAsync(localRecipes);
+        var finalRecipes = recipesWithImages.Take(Math.Max(1, limit)).ToList();
+        RecordRecentRecipeNames(userId, finalRecipes);
+
+        return new Dictionary<string, object>
+        {
+            ["success"] = true,
+            ["source"] = "local_primary",
+            ["message"] = "Đề xuất nhanh từ kho nguyên liệu hiện có.",
+            ["recipes"] = finalRecipes
+        };
     }
 
     private async Task<List<object>> GenerateAISuggestionsAsync(

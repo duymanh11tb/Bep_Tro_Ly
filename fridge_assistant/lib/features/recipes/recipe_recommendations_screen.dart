@@ -615,6 +615,15 @@ class _RecipeRecommendationsScreenState
                   color: AppColors.textSecondary,
                 ),
               ),
+              Text(
+                _suggestionMode == RecipeSuggestionMode.pantry
+                    ? 'Ứng dụng ưu tiên món phù hợp từ kho hiện có trước, sau đó bạn có thể xin thêm gợi ý AI.'
+                    : 'Ứng dụng ưu tiên món gợi ý nhanh theo vùng miền, sau đó bạn có thể xin thêm gợi ý AI.',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.textSecondary,
+                ),
+              ),
               Align(
                 alignment: Alignment.centerLeft,
                 child: TextButton(
@@ -667,7 +676,7 @@ class _RecipeRecommendationsScreenState
             label: Text(
               isCooldownActive
                   ? 'Thử lại sau ${cooldownSeconds}s'
-                  : 'Gợi ý mới',
+                  : 'Gợi ý AI mới',
             ),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppColors.primary,

@@ -396,7 +396,7 @@ class PantryService {
     }
   }
 
-  /// Lấy gợi ý món ăn từ AI
+  /// Lấy gợi ý món ăn theo luồng thông minh: local-first, AI khi cần
   static Future<List<RecipeSuggestion>> getAiSuggestions({
     RecipeSuggestionMode mode = RecipeSuggestionMode.pantry,
     int? fridgeId,
