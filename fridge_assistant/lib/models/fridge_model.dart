@@ -72,4 +72,19 @@ class FridgeModel {
           .toList(),
     );
   }
+
+  bool isPending(int? userId) {
+    if (userId == null) return false;
+    try {
+      final myMember = members.firstWhere((m) => m.userId == userId);
+      return myMember.status == 'pending';
+    } catch (_) {
+      // Nếu không tìm thấy trong danh sách member (có thể do API getFridges 
+      // chỉ trả về record member nhưng code UI đang filter lấy accepted)
+      // thì mặc định là false nếu ownerId khớp (vì owner luôn accepted)
+      return ownerId != userId; 
+    }
+  }
+
+  bool get isPendingAny => members.any((m) => m.status == 'pending');
 }

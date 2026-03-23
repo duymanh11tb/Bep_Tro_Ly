@@ -4,23 +4,31 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:google_generative_ai/google_generative_ai.dart';
+import '../core/config/api_config.dart';
 
 class ApiService {
   // API Backend deployed on VPS
   static String get baseUrl {
-    final configured = dotenv.env['API_URL']?.trim();
+    final configured = ApiConfig.apiUrl.trim();
     if (!kIsWeb) {
-      return (configured == null || configured.isEmpty)
+      return (configured.isEmpty)
           ? 'http://localhost:5001'
           : configured;
     }
 
-    final configuredWeb = dotenv.env['API_URL_WEB']?.trim();
-    return _resolveWebBaseUrl(
-      configuredWeb == null || configuredWeb.isEmpty || configuredWeb == 'auto'
-          ? null
-          : configuredWeb,
-    );
+    final configuredWeb = ApiConfig.apiUrlWeb.trim();
+    if (configuredWeb.isEmpty || configuredWeb == 'auto') {
+      // If we are on localhost/dev, prefer the configured API_URL (if any) 
+      // instead of self-origin, to allow testing against remote servers.
+      if (_isDevelopingLocally) {
+        final remote = ApiConfig.apiUrl.trim();
+        if (remote.isNotEmpty) return remote;
+      }
+      return _resolveWebBaseUrl(null);
+    }
+
+    return _resolveWebBaseUrl(configuredWeb);
   }
 
   static const Duration _requestTimeout = Duration(seconds: 15);
@@ -51,13 +59,17 @@ class ApiService {
     return '$baseUrl/$raw';
   }
 
+  static bool get _isDevelopingLocally {
+    final page = Uri.base;
+    return page.host == 'localhost' ||
+        page.host == '127.0.0.1' ||
+        page.host == '0.0.0.0';
+  }
+
   static String _resolveWebBaseUrl(String? configured) {
     final page = Uri.base;
     final pageOrigin = page.origin;
-    final isLocalWebHost =
-        page.host == 'localhost' ||
-        page.host == '127.0.0.1' ||
-        page.host == '0.0.0.0';
+    final isLocalWebHost = _isDevelopingLocally;
 
     if (configured == null || configured.isEmpty) {
       return pageOrigin;
@@ -299,8 +311,218 @@ class ApiService {
     final jitterMs = Random().nextInt(250);
     return Duration(milliseconds: baseMs + jitterMs);
   }
-}
 
+  // === Gemini AI Integration ===
+
+  static GenerativeModel? _geminiModel;
+
+  static Future<GenerativeModel> _getGeminiModel() async {
+    if (_geminiModel == null) {
+      final apiKey = ApiConfig.geminiApiKey;
+      _geminiModel = GenerativeModel(
+        model: 'gemini-1.5-flash-latest', // Dùng bản latest để ổn định hơn
+        apiKey: apiKey,
+        generationConfig: GenerationConfig(
+          temperature: 0.7,
+          maxOutputTokens: 8192,
+        ),
+      );
+    }
+    return _geminiModel!;
+  }
+
+  /// Gợi ý món ăn từ nguyên liệu sử dụng Gemini
+  static Future<List<Map<String, dynamic>>> suggestRecipesWithGemini({
+    required List<String> availableIngredients,
+    List<String>? expiringIngredients,
+    int numberOfRecipes = 5,
+  }) async {
+    try {
+      final model = await _getGeminiModel();
+
+      final prompt = _buildRecipePrompt(
+        availableIngredients: availableIngredients,
+        expiringIngredients: expiringIngredients,
+        numberOfRecipes: numberOfRecipes,
+      );
+
+      final response = await model.generateContent([Content.text(prompt)]);
+      final text = response.text;
+
+      if (text == null) {
+        throw Exception('No response from Gemini');
+      }
+
+      return _parseGeminiRecipes(text);
+    } catch (e) {
+      debugPrint('Gemini API error: $e');
+
+      // Fallback: gọi API backend nếu có
+      try {
+        return await _getRecipesFromBackend(
+          availableIngredients: availableIngredients,
+          expiringIngredients: expiringIngredients,
+        );
+      } catch (backendError) {
+        debugPrint('Backend fallback error: $backendError');
+        return [];
+      }
+    }
+  }
+
+  static String _buildRecipePrompt({
+    required List<String> availableIngredients,
+    List<String>? expiringIngredients,
+    required int numberOfRecipes,
+  }) {
+    return '''
+Bạn là đầu bếp chuyên nghiệp. Hãy gợi ý $numberOfRecipes món ăn từ nguyên liệu sau:
+
+NGUYÊN LIỆU CÓ SẴN:
+${availableIngredients.map((i) => '- $i').join('\n')}
+
+${expiringIngredients != null && expiringIngredients.isNotEmpty ? '''
+NGUYÊN LIỆU CẦN DÙNG TRƯỚC (sắp hết hạn):
+${expiringIngredients.map((i) => '- $i').join('\n')}
+''' : ''}
+
+YÊU CẦU:
+- Ưu tiên sử dụng nguyên liệu sắp hết hạn
+- Mỗi món nên có độ phù hợp (match_score) từ 0-1
+- Công thức rõ ràng, dễ làm
+- Difficulty: easy, medium, hard
+
+TRẢ VỀ JSON CHÍNH XÁC (không text khác):
+{
+  "recipes": [
+    {
+      "name": "Tên món ăn",
+      "description": "Mô tả ngắn gọn",
+      "ingredients_used": ["nguyên liệu 1", "nguyên liệu 2"],
+      "ingredients_missing": ["nguyên liệu cần thêm"],
+      "prep_time": 15,
+      "cook_time": 30,
+      "difficulty": "easy",
+      "match_score": 0.85,
+      "instructions": ["Bước 1: ...", "Bước 2: ..."],
+      "tips": "Mẹo nấu ngon"
+    }
+  ]
+}
+''';
+  }
+
+  static List<Map<String, dynamic>> _parseGeminiRecipes(String response) {
+    try {
+      String jsonString = response.trim();
+
+      // Xử lý nếu response có code block
+      if (jsonString.contains('```json')) {
+        final start = jsonString.indexOf('```json') + 7;
+        final end = jsonString.indexOf('```', start);
+        jsonString = jsonString.substring(start, end).trim();
+      } else if (jsonString.contains('```')) {
+        final start = jsonString.indexOf('```') + 3;
+        final end = jsonString.indexOf('```', start);
+        jsonString = jsonString.substring(start, end).trim();
+      }
+
+      final data = jsonDecode(jsonString);
+
+      if (data['recipes'] != null && data['recipes'] is List) {
+        return List<Map<String, dynamic>>.from(data['recipes']);
+      }
+
+      return [];
+    } catch (e) {
+      debugPrint('Parse Gemini response error: $e');
+      debugPrint('Raw response: $response');
+      return [];
+    }
+  }
+
+  /// Fallback: Gọi API backend nếu có
+  static Future<List<Map<String, dynamic>>> _getRecipesFromBackend({
+    required List<String> availableIngredients,
+    List<String>? expiringIngredients,
+  }) async {
+    try {
+      final response = await ApiService.post(
+        '/api/recipes/suggest',
+        {
+          'ingredients': availableIngredients,
+          'expiring_ingredients': expiringIngredients ?? [],
+        },
+        withAuth: true,
+      );
+
+      if (response.statusCode == 200) {
+        final data = jsonDecode(response.body);
+        return List<Map<String, dynamic>>.from(data['recipes'] ?? []);
+      }
+
+      return [];
+    } catch (e) {
+      debugPrint('Backend recipe API error: $e');
+      return [];
+    }
+  }
+
+  /// Tạo ảnh cho món ăn bằng Gemini
+  static Future<String?> generateRecipeImage(String recipeName) async {
+    try {
+      final model = await _getGeminiModel();
+
+      final prompt = '''
+Tìm URL ảnh thật chất lượng cao cho món ăn "$recipeName".
+Yêu cầu:
+- Ảnh thật của món ăn (không phải ảnh minh họa)
+- URL từ nguồn đáng tin cậy (Pexels, Unsplash, hoặc ảnh thực tế)
+- Trả về duy nhất URL hợp lệ, không kèm text khác
+''';
+
+      final response = await model.generateContent([Content.text(prompt)]);
+      final url = response.text?.trim();
+
+      if (url != null &&
+          (url.startsWith('http://') || url.startsWith('https://'))) {
+        return url;
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Generate image error: $e');
+      return null;
+    }
+  }
+
+  /// Gợi ý món ăn kèm ảnh (kết hợp)
+  static Future<List<Map<String, dynamic>>> suggestRecipesWithImages({
+    required List<String> availableIngredients,
+    List<String>? expiringIngredients,
+    int numberOfRecipes = 5,
+  }) async {
+    // Lấy gợi ý công thức
+    final recipes = await suggestRecipesWithGemini(
+      availableIngredients: availableIngredients,
+      expiringIngredients: expiringIngredients,
+      numberOfRecipes: numberOfRecipes,
+    );
+
+    // Thêm ảnh cho từng món (có thể chạy song song)
+    final updatedRecipes = <Map<String, dynamic>>[];
+
+    for (var recipe in recipes) {
+      final imageUrl = await generateRecipeImage(recipe['name']);
+      updatedRecipes.add({
+        ...recipe,
+        'image_url': imageUrl,
+      });
+    }
+
+    return updatedRecipes;
+  }
+}
 class _RecentResponse {
   final http.Response response;
   final DateTime at;

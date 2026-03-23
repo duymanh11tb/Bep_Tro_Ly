@@ -12,7 +12,7 @@ public class JwtService
 
     public JwtService(IConfiguration configuration)
     {
-        _secretKey = configuration["Jwt:SecretKey"] ?? "bep-tro-ly-secret-key-2024-super-secure-jwt-token-key";
+        _secretKey = configuration["Jwt:SecretKey"] ?? "bep-tro-ly-secret-key-2026-super-secure-jwt-token-key";
         _expirationDays = int.Parse(configuration["Jwt:ExpirationDays"] ?? "30");
         Console.WriteLine($"[JWT DEBUG] SecretKey length: {_secretKey.Length}, value: {_secretKey.Substring(0, Math.Min(5, _secretKey.Length))}..., bytes: {Encoding.UTF8.GetBytes(_secretKey).Length}");
     }

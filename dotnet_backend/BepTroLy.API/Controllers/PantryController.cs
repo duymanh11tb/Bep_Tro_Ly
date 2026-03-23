@@ -305,8 +305,11 @@ public class PantryController : ControllerBase
         var userId = GetUserId();
         if (userId == 0) return Unauthorized();
 
-        var item = await _db.PantryItems.FirstOrDefaultAsync(p => p.ItemId == id && p.UserId == userId);
+        var item = await _db.PantryItems.FirstOrDefaultAsync(p => p.ItemId == id);
         if (item == null) return NotFound(new { error = "Không tìm thấy sản phẩm" });
+
+        if (item.UserId != userId && (!item.FridgeId.HasValue || !await UserHasAccessToFridge(userId, item.FridgeId.Value)))
+            return Forbid();
 
         decimal oldQty = item.Quantity;
         string oldStatus = item.Status;
@@ -408,8 +411,11 @@ public class PantryController : ControllerBase
         var userId = GetUserId();
         if (userId == 0) return Unauthorized();
 
-        var item = await _db.PantryItems.FirstOrDefaultAsync(p => p.ItemId == id && p.UserId == userId);
+        var item = await _db.PantryItems.FirstOrDefaultAsync(p => p.ItemId == id);
         if (item == null) return NotFound(new { error = "Không tìm thấy sản phẩm" });
+
+        if (item.UserId != userId && (!item.FridgeId.HasValue || !await UserHasAccessToFridge(userId, item.FridgeId.Value)))
+            return Forbid();
 
         item.Status = "deleted";
         item.UpdatedAt = DateTime.UtcNow;

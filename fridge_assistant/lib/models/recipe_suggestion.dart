@@ -12,6 +12,7 @@ class RecipeSuggestion {
   final int ingredientsExpiringCount;
   final List<String> instructions;
   final String? tips;
+  String? status; // liked, disliked, hidden
 
   RecipeSuggestion({
     required this.id,
@@ -27,6 +28,7 @@ class RecipeSuggestion {
     this.ingredientsExpiringCount = 0,
     this.instructions = const [],
     this.tips,
+    this.status,
   });
 
   /// Điểm tương thích (%)
@@ -80,6 +82,7 @@ class RecipeSuggestion {
       ingredientsExpiringCount: json['ingredients_expiring_count'] ?? 0,
       instructions: List<String>.from(json['instructions'] ?? []),
       tips: json['tips'],
+      status: json['status'],
     );
   }
 
@@ -100,39 +103,39 @@ class RecipeSuggestion {
     );
 
     const exactDishImages = <String, String>{
-      'bo xao ca chua':
-          'https://images.pexels.com/photos/769289/pexels-photo-769289.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'thit bo luc lac':
-          'https://images.pexels.com/photos/1860204/pexels-photo-1860204.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'ga kho gung':
-          'https://images.pexels.com/photos/616354/pexels-photo-616354.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'thit kho tau':
-          'https://images.pexels.com/photos/4518843/pexels-photo-4518843.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'canh chua ca loc':
-          'https://images.pexels.com/photos/539451/pexels-photo-539451.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'ca kho to':
-          'https://images.pexels.com/photos/262959/pexels-photo-262959.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'pho bo':
-          'https://images.pexels.com/photos/6646035/pexels-photo-6646035.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'bun bo hue':
-          'https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'bun rieu cua':
-          'https://images.pexels.com/photos/884600/pexels-photo-884600.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'mi xao bo rau cai':
-          'https://images.pexels.com/photos/1279330/pexels-photo-1279330.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'com chien duong chau':
-          'https://images.pexels.com/photos/723198/pexels-photo-723198.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'goi cuon tom thit':
+      'bò xào cà chua':
+          'https://cdn.tgdd.vn/2022/01/CookDish/cach-lam-mon-thit-bam-xao-ca-chua-thom-ngon-la-mieng-cho-bua-avt-1200x676.jpg',
+      'thịt bò lúc lắc':
+          'https://i.ytimg.com/vi/0X5m98q3Pn0/maxresdefault.jpg',
+      'gà kho gừng':
+          'https://i.ytimg.com/vi/xFzQdCIrgko/maxresdefault.jpg',
+      'thịt kho tàu':
+          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
+      'canh chua cá lóc':
+          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
+      'cá kho tộ':
+          'https://i.ytimg.com/vi/zvlct2ZXhj8/maxresdefault.jpg',
+      'phở bò':
+          'https://cdn.tgdd.vn/2020/11/CookProduct/pho-bo-thumbnail-1200x676.jpg',
+      'bún bò huế':
+          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
+      'bún riêu cua':
+          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
+      'mì xào bò rau cải':
+          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
+      'cơm chiên dương châu':
+          'https://i.ytimg.com/vi/Q5V0uEkdTPg/maxresdefault.jpg',
+      'gỏi cuốn tôm thịt':
           'https://images.pexels.com/photos/2097090/pexels-photo-2097090.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'lau thai hai san':
+      'lẩu thái hải sản':
           'https://images.pexels.com/photos/699953/pexels-photo-699953.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'salad uc ga va bo':
+      'salad úc gà và bò':
           'https://images.pexels.com/photos/1213710/pexels-photo-1213710.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'bo ne chao gang':
+      'bò né chảo gang':
           'https://images.pexels.com/photos/361184/asparagus-steak-veal-steak-veal-361184.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'banh xeo mien tay':
+      'bánh xèo miền tây':
           'https://images.pexels.com/photos/5560763/pexels-photo-5560763.jpeg?auto=compress&cs=tinysrgb&w=1200',
-      'mi quang ga':
+      'mì quảng gà':
           'https://images.pexels.com/photos/1437267/pexels-photo-1437267.jpeg?auto=compress&cs=tinysrgb&w=1200',
     };
 
@@ -321,6 +324,41 @@ class RecipeSuggestion {
     return url;
   }
 
+  RecipeSuggestion copyWith({
+    String? id,
+    String? name,
+    String? imageUrl,
+    String? description,
+    List<String>? ingredientsUsed,
+    List<String>? ingredientsMissing,
+    int? prepTimeMinutes,
+    int? cookTimeMinutes,
+    String? difficulty,
+    double? matchScore,
+    int? ingredientsExpiringCount,
+    List<String>? instructions,
+    String? tips,
+    String? status,
+  }) {
+    return RecipeSuggestion(
+      id: id ?? this.id,
+      name: name ?? this.name,
+      imageUrl: imageUrl ?? this.imageUrl,
+      description: description ?? this.description,
+      ingredientsUsed: ingredientsUsed ?? this.ingredientsUsed,
+      ingredientsMissing: ingredientsMissing ?? this.ingredientsMissing,
+      prepTimeMinutes: prepTimeMinutes ?? this.prepTimeMinutes,
+      cookTimeMinutes: cookTimeMinutes ?? this.cookTimeMinutes,
+      difficulty: difficulty ?? this.difficulty,
+      matchScore: matchScore ?? this.matchScore,
+      ingredientsExpiringCount:
+          ingredientsExpiringCount ?? this.ingredientsExpiringCount,
+      instructions: instructions ?? this.instructions,
+      tips: tips ?? this.tips,
+      status: status ?? this.status,
+    );
+  }
+
   Map<String, dynamic> toJson() {
     return {
       'id': id,
@@ -336,6 +374,37 @@ class RecipeSuggestion {
       'ingredients_expiring_count': ingredientsExpiringCount,
       'instructions': instructions,
       'tips': tips,
+      'status': status,
     };
+  }
+
+  /// Tạo từ dữ liệu Gemini
+  static RecipeSuggestion fromGeminiData(
+    Map<String, dynamic> data, {
+    String? imageUrl,
+  }) {
+    return RecipeSuggestion(
+      id: DateTime.now().millisecondsSinceEpoch.toString(),
+      name: data['name'] ?? '',
+      imageUrl: imageUrl ?? data['image_url'],
+      description: data['description'] ?? '',
+      ingredientsUsed: List<String>.from(data['ingredients_used'] ?? []),
+      ingredientsMissing: List<String>.from(data['ingredients_missing'] ?? []),
+      prepTimeMinutes: data['prep_time'] ?? 0,
+      cookTimeMinutes: data['cook_time'] ?? 0,
+      difficulty: data['difficulty'] ?? 'easy',
+      matchScore: (data['match_score'] ?? 0.0).toDouble(),
+      instructions: List<String>.from(data['instructions'] ?? []),
+      tips: data['tips'],
+      ingredientsExpiringCount: 0, // Sẽ tính sau
+    );
+  }
+
+  /// Tính số nguyên liệu sắp hết được sử dụng
+  static int countExpiringIngredients(
+    List<String> usedIngredients,
+    List<String> expiringIngredients,
+  ) {
+    return usedIngredients.where((i) => expiringIngredients.contains(i)).length;
   }
 }

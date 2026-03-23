@@ -4,6 +4,7 @@ import 'core/localization/app_locale_controller.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/app_colors.dart';
 import 'features/dashboard/dashboard_screen.dart';
+
 import 'features/onboarding/onboarding_screen.dart';
 import 'features/profile/profile_screen.dart';
 import 'services/auth_service.dart';
@@ -58,7 +59,7 @@ class BepTroLyApp extends StatelessWidget {
             '/': (context) => const CheckAuthScreen(),
             '/onboarding': (context) => const OnboardingScreen(),
             '/auth': (context) => const AuthScreen(),
-            '/home': (context) => const DashboardScreen(),
+            '/home': (context) => const DashboardScreen(), // Hồi phục DashboardScreen làm mặc định
             '/add-product': (context) => const AddProductScreen(),
             '/expiring-items': (context) => const Scaffold(
               backgroundColor: AppColors.background,

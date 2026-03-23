@@ -4,14 +4,14 @@ import '../../../core/theme/app_colors.dart';
 class QuickActions extends StatelessWidget {
   final VoidCallback? onScanTap;
   final VoidCallback? onAddTap;
-  final VoidCallback? onSearchTap;
+  final VoidCallback? onAiSuggestTap;
   final VoidCallback? onFridgeTap;
 
   const QuickActions({
     super.key,
     this.onScanTap,
     this.onAddTap,
-    this.onSearchTap,
+    this.onAiSuggestTap,
     this.onFridgeTap,
   });
 
@@ -38,9 +38,9 @@ class QuickActions extends StatelessWidget {
             onTap: onFridgeTap,
           ),
           _buildActionButton(
-            icon: Icons.search_rounded,
-            label: 'Tìm kiếm',
-            onTap: onSearchTap,
+            icon: Icons.auto_awesome, // Changed Icon
+            label: 'Gợi ý AI', // Changed Label
+            onTap: onAiSuggestTap,
           ),
         ],
       ),

@@ -6,6 +6,7 @@ import 'auth_service.dart';
 import 'fridge_service.dart';
 import 'region_preference_service.dart';
 import '../models/recipe_suggestion.dart';
+import '../repositories/recipe_repository.dart';
 
 enum RecipeSuggestionMode { pantry, region }
 
@@ -447,6 +448,28 @@ class PantryService {
       }
     } catch (e) {
       debugPrint('PantryService.getAiSuggestions error: $e');
+      
+      // NEW: Direct Gemini API fallback using RecipeRepository
+      try {
+        final items = await getItems(fridgeId: fridgeId);
+        final ingredients = items.map((e) => e.name).toList();
+        final expiring = items.where((e) => e.isExpiringSoon).map((e) => e.name).toList();
+        
+        if (ingredients.isNotEmpty) {
+          final suggestions = await RecipeRepository.getSuggestions(
+            ingredients: ingredients,
+            expiringIngredients: expiring,
+            limit: limit,
+          );
+          
+          if (suggestions.isNotEmpty) {
+            _cachedAiSuggestions = suggestions;
+            return suggestions;
+          }
+        }
+      } catch (geminiError) {
+        debugPrint('Gemini fallback also failed: $geminiError');
+      }
     }
     final regionCode = await _resolveRegionCode(region);
     if (refreshToken != null && refreshToken.isNotEmpty) {
@@ -791,5 +814,27 @@ class PantryService {
   static Future<void> setShowAiSuggestionsPreference(bool value) async {
     final prefs = await SharedPreferences.getInstance();
     await prefs.setBool(_showAiSuggestionsKey, value);
+  }
+
+  /// Ghi nhận feedback cho gợi ý (Like/Dislike)
+  static Future<bool> recordSuggestionFeedback({
+    required String recipeName,
+    required String feedback,
+  }) async {
+    try {
+      final body = {
+        'recipeName': recipeName,
+        'feedback': feedback,
+      };
+      final resp = await ApiService.post(
+        '/api/v1/recipes/suggestion-feedback',
+        body,
+        withAuth: true,
+      );
+      return resp.statusCode == 200;
+    } catch (e) {
+      debugPrint('PantryService.recordSuggestionFeedback error: $e');
+      return false;
+    }
   }
 }

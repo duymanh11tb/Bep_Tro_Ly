@@ -70,6 +70,29 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
     return estimated;
   }
 
+  Future<void> _handleFeedback(String feedback) async {
+    final success = await PantryService.recordSuggestionFeedback(
+      recipeName: recipe.name,
+      feedback: feedback,
+    );
+    if (success && mounted) {
+      setState(() {
+        recipe.status = feedback;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            feedback == 'liked'
+                ? 'Đã thêm vào mục yêu thích!'
+                : 'Đã ghi nhận phản hồi của bạn.',
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
   String _difficultyText() {
     switch (recipe.difficulty.toLowerCase()) {
       case 'easy':
@@ -409,6 +432,25 @@ class _RecipeDetailScreenState extends State<RecipeDetailScreen> {
           overflow: TextOverflow.ellipsis,
           style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
         ),
+        actions: [
+          IconButton(
+            onPressed: () => _handleFeedback('liked'),
+            icon: Icon(
+              recipe.status == 'liked' ? Icons.favorite : Icons.favorite_border,
+              color: recipe.status == 'liked' ? Colors.red : null,
+            ),
+          ),
+          IconButton(
+            onPressed: () => _handleFeedback('disliked'),
+            icon: Icon(
+              recipe.status == 'disliked'
+                  ? Icons.thumb_down
+                  : Icons.thumb_down_outlined,
+              color: recipe.status == 'disliked' ? Colors.orange : null,
+            ),
+          ),
+          const SizedBox(width: 8),
+        ],
       ),
       body: SafeArea(
         child: SingleChildScrollView(

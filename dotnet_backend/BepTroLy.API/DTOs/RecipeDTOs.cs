@@ -43,3 +43,9 @@ public class CookRecipeRequest
     public int? RecipeId { get; set; }
     public string RecipeName { get; set; } = string.Empty;
 }
+
+public class SuggestionFeedbackRequest
+{
+    public string RecipeName { get; set; } = string.Empty;
+    public string Feedback { get; set; } = string.Empty; // liked, disliked, hidden
+}

@@ -42,22 +42,23 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     final result = await _notificationService.respondToInvitation(notification.notificationId, accept);
     
     if (mounted) {
+      setState(() => _isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(result['message'])),
+      );
       if (result['success']) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'])),
-        );
         _loadNotifications();
-      } else {
-        setState(() => _isLoading = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(result['message'])),
-        );
       }
     }
   }
 
   Future<void> _handleMarkRead(NotificationModel notification) async {
     if (notification.isRead) return;
+    
+    // Đừng tự động đánh dấu đã đọc cho lời mời tủ lạnh khi chỉ mới nhấn vào thẻ
+    // Điều này giúp giữ lại nút Chấp nhận/Từ chối cho đến khi người dùng quyết định.
+    if (notification.type == 'fridge_invitation') return;
+
     await _notificationService.markAsRead(notification.notificationId);
     _loadNotifications();
   }

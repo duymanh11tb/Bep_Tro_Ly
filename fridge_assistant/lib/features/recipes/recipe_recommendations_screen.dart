@@ -253,6 +253,29 @@ class _RecipeRecommendationsScreenState
     return '${recipe.name.toLowerCase()}|${recipe.description.toLowerCase()}';
   }
 
+  Future<void> _handleFeedback(RecipeSuggestion recipe, String feedback) async {
+    final success = await PantryService.recordSuggestionFeedback(
+      recipeName: recipe.name,
+      feedback: feedback,
+    );
+    if (success && mounted) {
+      setState(() {
+        recipe.status = feedback;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            feedback == 'liked'
+                ? 'Đã thêm vào mục yêu thích!'
+                : 'Đã ghi nhận phản hồi của bạn.',
+          ),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+    }
+  }
+
   List<RecipeSuggestion> get _filteredSuggestions {
     final q = _searchQuery.trim().toLowerCase();
 
@@ -703,6 +726,57 @@ class _RecipeRecommendationsScreenState
                       );
                     }).toList(),
                   ),
+                  const SizedBox(height: 12),
+                  const Divider(height: 1, color: Color(0xFFE0E0E0)),
+                  const SizedBox(height: 4),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    children: [
+                      TextButton.icon(
+                        onPressed: () => _handleFeedback(recipe, 'disliked'),
+                        icon: Icon(
+                          recipe.status == 'disliked'
+                              ? Icons.thumb_down
+                              : Icons.thumb_down_outlined,
+                          size: 18,
+                          color: recipe.status == 'disliked'
+                              ? Colors.red
+                              : Colors.grey,
+                        ),
+                        label: Text(
+                          'Không thích',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: recipe.status == 'disliked'
+                                ? Colors.red
+                                : Colors.grey,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      TextButton.icon(
+                        onPressed: () => _handleFeedback(recipe, 'liked'),
+                        icon: Icon(
+                          recipe.status == 'liked'
+                              ? Icons.thumb_up
+                              : Icons.thumb_up_outlined,
+                          size: 18,
+                          color: recipe.status == 'liked'
+                              ? AppColors.primary
+                              : Colors.grey,
+                        ),
+                        label: Text(
+                          'Thích',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: recipe.status == 'liked'
+                                ? AppColors.primary
+                                : Colors.grey,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
                 ],
               ),
             ),
@@ -791,6 +865,17 @@ class _RecipeRecommendationsScreenState
     );
   }
 
+  Widget _buildRecipeImage(RecipeSuggestion recipe) {
+    if (recipe.imageUrl == null || recipe.imageUrl!.isEmpty) {
+      return _buildRecipeImageFallback(recipe.name);
+    }
+    return Image.network(
+      recipe.imageUrl!,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => _buildRecipeImageFallback(recipe.name),
+    );
+  }
+
   Widget _buildRecipeImageFallback(String recipeName) {
     return Container(
       decoration: const BoxDecoration(
@@ -800,74 +885,13 @@ class _RecipeRecommendationsScreenState
           colors: [Color(0xFFDBEAFE), Color(0xFFD1FAE5)],
         ),
       ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-              decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.85),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: const Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.image_outlined,
-                    size: 14,
-                    color: AppColors.primary,
-                  ),
-                  SizedBox(width: 4),
-                  Text(
-                    'Ảnh minh họa',
-                    style: TextStyle(
-                      fontSize: 11,
-                      color: AppColors.textPrimary,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            const Spacer(),
-            const Center(
-              child: Icon(
-                Icons.restaurant_menu,
-                size: 48,
-                color: Color(0xFF0F172A),
-              ),
-            ),
-            const SizedBox(height: 12),
-          ],
+      child: Center(
+        child: Icon(
+          Icons.restaurant,
+          size: 40,
+          color: Colors.blue.withValues(alpha: 0.3),
         ),
       ),
-    );
-  }
-
-  Widget _buildRecipeImage(RecipeSuggestion recipe) {
-    final primary = recipe.imageUrl;
-    final secondary = RecipeSuggestion.fallbackImageForRecipe(recipe);
-
-    if (primary == null || primary.isEmpty) {
-      return Image.network(
-        secondary,
-        fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => _buildRecipeImageFallback(recipe.name),
-      );
-    }
-
-    return Image.network(
-      primary,
-      fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) {
-        return Image.network(
-          secondary,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _buildRecipeImageFallback(recipe.name),
-        );
-      },
     );
   }
 }

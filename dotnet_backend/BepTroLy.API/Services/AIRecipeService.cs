@@ -79,6 +79,8 @@ public class AIRecipeService
         }
         preferences["limit"] = limit;
 
+        await ApplyUserPersonalizationAsync(preferences, userId);
+
         // Check cache
         var cacheKey = GenerateCacheKey(ingredients, preferences);
         var cached = await GetFromCacheAsync(cacheKey);
@@ -112,7 +114,21 @@ public class AIRecipeService
                 };
             }
 
-            var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit * 2);
+            var historyText = "";
+            if (userId.HasValue)
+            {
+                var history = await _db.SuggestedRecipes
+                    .Where(r => r.UserId == userId.Value && r.Status != "hidden")
+                    .OrderByDescending(r => r.CreatedAt)
+                    .Take(15)
+                    .ToListAsync();
+                if (history.Any())
+                {
+                    historyText = string.Join("\n", history.Select(h => $"- {h.RecipeName}: {h.Status}"));
+                }
+            }
+
+            var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit * 2, historyText);
             var shuffleSeed = BuildShuffleSeed(preferences);
             var rng = new Random(shuffleSeed);
             var shuffled = aiRecipes.OrderBy(_ => rng.Next()).ToList();
@@ -142,6 +158,16 @@ public class AIRecipeService
             }
             await SaveToCacheAsync(cacheKey, finalRecipes);
             RecordRecentRecipeNames(userId, finalRecipes);
+            
+            if (userId.HasValue)
+            {
+                var contextData = new { 
+                    time = GetTimeOfDayContext(), 
+                    season = GetSeasonContext(),
+                    weather = preferences.TryGetValue("weather", out var w) ? w?.ToString() : "normal"
+                };
+                await SaveSuggestedRecipesAsync(userId.Value, finalRecipes, JsonSerializer.Serialize(contextData));
+            }
 
             return new Dictionary<string, object>
             {
@@ -236,12 +262,16 @@ public class AIRecipeService
     private async Task<List<object>> GenerateAISuggestionsAsync(
         List<string> ingredients,
         Dictionary<string, object>? preferences,
-        int limit)
+        int limit,
+        string historyText = "")
     {
         if (string.IsNullOrEmpty(_apiKey))
             throw new InvalidOperationException("Gemini API key chưa được cấu hình");
 
         preferences ??= new Dictionary<string, object>();
+        var feedbackContext = string.IsNullOrEmpty(historyText)
+            ? ""
+            : $"\nLỊCH SỬ PHẢN HỒI CỦA NGƯỜI DÙNG (Hãy ưu tiên món 'liked' và tránh món 'disliked'):\n{historyText}";
 
         var dietary = preferences.TryGetValue("dietary_restrictions", out var d) ? d?.ToString() ?? "" : "";
         var cuisine = preferences.TryGetValue("cuisine", out var c) ? c?.ToString() ?? "Việt Nam" : "Việt Nam";
@@ -288,6 +318,40 @@ public class AIRecipeService
             - Creativity token: {{creativityToken}}
             """;
 
+        var timeOfDay = GetTimeOfDayContext();
+        var season = GetSeasonContext();
+        var weather = preferences.TryGetValue("weather", out var w) ? w?.ToString() ?? "bình thường" : "bình thường";
+
+        var contextText = $"- Thời gian: {timeOfDay}\n- Mùa vụ: {season}\n- Thời tiết: {weather}";
+
+        var fewShotExamples = """
+            VÍ DỤ GỢI Ý CHUẨN (Mẫu JSON):
+            Example 1:
+            {
+                "name": "Thịt kho tàu nước dừa",
+                "description": "Món ăn quốc hồn quốc túy với miếng thịt mềm béo, trứng vịt thấm đẫm nước dừa ngọt thanh.",
+                "difficulty": "medium",
+                "prep_time": 20, "cook_time": 60, "servings": 4,
+                "ingredients_used": ["thịt ba chỉ", "trứng vịt"],
+                "ingredients_missing": ["nước dừa tươi", "hành tím"],
+                "match_score": 0.95,
+                "instructions": ["Sơ chế thịt và trứng", "Thắng nước màu", "Kho nhỏ lửa với nước dừa"],
+                "tips": "Nên dùng nước dừa xiêm để nước kho có màu đẹp tự nhiên."
+            }
+            Example 2:
+            {
+                "name": "Canh chua cá lóc",
+                "description": "Vị chua thanh của me, ngọt từ cá tươi và thơm nồng của ngò gai, rau ngổ.",
+                "difficulty": "medium",
+                "prep_time": 15, "cook_time": 15, "servings": 3,
+                "ingredients_used": ["cá lóc", "cà chua"],
+                "ingredients_missing": ["me", "bạc hà", "đậu bắp"],
+                "match_score": 0.88,
+                "instructions": ["Chiên sơ cá", "Nấu nước dùng me", "Cho rau vào sau cùng"],
+                "tips": "Cho một ít tỏi phi vào bát canh trước khi ăn để tăng hương vị."
+            }
+            """;
+
         var statusText = ingredients.Any()
             ? $"CHẾ ĐỘ GỢI Ý: Dựa trên {ingredients.Count} nguyên liệu có sẵn: {string.Join(", ", ingredients)}."
             : $"CHẾ ĐỘ KHÁM PHÁ: Hãy gợi ý thực đơn hằng ngày phù hợp với vùng miền ưu tiên: {regionLabel}.";
@@ -309,10 +373,13 @@ public class AIRecipeService
             {{refreshHintText}}
             {{excludedText}}
             {{diversityConstraint}}
+            {{feedbackContext}}
 
-            NHIỆM VỤ: Đề xuất {{limit * 2}} món ăn.
-            - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất, mang tính ứng dụng cao cho bữa ăn gia đình hàng ngày.
-            - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy đề xuất những mâm cơm nhà hoặc món ăn thường ngày phong phú, sáng tạo, không lặp lại nhàm chán. Món ngon nhưng phải dễ nấu.
+            {{fewShotExamples}}
+
+            NHIỆM VỤ: Đề xuất {{limit * 2}} món ăn phù hợp với {{timeOfDay}} và {{season}} nhất.
+            - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất.
+            - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy đề xuất những mâm cơm nhà hoặc món ăn đa dạng, đúng mùa vụ.
 
             QUY ĐỊNH TRẢ VỀ (CHỈ TRẢ VỀ JSON THUẦN, KHÔNG CÓ MARKDOWN, KHÔNG DÙNG ```):
             {
@@ -349,7 +416,8 @@ public class AIRecipeService
             throw new InvalidOperationException($"AI đang quá tải, vui lòng thử lại sau {waitSeconds} giây.");
         }
 
-        var url = $"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={_apiKey}";
+        // Dùng gemini-1.5-flash-latest hoặc gemini-pro để đảm bảo độ tương thích
+        var url = $"https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key={_apiKey}";
 
         var requestBody = new
         {
@@ -1281,8 +1349,81 @@ public class AIRecipeService
             preferences["user_avoid_ingredients"] = string.Join(", ", allergies);
         }
 
-        preferences["user_flavor_profile"] = BuildFlavorProfile(user, cuisinePreferences, dietary);
+        preferences["user_flavor_profile"] = await BuildEnhancedFlavorProfileAsync(user, cuisinePreferences, dietary);
         preferences["user_variant_hint"] = BuildUserVariantHint(user.UserId);
+        
+        // Add info about liked/cooked recipes
+        var favorites = await _db.UserFavorites
+            .Where(f => f.UserId == userId.Value)
+            .Include(f => f.Recipe)
+            .OrderByDescending(f => f.CreatedAt)
+            .Take(5)
+            .Select(f => f.Recipe!.TitleVi)
+            .ToListAsync();
+        if (favorites.Any())
+        {
+            preferences["user_favorite_dishes"] = string.Join(", ", favorites);
+            preferences["user_flavor_profile"] += "; thích các món như " + string.Join(", ", favorites);
+        }
+
+        var recentCooked = await _db.ActivityLogs
+            .Where(l => l.UserId == userId.Value && l.ActivityType == "cook_recipe")
+            .OrderByDescending(l => l.CreatedAt)
+            .Take(3)
+            .Select(l => l.ExtraData) // extra_data contains itemName
+            .ToListAsync();
+        
+        if (recentCooked.Any())
+        {
+            var cookedNames = recentCooked
+                .Select(ed => {
+                    try {
+                        using var doc = JsonDocument.Parse(ed ?? "{}");
+                        return doc.RootElement.TryGetProperty("itemName", out var p) ? p.GetString() : null;
+                    } catch { return null; }
+                })
+                .Where(n => n != null)
+                .Cast<string>()
+                .ToList();
+            if (cookedNames.Any())
+            {
+                preferences["user_recent_cooked"] = string.Join(", ", cookedNames);
+                // Hint AI to avoid these for variety
+                preferences["refresh_token"] = (preferences.TryGetValue("refresh_token", out var rt) ? rt?.ToString() ?? "" : "") 
+                    + " avoid:" + string.Join(",", cookedNames);
+            }
+        }
+    }
+
+    private async Task<string> BuildEnhancedFlavorProfileAsync(User user, List<string> cuisines, List<string> dietary)
+    {
+        var parts = new List<string>();
+
+        if (user.SkillLevel == "beginner") parts.Add("uu tien mon de nau, it buoc");
+        else if (user.SkillLevel == "advanced") parts.Add("co the thu mon cau ky hon");
+
+        if (cuisines.Any()) parts.Add($"thich {string.Join(", ", cuisines.Take(2))}");
+        if (dietary.Any()) parts.Add($"uu tien che do {string.Join(", ", dietary.Take(2))}");
+
+        // Add more specific flavor profile based on ratings
+        var highRatings = await _db.UserRatings
+            .Where(r => r.UserId == user.UserId && r.Rating >= 4)
+            .Include(r => r.Recipe)
+            .Take(3)
+            .Select(r => r.Recipe!.TitleVi)
+            .ToListAsync();
+        
+        if (highRatings.Any())
+        {
+            parts.Add($"da thich va danh gia cao: {string.Join(", ", highRatings)}");
+        }
+
+        var variant = user.UserId % 3;
+        if (variant == 0) parts.Add("nghieng ve vi thanh va mon canh");
+        if (variant == 1) parts.Add("nghieng ve mon xao kho dua com");
+        if (variant == 2) parts.Add("nghieng ve mon nhanh gon cho bua hang ngay");
+
+        return string.Join("; ", parts);
     }
 
     private static List<string> ParseJsonStringArray(string? raw)
@@ -1392,5 +1533,51 @@ public class AIRecipeService
 
         preferences["region_code"] = normalized;
         preferences["region_label"] = region.Trim();
+    }
+
+    private async Task SaveSuggestedRecipesAsync(int userId, List<object> recipes, string contextData)
+    {
+        try
+        {
+            var suggestedRecipes = recipes.Select(r => {
+                var map = ToDictionary(r);
+                return new SuggestedRecipe
+                {
+                    UserId = userId,
+                    RecipeName = map?.TryGetValue("name", out var n) == true ? n?.ToString() ?? "Unknown" : "Unknown",
+                    RecipeDataJson = JsonSerializer.Serialize(r),
+                    SuggestedAt = DateTime.Now,
+                    Status = "suggested",
+                    ContextData = contextData
+                };
+            }).ToList();
+
+            _db.SuggestedRecipes.AddRange(suggestedRecipes);
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Lỗi lưu lịch sử gợi ý món ăn");
+        }
+    }
+
+    private static string GetTimeOfDayContext()
+    {
+        var hour = DateTime.Now.Hour;
+        if (hour >= 5 && hour < 10) return "Buổi sáng (Bữa sáng)";
+        if (hour >= 10 && hour < 14) return "Buổi trưa (Bữa trưa)";
+        if (hour >= 14 && hour < 17) return "Buổi chiều (Bữa xế/Bữa tối sớm)";
+        if (hour >= 17 && hour < 22) return "Buổi tối (Bữa tối)";
+        return "Ban đêm (Bữa khuya)";
+    }
+
+    private static string GetSeasonContext()
+    {
+        var month = DateTime.Now.Month;
+        // Simplified for Vietnam (more or less)
+        if (month >= 2 && month <= 4) return "Mùa Xuân (Thời tiết ấm áp, tươi mới)";
+        if (month >= 5 && month <= 7) return "Mùa Hè (Thời tiết nóng bức, ưu tiên món thanh mát)";
+        if (month >= 8 && month <= 10) return "Mùa Thu (Thời tiết mát mẻ, dễ chịu)";
+        return "Mùa Đông (Thời tiết lạnh, ưu tiên món nóng sốt, đậm đà)";
     }
 }

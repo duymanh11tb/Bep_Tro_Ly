@@ -1,4 +1,5 @@
 import 'package:fridge_assistant/core/localization/app_material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'app_colors.dart';
 
 /// Theme configuration cho ứng dụng Bếp Trợ Lý
@@ -11,6 +12,7 @@ class AppTheme {
       brightness: Brightness.light,
       primaryColor: AppColors.primary,
       scaffoldBackgroundColor: AppColors.background,
+      textTheme: GoogleFonts.interTextTheme(),
       
       // Color Scheme
       colorScheme: const ColorScheme.light(

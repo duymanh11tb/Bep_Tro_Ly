@@ -129,6 +129,13 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
   }
 
   Future<void> _handleSelectFridge(FridgeModel fridge) async {
+    if (fridge.isPending(_currentUserId)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Vui lòng chấp nhận lời mời để truy cập tủ lạnh này')),
+      );
+      return;
+    }
+
     await FridgeService.setActiveFridge(fridge.fridgeId);
     if (mounted) {
       setState(() => _activeFridgeId = fridge.fridgeId);
@@ -138,6 +145,25 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
           builder: (context) => const PantryOverviewScreen(isSubPage: true),
         ),
       ).then((_) => _loadItemCounts());
+    }
+  }
+
+  Future<void> _handleAcceptInvitation(FridgeModel fridge) async {
+    setState(() => _isLoading = true);
+    final success = await _fridgeService.acceptInvitation(fridge.fridgeId);
+    
+    if (mounted) {
+      if (success) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Đã tham gia tủ lạnh thành công')),
+        );
+        _loadData(); // Refresh everything
+      } else {
+        setState(() => _isLoading = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Lỗi khi chấp nhận lời mời')),
+        );
+      }
     }
   }
 
@@ -522,96 +548,113 @@ class _FridgeManagementScreenState extends State<FridgeManagementScreen> {
             // Action buttons
             Row(
               children: [
-                Expanded(
-                  child: _buildActionButton(
-                    icon: Icons.add_shopping_cart,
-                    label: 'Thêm nguyên liệu',
-                    onTap: () async {
-                      await FridgeService.setActiveFridge(fridge.fridgeId);
-                      if (mounted) {
-                        setState(() => _activeFridgeId = fridge.fridgeId);
-                        final result = await Navigator.pushNamed(context, '/add-product');
-                        if (result == true) _loadItemCounts();
-                      }
-                    },
-                    isPrimary: true,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                _buildIconAction(
-                  icon: Icons.history,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => ActivityLogScreen(fridgeId: fridge.fridgeId),
-                      ),
-                    );
-                  },
-                ),
-                const SizedBox(width: 8),
-                Stack(
-                  children: [
-                    _buildIconAction(
-                      icon: Icons.chat_outlined,
-                      onTap: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (context) => FridgeChatScreen(fridge: fridge),
-                          ),
-                        ).then((_) => _loadUnreadStatuses());
-                      },
+                if (fridge.isPending(_currentUserId)) ...[
+                  Expanded(
+                    child: _buildActionButton(
+                      icon: Icons.check_circle_outline,
+                      label: 'Chấp nhận lời mời',
+                      onTap: () => _handleAcceptInvitation(fridge),
+                      isPrimary: true,
                     ),
-                    if (_unreadStatuses[fridge.fridgeId] ?? false)
-                      Positioned(
-                        right: 8,
-                        top: 8,
-                        child: Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(width: 8),
-                _buildIconAction(
-                  icon: Icons.people_alt_outlined,
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => FridgeMembersScreen(fridge: fridge),
-                      ),
-                    ).then((_) => _loadData());
-                  },
-                ),
-                if (fridge.ownerId == _currentUserId) ...[
-                  const SizedBox(width: 8),
-                  _buildIconAction(
-                    icon: Icons.edit_note,
-                    onTap: () {
-                      Navigator.pushNamed(
-                        context,
-                        '/edit-fridge',
-                        arguments: fridge,
-                      ).then((value) {
-                        if (value != null) _loadData();
-                      });
-                    },
                   ),
-                ],
-                if (fridge.ownerId != _currentUserId) ...[
                   const SizedBox(width: 8),
                   _buildIconAction(
-                    icon: Icons.logout,
+                    icon: Icons.close,
                     color: Colors.red,
                     onTap: () => _handleLeaveFridge(fridge),
                   ),
+                ] else ...[
+                  Expanded(
+                    child: _buildActionButton(
+                      icon: Icons.add_shopping_cart,
+                      label: 'Thêm nguyên liệu',
+                      onTap: () async {
+                        await FridgeService.setActiveFridge(fridge.fridgeId);
+                        if (mounted) {
+                          setState(() => _activeFridgeId = fridge.fridgeId);
+                          final result = await Navigator.pushNamed(context, '/add-product');
+                          if (result == true) _loadItemCounts();
+                        }
+                      },
+                      isPrimary: true,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  _buildIconAction(
+                    icon: Icons.history,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => ActivityLogScreen(fridgeId: fridge.fridgeId),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(width: 8),
+                  Stack(
+                    children: [
+                      _buildIconAction(
+                        icon: Icons.chat_outlined,
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => FridgeChatScreen(fridge: fridge),
+                            ),
+                          ).then((_) => _loadUnreadStatuses());
+                        },
+                      ),
+                      if (_unreadStatuses[fridge.fridgeId] ?? false)
+                        Positioned(
+                          right: 8,
+                          top: 8,
+                          child: Container(
+                            width: 8,
+                            height: 8,
+                            decoration: const BoxDecoration(
+                              color: Colors.red,
+                              shape: BoxShape.circle,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
+                  const SizedBox(width: 8),
+                  _buildIconAction(
+                    icon: Icons.people_alt_outlined,
+                    onTap: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => FridgeMembersScreen(fridge: fridge),
+                        ),
+                      ).then((_) => _loadData());
+                    },
+                  ),
+                  if (fridge.ownerId == _currentUserId) ...[
+                    const SizedBox(width: 8),
+                    _buildIconAction(
+                      icon: Icons.edit_note,
+                      onTap: () {
+                        Navigator.pushNamed(
+                          context,
+                          '/edit-fridge',
+                          arguments: fridge,
+                        ).then((value) {
+                          if (value != null) _loadData();
+                        });
+                      },
+                    ),
+                  ],
+                  if (fridge.ownerId != _currentUserId) ...[
+                    const SizedBox(width: 8),
+                    _buildIconAction(
+                      icon: Icons.logout,
+                      color: Colors.red,
+                      onTap: () => _handleLeaveFridge(fridge),
+                    ),
+                  ],
                 ],
               ],
             ),

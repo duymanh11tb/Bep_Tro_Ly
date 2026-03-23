@@ -3,6 +3,7 @@ import '../../core/theme/app_colors.dart';
 import '../../services/pantry_service.dart';
 import '../../services/fridge_service.dart';
 import '../../models/fridge_model.dart';
+import '../recipes/recipe_suggestion_screen.dart';
 
 class PantryOverviewScreen extends StatefulWidget {
   final bool isSubPage;
@@ -219,15 +220,42 @@ class _PantryOverviewScreenState extends State<PantryOverviewScreen> {
                           color: AppColors.textPrimary,
                         ),
                       ),
-                      IconButton(
-                        onPressed: () => Navigator.pushNamed(
-                          context,
-                          '/fridge-management',
-                        ).then((_) => _loadItems()),
-                        icon: const Icon(
-                          Icons.settings_outlined,
-                          color: AppColors.primary,
-                        ),
+                      Row(
+                        children: [
+                          IconButton(
+                            onPressed: () {
+                              final List<String> ingredients =
+                                  _items.map((e) => e.name).toList();
+                              final List<String> expiring = _items
+                                  .where((e) => e.isExpiringSoon)
+                                  .map((e) => e.name)
+                                  .toList();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => RecipeSuggestionScreen(
+                                    ingredients: ingredients,
+                                    expiringIngredients: expiring,
+                                  ),
+                                ),
+                              );
+                            },
+                            icon: const Icon(
+                              Icons.auto_awesome,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pushNamed(
+                              context,
+                              '/fridge-management',
+                            ).then((_) => _loadItems()),
+                            icon: const Icon(
+                              Icons.settings_outlined,
+                              color: AppColors.primary,
+                            ),
+                          ),
+                        ],
                       ),
                     ],
                   ),

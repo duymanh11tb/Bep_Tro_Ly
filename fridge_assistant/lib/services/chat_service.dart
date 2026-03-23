@@ -50,8 +50,11 @@ class ChatService {
 
     _hubConnection!.onreconnected(({connectionId}) async {
       debugPrint('SignalR reconnected: $connectionId. Re-joining groups...');
-      for (var fridgeId in _joinedFridgeIds.toList()) {
-        await joinFridgeGroup(fridgeId);
+      final idsToRejoin = _joinedFridgeIds.toList();
+      // We don't clear _joinedFridgeIds here, instead we use force: true 
+      // to ensure we always try to join on the server regardless of local state.
+      for (var fridgeId in idsToRejoin) {
+        await joinFridgeGroup(fridgeId, force: true);
       }
     });
 
@@ -102,15 +105,16 @@ class ChatService {
       // Tham gia tất cả các nhóm tủ lạnh mà người dùng thuộc về
       final fridges = await FridgeService().getFridges();
       for (var f in fridges) {
-        await joinFridgeGroup(f.fridgeId);
+        await joinFridgeGroup(f.fridgeId, force: true);
       }
     } catch (e) {
       debugPrint('SignalR initGlobal error: $e');
     }
   }
 
-  Future<void> joinFridgeGroup(int fridgeId) async {
-    if (!isConnected || _joinedFridgeIds.contains(fridgeId)) return;
+  Future<void> joinFridgeGroup(int fridgeId, {bool force = false}) async {
+    if (!isConnected) return;
+    if (!force && _joinedFridgeIds.contains(fridgeId)) return;
     try {
       await _hubConnection!.invoke('JoinFridgeGroup', args: [fridgeId]);
       _joinedFridgeIds.add(fridgeId);
@@ -123,9 +127,9 @@ class ChatService {
   Future<void> init(int fridgeId) async {
     if (!isConnected) {
       await initGlobal();
-    } else {
-      await joinFridgeGroup(fridgeId);
     }
+    // Luôn force join khi vào màn hình chat cụ thể để đảm bảo kết nối
+    await joinFridgeGroup(fridgeId, force: true);
   }
 
   Future<void> sendMessage(int fridgeId, String content) async {

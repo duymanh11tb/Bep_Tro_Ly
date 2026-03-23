@@ -28,6 +28,9 @@ public class ActivityLog
     [Column("related_item_id")]
     public int? RelatedItemId { get; set; }
 
+    [Column("item_name")]
+    public string? ItemName { get; set; }
+
     [Column("extra_data", TypeName = "json")]
     public string? ExtraData { get; set; }
 

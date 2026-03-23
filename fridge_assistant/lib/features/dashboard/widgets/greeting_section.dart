@@ -5,12 +5,14 @@ class GreetingSection extends StatelessWidget {
   final String userName;
   final String? statusMessage;
   final String? avatarUrl;
+  final VoidCallback? onAiSuggestTap;
 
   const GreetingSection({
     super.key,
     required this.userName,
     this.statusMessage,
     this.avatarUrl,
+    this.onAiSuggestTap,
   });
 
   @override
@@ -63,6 +65,25 @@ class GreetingSection extends StatelessWidget {
               ],
             ),
           ),
+          // AI Suggest Button (Prominent as requested)
+          if (onAiSuggestTap != null)
+            ElevatedButton.icon(
+              onPressed: onAiSuggestTap,
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text(
+                'GỢI Ý',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                elevation: 2,
+              ),
+            ),
         ],
       ),
     );

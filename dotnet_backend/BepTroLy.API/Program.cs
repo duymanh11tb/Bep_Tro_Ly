@@ -124,7 +124,7 @@ builder.Services.AddRateLimiter(options =>
 });
 
 // JWT Authentication
-var jwtSecret = builder.Configuration["Jwt:SecretKey"] ?? "bep-tro-ly-secret-key-2024-super-secure-jwt-token-key";
+var jwtSecret = builder.Configuration["Jwt:SecretKey"] ?? "bep-tro-ly-secret-key-2026-super-secure-jwt-token-key";
 builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     .AddJwtBearer(options =>
     {
@@ -307,4 +307,5 @@ app.MapGet("/debug/jwt", (JwtService jwt) =>
     }
 });
 
-app.Run();
+// Lắng nghe trên tất cả các địa chỉ IP để điện thoại thật có thể kết nối
+app.Run("http://0.0.0.0:5186");

@@ -1,6 +1,7 @@
 import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/auth_service.dart';
+import '../../services/fridge_service.dart';
 import '../../services/pantry_service.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import 'widgets/dashboard_header.dart';
@@ -17,6 +18,8 @@ import '../pantry/virtual_fridge_screen.dart';
 import '../fridge/fridge_management_screen.dart';
 import '../recipes/recipe_detail_screen.dart';
 import '../recipes/recipe_recommendations_screen.dart';
+import '../recipes/recipe_suggestion_screen.dart';
+
 import '../scan/scan_ingredient_screen.dart';
 import '../settings/settings_screen.dart';
 
@@ -192,6 +195,75 @@ class _DashboardScreenState extends State<DashboardScreen> {
     await _loadPantryData(isBackground: false);
   }
 
+  Future<void> _handleAiSuggest() async {
+    final activeFridgeId = await FridgeService.getActiveFridgeId();
+    if (activeFridgeId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Vui lòng chọn hoặc tạo tủ lạnh để nhận gợi ý!'),
+          backgroundColor: AppColors.warning,
+        ),
+      );
+      return;
+    }
+
+    // Cải thiện: Kiểm tra cả stats và danh sách hiện tại để tránh báo lỗi sai khi đang tải
+    final hasItems = (_stats != null && _stats!.totalItems > 0) || _expiringItems.isNotEmpty;
+
+    List<PantryItem> itemsToUse;
+    if (!hasItems) {
+      // Thử tải lại dữ liệu một lần nữa nếu danh sách thực sự trống
+      setState(() => _isLoading = true);
+      final currentItems = await PantryService.getItems(fridgeId: activeFridgeId);
+      setState(() => _isLoading = false);
+
+      if (currentItems.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(_stats == null 
+              ? 'Đang tải dữ liệu, vui lòng thử lại sau!'
+              : 'Tủ lạnh hiện tại đang trống. Hãy thêm nguyên liệu hoặc chọn tủ lạnh khác nhé!'),
+            backgroundColor: AppColors.primary,
+            action: SnackBarAction(
+              label: 'Đổi tủ',
+              textColor: Colors.white,
+              onPressed: () => Navigator.pushNamed(context, '/fridge-management'),
+            ),
+          ),
+        );
+        return;
+      }
+      itemsToUse = currentItems;
+    } else {
+      itemsToUse = _expiringItems.isNotEmpty ? _expiringItems : await PantryService.getItems(fridgeId: activeFridgeId);
+    }
+
+    if (itemsToUse.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Không tìm thấy nguyên liệu nào phù hợp để gợi ý!'),
+          backgroundColor: AppColors.primary,
+        ),
+      );
+      return;
+    }
+
+    final ingredients = itemsToUse.map((e) => e.name).toList();
+    final expiring = itemsToUse
+        .where((e) => e.daysUntilExpiry <= 3)
+        .map((e) => e.name)
+        .toList();
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => RecipeSuggestionScreen(
+          ingredients: ingredients,
+          expiringIngredients: expiring,
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -264,6 +336,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ? '${_stats!.expiringSoon} sản phẩm sắp hết hạn!'
                   : 'Tủ lạnh của bạn đang ổn định!',
               avatarUrl: _avatarUrl,
+              onAiSuggestTap: _handleAiSuggest, // Link behavior
             ),
             const SizedBox(height: 20),
 
@@ -296,13 +369,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 await Navigator.pushNamed(context, '/fridge-management');
                 _refresh(); // Refresh when back from fridge management
               },
-              onSearchTap: () {
-                Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const RecipeRecommendationsScreen(),
-                  ),
-                );
-              },
+              onAiSuggestTap: _handleAiSuggest, // Connect to AI suggest flow
             ),
             const SizedBox(height: 24),
 

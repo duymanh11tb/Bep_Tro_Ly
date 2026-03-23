@@ -6,6 +6,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 namespace BepTroLy.API.Controllers;
 
@@ -14,10 +15,12 @@ namespace BepTroLy.API.Controllers;
 public class RecipeController : ControllerBase
 {
     private readonly AIRecipeService _aiService;
+    private readonly AppDbContext _db;
 
-    public RecipeController(AIRecipeService aiService)
+    public RecipeController(AIRecipeService aiService, AppDbContext db)
     {
         _aiService = aiService;
+        _db = db;
     }
 
     /// <summary>Gợi ý món ăn dựa trên nguyên liệu.</summary>
@@ -135,8 +138,6 @@ public class RecipeController : ControllerBase
 
     private async Task LogActivity(int userId, int? fridgeId, string type, string itemName, decimal quantity, string unit, int? recipeId = null)
     {
-        using var scope = HttpContext.RequestServices.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         try
         {
             var log = new ActivityLog
@@ -146,15 +147,15 @@ public class RecipeController : ControllerBase
                 ActivityType = type,
                 RelatedRecipeId = recipeId,
                 CreatedAt = DateTime.UtcNow,
-                ExtraData = System.Text.Json.JsonSerializer.Serialize(new
+                ExtraData = JsonSerializer.Serialize(new
                 {
                     itemName = itemName,
                     quantity = quantity,
                     unit = unit
                 })
             };
-            db.ActivityLogs.Add(log);
-            await db.SaveChangesAsync();
+            _db.ActivityLogs.Add(log);
+            await _db.SaveChangesAsync();
 
             // Send Notifications to other members
             if (fridgeId.HasValue)
@@ -170,14 +171,12 @@ public class RecipeController : ControllerBase
 
     private async Task NotifyFridgeMembers(int actorId, int fridgeId, string type, string itemName, decimal quantity, string unit)
     {
-        using var scope = HttpContext.RequestServices.CreateScope();
-        var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
         try
         {
-            var actor = await db.Users.FindAsync(actorId);
+            var actor = await _db.Users.FindAsync(actorId);
             var actorName = actor?.DisplayName ?? "Một thành viên";
             
-            var members = await db.FridgeMembers
+            var members = await _db.FridgeMembers
                 .Where(m => m.FridgeId == fridgeId && m.UserId != actorId && m.Status == "accepted")
                 .Select(m => m.UserId)
                 .ToListAsync();
@@ -195,7 +194,7 @@ public class RecipeController : ControllerBase
 
             foreach (var memberId in members)
             {
-                db.Notifications.Add(new Notification
+                _db.Notifications.Add(new Notification
                 {
                     UserId = memberId,
                     Type = "fridge_activity",
@@ -205,9 +204,62 @@ public class RecipeController : ControllerBase
                     IsRead = false
                 });
             }
-            await db.SaveChangesAsync();
+            await _db.SaveChangesAsync();
         }
         catch (Exception) { /* Ignore */ }
+    }
+
+    [Authorize]
+    [HttpPost("suggestion-feedback")]
+    public async Task<IActionResult> RecordSuggestionFeedback([FromBody] SuggestionFeedbackRequest request)
+    {
+        var userId = GetCurrentUserId();
+        if (userId == null) return Unauthorized();
+
+        var suggestion = await _db.SuggestedRecipes
+            .FirstOrDefaultAsync(s => s.UserId == userId && s.RecipeName == request.RecipeName);
+
+        if (suggestion == null)
+        {
+            // Create a record if it doesn't exist
+            suggestion = new SuggestedRecipe
+            {
+                UserId = userId.Value,
+                RecipeName = request.RecipeName,
+                SuggestedAt = DateTime.Now,
+                RecipeDataJson = "{}"
+            };
+            _db.SuggestedRecipes.Add(suggestion);
+        }
+
+        suggestion.Status = request.Feedback; // "liked", "disliked", "hidden"
+        await _db.SaveChangesAsync();
+
+        // If disliked, add to activity log to help AI learn
+        if (request.Feedback == "disliked")
+        {
+            await LogDislikeActivityAsync(userId.Value, request.RecipeName);
+        }
+
+        return Ok(new { success = true });
+    }
+
+    private async Task LogDislikeActivityAsync(int userId, string recipeName)
+    {
+        try
+        {
+            var activity = new ActivityLog
+            {
+                UserId = userId,
+                ActivityType = "dislike_recipe",
+                ItemName = recipeName,
+                ExtraData = JsonSerializer.Serialize(new { recipeName }),
+                CreatedAt = DateTime.Now
+            };
+            _db.ActivityLogs.Add(activity);
+            await _db.SaveChangesAsync();
+        }
+        catch (Exception) { /* Best effort */ }
     }
 
     private int? GetCurrentUserId()

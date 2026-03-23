@@ -27,6 +27,7 @@ public class AppDbContext : DbContext
     public DbSet<FridgeMember> FridgeMembers { get; set; }
     public DbSet<ChatMessage> ChatMessages { get; set; }
     public DbSet<ChatMessageRead> ChatMessageReads { get; set; }
+    public DbSet<SuggestedRecipe> SuggestedRecipes { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
