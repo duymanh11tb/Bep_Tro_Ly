@@ -19,6 +19,8 @@ public class RecipeSuggestionService
     private static readonly ConcurrentDictionary<int, LinkedList<string>> _recentRecipeNamesByUser = new();
 
     private readonly string? _pexelsApiKey;
+    private readonly string? _spoonacularApiKey;
+    private readonly string _spoonacularBaseUrl;
     private readonly HttpClient _httpClient;
     private readonly IRecipeCatalogProvider _catalogProvider;
     private readonly AppDbContext _db;
@@ -31,6 +33,8 @@ public class RecipeSuggestionService
         ILogger<RecipeSuggestionService> logger)
     {
         _pexelsApiKey = configuration["Pexels:ApiKey"];
+        _spoonacularApiKey = configuration["Spoonacular:ApiKey"];
+        _spoonacularBaseUrl = configuration["Spoonacular:BaseUrl"] ?? "https://api.spoonacular.com";
         _httpClient = new HttpClient { Timeout = TimeSpan.FromSeconds(20) };
         _catalogProvider = catalogProvider;
         _db = db;
@@ -121,13 +125,22 @@ public class RecipeSuggestionService
                 };
             }
 
-            var catalogRecipes = await _catalogProvider.SuggestRecipesAsync(
+            if (string.IsNullOrWhiteSpace(_spoonacularApiKey))
+            {
+                _logger.LogInformation(
+                    "Spoonacular API key is missing; recipe suggestions may rely on fallback sources. BaseUrl: {BaseUrl}",
+                    _spoonacularBaseUrl);
+            }
+
+            var historyText = string.Join(", ", recentNames.Take(10));
+            var aiRecipes = await FetchRecipesFromSpoonacularAsync(
                 ingredients,
                 preferences,
-                Math.Max(limit * 2, limit));
+                limit,
+                historyText);
 
             var prioritizedCatalogRecipes = PrioritizePantryRelevantRecipes(
-                catalogRecipes,
+                aiRecipes,
                 ingredients,
                 requirePantryIngredientMatch
             );
@@ -366,6 +379,149 @@ public class RecipeSuggestionService
             weather = preferences.TryGetValue("weather", out var w) ? w?.ToString() : "normal"
         };
         await SaveSuggestedRecipesAsync(userId.Value, recipes, JsonSerializer.Serialize(contextData));
+    }
+
+    private async Task<List<object>> FetchRecipesFromSpoonacularAsync(
+        List<string> ingredients,
+        Dictionary<string, object>? preferences,
+        int limit,
+        string historyText = "")
+    {
+        if (string.IsNullOrEmpty(_spoonacularApiKey))
+        {
+            throw new InvalidOperationException("Spoonacular API key chưa được cấu hình");
+        }
+
+        var cleanedIngredients = ingredients
+            .Where(i => !string.IsNullOrWhiteSpace(i))
+            .Select(i => i.Trim())
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        if (cleanedIngredients.Count == 0)
+        {
+            return new List<object>();
+        }
+
+        var ingredientsParam = string.Join(",", cleanedIngredients.Select(Uri.EscapeDataString));
+        var number = Math.Clamp(limit, 1, 20);
+        const int ranking = 1;
+
+        var maxReadyTime = 0;
+        if (preferences != null && preferences.TryGetValue("difficulty", out var diff))
+        {
+            var diffStr = diff?.ToString()?.ToLowerInvariant();
+            if (diffStr == "easy") maxReadyTime = 20;
+            else if (diffStr == "medium") maxReadyTime = 45;
+            else if (diffStr == "hard") maxReadyTime = 90;
+        }
+
+        var url =
+            $"{_spoonacularBaseUrl}/recipes/findByIngredients?apiKey={Uri.EscapeDataString(_spoonacularApiKey)}" +
+            $"&ingredients={ingredientsParam}&number={number}&ranking={ranking}";
+
+        if (maxReadyTime > 0)
+        {
+            url += $"&maxReadyTime={maxReadyTime}";
+        }
+
+        if (preferences != null)
+        {
+            if (preferences.TryGetValue("dietary_restrictions", out var diet))
+            {
+                var dietStr = ExtractStringList(diet).FirstOrDefault()?.ToLowerInvariant()
+                    ?? diet?.ToString()?.ToLowerInvariant();
+                var mappedDiet = MapDietary(dietStr);
+                if (!string.IsNullOrWhiteSpace(mappedDiet))
+                {
+                    url += $"&diet={Uri.EscapeDataString(mappedDiet)}";
+                }
+            }
+
+            if (preferences.TryGetValue("cuisine", out var cuisine))
+            {
+                var cuisineStr = cuisine?.ToString()?.ToLowerInvariant();
+                var mappedCuisine = MapCuisine(cuisineStr);
+                if (!string.IsNullOrWhiteSpace(mappedCuisine))
+                {
+                    url += $"&cuisine={Uri.EscapeDataString(mappedCuisine)}";
+                }
+            }
+        }
+
+        using var response = await _httpClient.GetAsync(url);
+        var responseText = await response.Content.ReadAsStringAsync();
+
+        if (!response.IsSuccessStatusCode)
+        {
+            _logger.LogError(
+                "Spoonacular error: {StatusCode} - {Response}",
+                response.StatusCode,
+                responseText);
+            throw new Exception($"Spoonacular API error: {response.StatusCode}");
+        }
+
+        using var doc = JsonDocument.Parse(responseText);
+        var result = new List<object>();
+        foreach (var recipeElem in doc.RootElement.EnumerateArray())
+        {
+            var recipeDict = new Dictionary<string, object>();
+
+            var recipeId = recipeElem.TryGetProperty("id", out var idElement) && idElement.TryGetInt32(out var parsedId)
+                ? parsedId
+                : 0;
+            var title = recipeElem.TryGetProperty("title", out var titleElement)
+                ? titleElement.GetString() ?? string.Empty
+                : string.Empty;
+            if (string.IsNullOrWhiteSpace(title))
+            {
+                continue;
+            }
+
+            var imageUrl = recipeElem.TryGetProperty("image", out var imageElement)
+                ? imageElement.GetString()
+                : null;
+
+            var usedIngredients = recipeElem.TryGetProperty("usedIngredients", out var usedElement) &&
+                                  usedElement.ValueKind == JsonValueKind.Array
+                ? usedElement.EnumerateArray()
+                    .Select(ing => ing.TryGetProperty("name", out var nameElement) ? nameElement.GetString() ?? string.Empty : string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : new List<string>();
+
+            var missedIngredients = recipeElem.TryGetProperty("missedIngredients", out var missedElement) &&
+                                    missedElement.ValueKind == JsonValueKind.Array
+                ? missedElement.EnumerateArray()
+                    .Select(ing => ing.TryGetProperty("name", out var nameElement) ? nameElement.GetString() ?? string.Empty : string.Empty)
+                    .Where(x => !string.IsNullOrWhiteSpace(x))
+                    .Distinct(StringComparer.OrdinalIgnoreCase)
+                    .ToList()
+                : new List<string>();
+
+            var total = usedIngredients.Count + missedIngredients.Count;
+            var matchScore = total == 0 ? 0.5 : (double)usedIngredients.Count / total;
+
+            recipeDict["id"] = recipeId;
+            recipeDict["name"] = title;
+            recipeDict["description"] = $"Món {title} được đề xuất dựa trên nguyên liệu bạn có.";
+            recipeDict["image_url"] = imageUrl ?? string.Empty;
+            recipeDict["difficulty"] = "medium";
+            recipeDict["prep_time"] = 10;
+            recipeDict["cook_time"] = 20;
+            recipeDict["servings"] = 2;
+            recipeDict["ingredients_used"] = usedIngredients;
+            recipeDict["ingredients_missing"] = missedIngredients;
+            recipeDict["match_score"] = matchScore;
+            recipeDict["instructions"] = new List<string> { "Xem hướng dẫn chi tiết trong ứng dụng." };
+            recipeDict["tips"] = "Chúc bạn ngon miệng!";
+            recipeDict["source_provider"] = "spoonacular";
+
+            result.Add(recipeDict);
+        }
+
+        return result;
     }
 
     private string GenerateCacheKey(List<string> ingredients, Dictionary<string, object>? preferences)
@@ -1352,6 +1508,55 @@ public class RecipeSuggestionService
 
         var chars = value.Select(c => map.TryGetValue(c, out var to) ? to : c).ToArray();
         return new string(chars);
+    }
+
+    private static string? MapDietary(string? dietary)
+    {
+        var normalized = NormalizeVietnameseText(dietary ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (normalized.Contains("an chay") || normalized.Contains("chay") || normalized.Contains("vegetarian"))
+        {
+            return "vegetarian";
+        }
+
+        if (normalized.Contains("vegan"))
+        {
+            return "vegan";
+        }
+
+        if (normalized.Contains("gluten"))
+        {
+            return "gluten free";
+        }
+
+        return null;
+    }
+
+    private static string? MapCuisine(string? cuisine)
+    {
+        var normalized = NormalizeVietnameseText(cuisine ?? string.Empty);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return null;
+        }
+
+        if (normalized.Contains("viet") || normalized.Contains("mien") || normalized.Contains("bac") ||
+            normalized.Contains("trung") || normalized.Contains("nam"))
+        {
+            return "vietnamese";
+        }
+
+        var knownCuisines = new[]
+        {
+            "italian", "chinese", "thai", "japanese", "indian", "mexican",
+            "french", "mediterranean", "korean", "american"
+        };
+
+        return knownCuisines.FirstOrDefault(normalized.Contains);
     }
 
     private List<object> ApplyExcludeAndFillRecipes(

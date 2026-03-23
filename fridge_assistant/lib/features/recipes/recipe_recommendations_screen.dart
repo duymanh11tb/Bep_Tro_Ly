@@ -168,8 +168,9 @@ class _RecipeRecommendationsScreenState
         ),
       );
     } finally {
-      if (!mounted) return;
-      setState(() => _isLoadingMore = false);
+      if (mounted) {
+        setState(() => _isLoadingMore = false);
+      }
     }
   }
 
@@ -466,7 +467,7 @@ class _RecipeRecommendationsScreenState
         ),
       ),
       child: Text(
-        isError ? displayError! : _emptyStateMessage(),
+        isError ? displayError : _emptyStateMessage(),
         textAlign: TextAlign.center,
         style: TextStyle(
           color: isError ? AppColors.error : AppColors.textSecondary,
@@ -995,7 +996,7 @@ class _RecipeRecommendationsScreenState
   }) {
     return AnimatedBuilder(
       animation: _shimmerController,
-      builder: (_, __) {
+      builder: (context, child) {
         final offset = (_shimmerController.value * 2) - 1;
         return Container(
           height: height,
@@ -1025,7 +1026,8 @@ class _RecipeRecommendationsScreenState
     return Image.network(
       recipe.imageUrl!,
       fit: BoxFit.cover,
-      errorBuilder: (_, __, ___) => _buildRecipeImageFallback(recipe.name),
+      errorBuilder: (context, error, stackTrace) =>
+          _buildRecipeImageFallback(recipe.name),
     );
   }
 
