@@ -104,7 +104,7 @@ Tùy chọn biến môi trường khi deploy/rollback:
 APP_DIR=~/Bep_Tro_Ly BRANCH=main HEALTH_URL=http://127.0.0.1:5001/health ./deploy.sh
 APP_DIR=~/Bep_Tro_Ly BRANCH=main HEALTH_URL=http://127.0.0.1:5001/health ./rollback.sh
 ```
-
+---
 Thành viên phát triển dự án :
 
 Đoàn Duy Mạnh – Code chính
