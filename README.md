@@ -105,8 +105,30 @@ APP_DIR=~/Bep_Tro_Ly BRANCH=main HEALTH_URL=http://127.0.0.1:5001/health ./deplo
 APP_DIR=~/Bep_Tro_Ly BRANCH=main HEALTH_URL=http://127.0.0.1:5001/health ./rollback.sh
 ```
 
-## Lưu Ý Quan Trọng
+Thành viên phát triển dự án :
 
-- Không commit file chứa secret (`.env`, `appsettings*.json`)
-- Migration được apply tự động khi API startup
-- Thư mục runtime (`uploads`, `node_modules`, build artifacts) không nên đưa vào git
+Đoàn Duy Mạnh – Code chính
+
+- Xây dựng Database
+
+- Phát triển API
+
+- Thiết kế và xây dựng giao diện
+
+Lương Quang Huy – Code phụ
+
+- Xây dựng giao diện
+
+- Chức năng thông tin cá nhân
+
+- Chức năng đăng nhập
+
+Trần Hậu Huân – Code phụ
+
+- Xây dựng giao diện
+
+- Chức năng thêm/sửa/xóa sản phẩm
+
+Thông tin liên hệ : 
+Email : doanduymanh11@gmail.com
+Phone : 0865060731
