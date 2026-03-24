@@ -1,6 +1,8 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
+import 'package:flutter/services.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
+import '../../services/support_service.dart';
 import '../../widgets/app_logo.dart';
 import '../../widgets/auth_tab_switcher.dart';
 import 'widgets/login_form.dart';
@@ -91,11 +93,73 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  void _handleForgotPassword() {
-    // TODO: Navigate to forgot password screen
+  Future<void> _handleForgotPassword() async {
+    final controller = TextEditingController();
+    final email = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Quên mật khẩu'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                'Nhập email đăng ký để mở yêu cầu hỗ trợ đặt lại mật khẩu.',
+              ),
+              const SizedBox(height: 12),
+              TextField(
+                controller: controller,
+                keyboardType: TextInputType.emailAddress,
+                autofocus: true,
+                decoration: InputDecoration(
+                  hintText: context.tr('Email đăng ký'),
+                  border: const OutlineInputBorder(),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Hủy'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(controller.text.trim()),
+              child: const Text('Tiếp tục'),
+            ),
+          ],
+        );
+      },
+    );
+    controller.dispose();
+
+    if (!mounted || email == null || email.isEmpty) return;
+
+    final success = await SupportService.requestPasswordReset(email: email);
+    if (!mounted) return;
+
+    if (success) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Đã mở ứng dụng email để gửi yêu cầu đặt lại mật khẩu.'),
+          behavior: SnackBarBehavior.floating,
+          backgroundColor: AppColors.primary,
+        ),
+      );
+      return;
+    }
+
+    await Clipboard.setData(
+      const ClipboardData(text: SupportService.supportEmail),
+    );
+    if (!mounted) return;
+
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Tính năng quên mật khẩu sẽ được triển khai sau'),
+        content: Text(
+          'Không mở được email. Đã sao chép địa chỉ hỗ trợ để bạn liên hệ thủ công.',
+        ),
         behavior: SnackBarBehavior.floating,
       ),
     );

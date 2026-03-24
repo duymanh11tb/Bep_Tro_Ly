@@ -1,14 +1,16 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../../core/theme/app_colors.dart';
 
 class DashboardHeader extends StatelessWidget {
   final String? avatarUrl;
   final VoidCallback? onNotificationTap;
+  final int unreadCount;
 
   const DashboardHeader({
     super.key,
     this.avatarUrl,
     this.onNotificationTap,
+    this.unreadCount = 0,
   });
 
   @override
@@ -80,18 +82,31 @@ class DashboardHeader extends StatelessWidget {
                     ),
                   ),
                   // Notification badge
-                  Positioned(
-                    top: 10,
-                    right: 10,
-                    child: Container(
-                      width: 8,
-                      height: 8,
-                      decoration: const BoxDecoration(
-                        color: AppColors.error,
-                        shape: BoxShape.circle,
+                  if (unreadCount > 0)
+                    Positioned(
+                      top: 4,
+                      right: 4,
+                      child: Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: const BoxDecoration(
+                          color: AppColors.error,
+                          shape: BoxShape.circle,
+                        ),
+                        constraints: const BoxConstraints(
+                          minWidth: 16,
+                          minHeight: 16,
+                        ),
+                        child: Text(
+                          unreadCount > 9 ? '9+' : unreadCount.toString(),
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontSize: 8,
+                            fontWeight: FontWeight.bold,
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
                       ),
                     ),
-                  ),
                 ],
               ),
             ),

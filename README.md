@@ -104,33 +104,9 @@ Tùy chọn biến môi trường khi deploy/rollback:
 APP_DIR=~/Bep_Tro_Ly BRANCH=main HEALTH_URL=http://127.0.0.1:5001/health ./deploy.sh
 APP_DIR=~/Bep_Tro_Ly BRANCH=main HEALTH_URL=http://127.0.0.1:5001/health ./rollback.sh
 ```
----
-Thành viên phát triển dự án :
 
-Đoàn Duy Mạnh – Code chính
+## Lưu Ý Quan Trọng
 
-- Xây dựng Database
-
-- Phát triển API
-
-- Thiết kế và xây dựng giao diện
-
-Lương Quang Huy – Code phụ
-
-- Xây dựng giao diện
-
-- Chức năng thông tin cá nhân
-
-- Chức năng đăng nhập
-
-Trần Hậu Huân – Code phụ
-
-- Xây dựng giao diện
-
-- Chức năng thêm/sửa/xóa sản phẩm
-
-## 📞 Thông tin liên hệ
-
-- ✉️ Email: doanduymanh11@gmail.com  
-- 📱 Phone: 0865060731
-
+- Không commit file chứa secret (`.env`, `appsettings*.json`)
+- Migration được apply tự động khi API startup
+- Thư mục runtime (`uploads`, `node_modules`, build artifacts) không nên đưa vào git

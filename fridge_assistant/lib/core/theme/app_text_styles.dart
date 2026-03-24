@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import 'app_colors.dart';
 
 /// Typography styles cho ứng dụng Bếp Trợ Lý

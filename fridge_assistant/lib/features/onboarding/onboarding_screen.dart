@@ -1,4 +1,4 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_text_styles.dart';
 import '../../widgets/app_logo.dart';
@@ -6,8 +6,54 @@ import '../../widgets/primary_button.dart';
 import '../auth/auth_screen.dart';
 
 /// Màn hình chào mừng / Onboarding
-class OnboardingScreen extends StatelessWidget {
+class OnboardingScreen extends StatefulWidget {
   const OnboardingScreen({super.key});
+
+  @override
+  State<OnboardingScreen> createState() => _OnboardingScreenState();
+}
+
+class _OnboardingScreenState extends State<OnboardingScreen> {
+  bool _didHandleRouteArgs = false;
+  bool _isLogoutDialogVisible = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_didHandleRouteArgs) return;
+    _didHandleRouteArgs = true;
+
+    final args = ModalRoute.of(context)?.settings.arguments;
+    final showLogoutNotice = args is Map && args['showLogoutNotice'] == true;
+
+    if (showLogoutNotice) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _isLogoutDialogVisible = true;
+        showDialog<void>(
+          context: context,
+          barrierDismissible: true,
+          builder: (dialogContext) => AlertDialog(
+            title: const Text('Đăng xuất thành công'),
+            content: const Text('Bạn đã đăng xuất hoàn toàn khỏi Google.'),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(dialogContext).pop(),
+                child: const Text('OK'),
+              ),
+            ],
+          ),
+        ).whenComplete(() {
+          _isLogoutDialogVisible = false;
+        });
+
+        Future.delayed(const Duration(seconds: 2), () {
+          if (!mounted || !_isLogoutDialogVisible) return;
+          Navigator.of(context, rootNavigator: true).pop();
+        });
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -23,9 +69,7 @@ class OnboardingScreen extends StatelessWidget {
               const AppLogo(showTagline: true),
               const SizedBox(height: 40),
               // Hero Image
-              Expanded(
-                child: _buildHeroImage(),
-              ),
+              Expanded(child: _buildHeroImage()),
               const SizedBox(height: 32),
               // Welcome Text
               _buildWelcomeText(),
@@ -83,10 +127,7 @@ class OnboardingScreen extends StatelessWidget {
                     color: Color.fromRGBO(76, 175, 80, 0.5),
                   ),
                   const SizedBox(height: 16),
-                  Text(
-                    '🥗 🥕 🍅 🥒',
-                    style: const TextStyle(fontSize: 40),
-                  ),
+                  Text('🥗 🥕 🍅 🥒', style: const TextStyle(fontSize: 40)),
                 ],
               ),
             ),
@@ -118,17 +159,12 @@ class OnboardingScreen extends StatelessWidget {
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        Text(
-          'Chưa có tài khoản? ',
-          style: AppTextStyles.bodyMedium,
-        ),
+        Text('Chưa có tài khoản? ', style: AppTextStyles.bodyMedium),
         GestureDetector(
           onTap: () => _navigateToAuth(context, initialTab: 0),
           child: Text(
             'Đăng nhập',
-            style: AppTextStyles.link.copyWith(
-              fontWeight: FontWeight.w600,
-            ),
+            style: AppTextStyles.link.copyWith(fontWeight: FontWeight.w600),
           ),
         ),
       ],

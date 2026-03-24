@@ -19,11 +19,17 @@ public class ActivityLog
     [Column("activity_type")]
     public string ActivityType { get; set; } = string.Empty;
 
+    [Column("fridge_id")]
+    public int? FridgeId { get; set; }
+
     [Column("related_recipe_id")]
     public int? RelatedRecipeId { get; set; }
 
     [Column("related_item_id")]
     public int? RelatedItemId { get; set; }
+
+    [Column("item_name")]
+    public string? ItemName { get; set; }
 
     [Column("extra_data", TypeName = "json")]
     public string? ExtraData { get; set; }

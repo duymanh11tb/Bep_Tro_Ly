@@ -5,16 +5,19 @@
 // gestures. You can also use WidgetTester to find child widgets in the widget
 // tree, read text, and verify that the values of widget properties are correct.
 
+import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 
 import 'package:fridge_assistant/main.dart';
 
 void main() {
-  testWidgets('App should display Bếp Trợ Lý title', (WidgetTester tester) async {
+  testWidgets('App should show loading while checking auth', (
+    WidgetTester tester,
+  ) async {
     // Build our app and trigger a frame.
     await tester.pumpWidget(const BepTroLyApp());
 
-    // Verify that app title is displayed
-    expect(find.text('Bếp Trợ Lý'), findsOneWidget);
+    // Verify splash loading indicator is rendered at startup.
+    expect(find.byType(CircularProgressIndicator), findsOneWidget);
   });
 }

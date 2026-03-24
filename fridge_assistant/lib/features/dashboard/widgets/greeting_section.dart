@@ -1,16 +1,18 @@
-import 'package:flutter/material.dart';
+import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../../core/theme/app_colors.dart';
 
 class GreetingSection extends StatelessWidget {
   final String userName;
   final String? statusMessage;
   final String? avatarUrl;
+  final VoidCallback? onRecipeSuggestTap;
 
   const GreetingSection({
     super.key,
     required this.userName,
     this.statusMessage,
     this.avatarUrl,
+    this.onRecipeSuggestTap,
   });
 
   @override
@@ -63,6 +65,25 @@ class GreetingSection extends StatelessWidget {
               ],
             ),
           ),
+          // Recipe suggestion button
+          if (onRecipeSuggestTap != null)
+            ElevatedButton.icon(
+              onPressed: onRecipeSuggestTap,
+              icon: const Icon(Icons.auto_awesome, size: 16),
+              label: const Text(
+                'GỢI Ý',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppColors.primary,
+                foregroundColor: Colors.white,
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                elevation: 2,
+              ),
+            ),
         ],
       ),
     );

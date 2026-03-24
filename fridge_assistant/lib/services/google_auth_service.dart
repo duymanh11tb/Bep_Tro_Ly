@@ -1,41 +1,51 @@
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:google_sign_in/google_sign_in.dart';
 import 'dart:convert';
+import 'dart:io' show Platform;
 import 'auth_service.dart';
 import 'api_service.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class GoogleAuthService {
   final GoogleSignIn _googleSignIn = GoogleSignIn(
-    // Dùng Web Client ID cho cả Web và Android (cùng project)
-    clientId: dotenv.env['GOOGLE_CLIENT_ID'],
+    // Android nên dùng serverClientId; clientId chỉ cần cho Web/iOS.
+    clientId: (kIsWeb || Platform.isIOS)
+        ? dotenv.env['GOOGLE_CLIENT_ID']
+        : null,
     serverClientId: kIsWeb ? null : dotenv.env['GOOGLE_CLIENT_ID'],
-    scopes: ['email', 'profile'],
+    scopes: ['openid', 'email', 'profile'],
   );
 
   final AuthService _authService = AuthService();
 
   Future<Map<String, dynamic>> signInWithGoogle() async {
     try {
+      // Đảm bảo mở lại trình chọn tài khoản thay vì bám phiên cũ.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+
       // 1. Khởi động quy trình đăng nhập Google
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
       if (googleUser == null) {
         return {'success': false, 'message': 'Đã hủy đăng nhập'};
       }
 
-      // 2. Lấy IdToken
+      // 2. Lấy token từ Google
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
       final String? idToken = googleAuth.idToken;
+      final String? accessToken = googleAuth.accessToken;
 
-      if (idToken == null) {
+      if (idToken == null && accessToken == null) {
         return {'success': false, 'message': 'Không lấy được Token từ Google'};
       }
 
       // 3. Gửi Token về Backend sử dụng ApiService
-      final response = await ApiService.post('/api/auth/google-login', {
-        'idToken': idToken,
-      });
+      final payload = <String, dynamic>{};
+      if (idToken != null) payload['idToken'] = idToken;
+      if (accessToken != null) payload['accessToken'] = accessToken;
+      final response = await ApiService.post('/api/v1/auth/google-login', payload);
 
       final data = jsonDecode(response.body);
 
@@ -57,7 +67,17 @@ class GoogleAuthService {
   }
 
   Future<void> signOut() async {
-    await _googleSignIn.signOut();
-    await _authService.logout();
+    try {
+      // disconnect sẽ revoke quyền và xóa phiên Google local,
+      // giúp lần đăng nhập sau hiện lại hộp chọn tài khoản.
+      await _googleSignIn.disconnect();
+    } catch (_) {
+      // Fallback nếu chưa từng connect hoặc revoke thất bại.
+      try {
+        await _googleSignIn.signOut();
+      } catch (_) {}
+    } finally {
+      await _authService.logout();
+    }
   }
 }
