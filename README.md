@@ -129,6 +129,8 @@ Trần Hậu Huân – Code phụ
 
 - Chức năng thêm/sửa/xóa sản phẩm
 
-Thông tin liên hệ : 
-Email : doanduymanh11@gmail.com
-Phone : 0865060731
+## 📞 Thông tin liên hệ
+
+- ✉️ Email: doanduymanh11@gmail.com  
+- 📱 Phone: 0865060731
+
