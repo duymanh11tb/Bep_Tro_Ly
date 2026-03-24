@@ -25,6 +25,13 @@ appsettings.Development.json
 appsettings.Production.json
 .env
 
+# Backend secrets (scoped paths)
+dotnet_backend/BepTroLy.API/appsettings.Development.json
+dotnet_backend/BepTroLy.API/appsettings.Production.json
+
+# Flutter secrets
+fridge_assistant/assets/.env
+
 # Build artifacts
 dotnet_backend/BepTroLy.API/publish/
 
