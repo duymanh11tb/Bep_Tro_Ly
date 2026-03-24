@@ -14,6 +14,10 @@ namespace BepTroLy.API.Services;
 /// </summary>
 public class AIRecipeService
 {
+    private const int DemoDefaultLimit = 2;
+    private const int DemoMaxLimit = 2;
+    private const int CacheTtlHours = 72;
+
     private readonly string? _apiKey;
     private readonly HttpClient _httpClient;
     private readonly AppDbContext _db;
@@ -33,10 +37,11 @@ public class AIRecipeService
     public async Task<Dictionary<string, object>> SuggestRecipesAsync(
         List<string> ingredients,
         Dictionary<string, object>? preferences = null,
-        int limit = 5)
+        int limit = DemoDefaultLimit)
     {
         // If no ingredients, we enter "Discovery" mode
         ingredients ??= new List<string>();
+        limit = Math.Clamp(limit, 1, DemoMaxLimit);
 
         // Ensure preferences is not null and include limit so cache key
         // differentiates between different requested recipe counts.
@@ -60,7 +65,7 @@ public class AIRecipeService
         try
         {
             var aiRecipes = await GenerateAISuggestionsAsync(ingredients, preferences, limit);
-            await SaveToCacheAsync(cacheKey, aiRecipes);
+            await SaveToCacheAsync(cacheKey, aiRecipes, CacheTtlHours);
 
             return new Dictionary<string, object>
             {
@@ -87,7 +92,7 @@ public class AIRecipeService
     public async Task<Dictionary<string, object>> SuggestFromPantryAsync(
         int userId,
         Dictionary<string, object>? preferences = null,
-        int limit = 5)
+        int limit = DemoDefaultLimit)
     {
         var pantryItems = await _db.PantryItems
             .Where(p => p.UserId == userId && p.Status == "active")
@@ -126,7 +131,7 @@ public class AIRecipeService
             {{dietaryText}}
             {{difficultyText}}
 
-            NHIỆM VỤ: Đề xuất {{limit}} món ăn. 
+            NHIỆM VỤ: Đề xuất đúng {{limit}} món ăn (tối đa 2 món cho bản demo). 
             - Nếu đang ở CHẾ ĐỘ GỢI Ý: Hãy ưu tiên các món sử dụng được nhiều nguyên liệu sẵn có nhất.
             - Nếu đang ở CHẾ ĐỘ KHÁM PHÁ: Hãy chọn những món ngon nhất, dễ tìm mua nguyên liệu nhất.
 
