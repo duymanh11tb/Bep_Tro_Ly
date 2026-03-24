@@ -1,88 +1,112 @@
-# Bep Tro Ly
+# Bếp Trợ Lý
 
-Ung dung quan ly thuc pham trong tu lanh, goi y mon an bang AI, va quan ly meal plan.
+Ứng dụng trợ lý bếp thông minh, giúp bạn:
+- Quản lý thực phẩm trong tủ lạnh
+- Gợi ý công thức theo nguyên liệu hiện có
+- Lập kế hoạch bữa ăn (meal plan) và theo dõi sử dụng thực phẩm
 
-## Tong Quan
+## Ứng Dụng Hoạt Động Như Thế Nào
 
-- Backend: `.NET 8` + `EF Core Code First` + `MySQL`
-- Mobile App: `Flutter`
-- Deployment: `Docker Compose` tren VPS Ubuntu
+Hệ thống gồm 3 phần chính:
+- `dotnet_backend/BepTroLy.API`: REST API .NET 8, xử lý nghiệp vụ, xác thực, kết nối MySQL
+- `fridge_assistant`: ứng dụng Flutter (mobile/web) cho người dùng cuối
+- `landing_web`: trang giới thiệu (landing page)
 
-## Cau Truc Thu Muc
+Luồng xử lý chính:
+1. Người dùng cập nhật danh sách thực phẩm trong tủ lạnh.
+2. API phân tích nguyên liệu, kết hợp dịch vụ gợi ý công thức.
+3. Hệ thống trả về món phù hợp, hướng dẫn nấu và gợi ý theo sở thích.
+4. Người dùng lưu vào meal plan để theo dõi và sử dụng thực phẩm hiệu quả hơn.
 
-- `dotnet_backend/BepTroLy.API`: API backend
-- `fridge_assistant`: Flutter app
-- `docker-compose.yml`: Chay API + MySQL bang Docker
-- `.env.example`: Mau bien moi truong
+## Công Nghệ Sử Dụng
 
-## Yeu Cau Cai Dat
+- Backend: `.NET 8`, `ASP.NET Core`, `EF Core Code First`, `MySQL`
+- Mobile app: `Flutter`
+- Vận hành: `Docker Compose`
+- Dịch vụ gợi ý công thức: `Spoonacular` (+ AI dịch/tạo mẹo qua Gemini nếu cấu hình)
 
-- Docker + Docker Compose
-- .NET SDK 8.0 (neu chay backend local)
-- Flutter SDK (neu chay mobile local)
+## Cấu Trúc Thư Mục
 
-## Chay Nhanh Bang Docker (Khuyen Dung)
+- `dotnet_backend/`: mã nguồn backend và Dockerfile
+- `fridge_assistant/`: mã nguồn ứng dụng Flutter
+- `landing_web/`: mã nguồn trang landing
+- `docker-compose.yml`: khởi chạy API + DB
+- `.env.example`: mẫu biến môi trường
+- `deploy.sh`, `rollback.sh`: script deploy/rollback trên VPS Linux
 
-1. Tao file `.env` tu file mau:
+## Hướng Dẫn Sử Dụng Nhanh
 
+### 1) Chạy bằng Docker (khuyến dùng)
+
+Tạo file môi trường:
 ```bash
 cp .env.example .env
 ```
 
-2. Dien gia tri that trong `.env`:
-
+Điền các biến quan trọng:
 - `DB_PASSWORD`
 - `JWT_SECRET`
-- `GEMINI_API_KEY`
+- `SPOONACULAR_API_KEY`
 - `GOOGLE_CLIENT_ID`
+- `GEMINI_API_KEY` (nếu cần AI dịch/tạo mẹo)
 
-3. Build va chay:
-
+Khởi động hệ thống:
 ```bash
 docker compose up -d --build
 ```
 
-4. Kiem tra trang thai:
-
+Kiểm tra trạng thái:
 ```bash
 docker compose ps
 docker compose logs -f db
 docker compose logs -f api
 ```
 
-## Endpoint Co Ban
+### 2) Truy cập dịch vụ
 
 - API base: `http://<VPS_IP>:5001`
 - Health check: `GET /health`
 - Swagger: `http://<VPS_IP>:5001/swagger`
 
-## Luu Y Database (Code First)
+### 3) Cấu hình Flutter API URL
 
-- Migration duoc apply tu dong khi API startup (`context.Database.Migrate()`).
-- Docker da duoc cau hinh healthcheck cho MySQL va API se doi DB `healthy` truoc khi khoi dong.
-- MySQL server version duoc set ro rang qua `Database:ServerVersion` de tranh loi `AutoDetect`.
+Flutter app đọc biến môi trường từ `fridge_assistant/assets/.env`.
+Mẫu cấu hình trong `fridge_assistant/assets/.env.example`:
 
-## Bao Mat
-
-- Khong commit file `.env`.
-- Khong dua secret that vao `appsettings*.json`.
-- Neu nghi ngo lo secret: doi ngay `DB_PASSWORD`, `JWT_SECRET`, `GEMINI_API_KEY`.
-
-## Lenh Thuong Dung
-
-```bash
-docker compose up -d --build
-docker compose down
-docker compose logs -f api
-docker compose logs -f db
+```env
+API_URL=<IP_VPS>:5001
+API_URL_WEB=auto
+GOOGLE_CLIENT_ID=your-google-client-id.apps.googleusercontent.com
 ```
 
-## Quy Trinh Git Ngan
+Khuyến nghị production:
+- Đặt frontend web và API cùng domain/HTTPS qua reverse proxy
+- Giữ `API_URL_WEB=auto` để tránh lỗi CORS/origin
 
+## Hướng Dẫn Vận Hành Trên VPS
+
+Deploy nhanh:
 ```bash
-git checkout develop
-git pull origin develop
-git checkout -b feature/ten-tinh-nang
+cd ~/Bep_Tro_Ly
+chmod +x deploy.sh
+./deploy.sh
 ```
 
-Mo Pull Request vao `develop` sau khi hoan thanh.
+Rollback nhanh:
+```bash
+cd ~/Bep_Tro_Ly
+chmod +x rollback.sh
+./rollback.sh
+```
+
+Tùy chọn biến môi trường khi deploy/rollback:
+```bash
+APP_DIR=~/Bep_Tro_Ly BRANCH=main HEALTH_URL=http://127.0.0.1:5001/health ./deploy.sh
+APP_DIR=~/Bep_Tro_Ly BRANCH=main HEALTH_URL=http://127.0.0.1:5001/health ./rollback.sh
+```
+
+## Lưu Ý Quan Trọng
+
+- Không commit file chứa secret (`.env`, `appsettings*.json`)
+- Migration được apply tự động khi API startup
+- Thư mục runtime (`uploads`, `node_modules`, build artifacts) không nên đưa vào git

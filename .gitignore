@@ -37,3 +37,9 @@ dotnet_backend/BepTroLy.API/publish/
 fridge_assistant/.dart_tool/
 fridge_assistant/.packages
 fridge_assistant/build/
+landing_web/node_modules/
+
+# Runtime generated uploads
+dotnet_backend/BepTroLy.API/wwwroot/uploads/**
+!dotnet_backend/BepTroLy.API/wwwroot/uploads/
+!dotnet_backend/BepTroLy.API/wwwroot/uploads/.gitkeep
