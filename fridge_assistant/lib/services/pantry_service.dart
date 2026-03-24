@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'api_service.dart';
 import 'auth_service.dart';
@@ -52,10 +53,16 @@ class PantryItem {
       categoryId: json['category_id'],
       location: json['location'] ?? 'fridge',
       expiryDate: expiry,
-      imageUrl: json['image_url'],
+      imageUrl: _normalizeImageUrl(json['image_url']),
       status: json['status'] ?? 'active',
       fridgeId: json['fridge_id'],
     );
+  }
+
+  static String? _normalizeImageUrl(dynamic raw) {
+    final value = raw?.toString().trim();
+    if (value == null || value.isEmpty) return null;
+    return ApiService.absoluteUrl(value);
   }
 
   /// Số ngày còn lại trước khi hết hạn
@@ -350,6 +357,9 @@ class PantryService {
     DateTime? expiryDate,
     String? notes,
     int? fridgeId, // Optional: override active fridge
+    String addMethod = 'manual',
+    String? barcode,
+    String? imageUrl,
   }) async {
     try {
       final effectiveFridgeId = fridgeId ?? await FridgeService.getActiveFridgeId();
@@ -378,7 +388,11 @@ class PantryService {
         if (expiryDate != null)
           'expiry_date': expiryDate.toIso8601String().split('T').first,
         if (notes != null && notes.isNotEmpty) 'notes': notes,
-        'add_method': 'manual',
+        'add_method': addMethod,
+        if (barcode != null && barcode.trim().isNotEmpty)
+          'barcode': barcode.trim(),
+        if (imageUrl != null && imageUrl.trim().isNotEmpty)
+          'image_url': imageUrl.trim(),
       };
       final resp = await ApiService.post('/api/v1/pantry', body, withAuth: true);
       final success = resp.statusCode == 200;
@@ -389,6 +403,64 @@ class PantryService {
     } catch (e) {
       debugPrint('PantryService.addItem error: $e');
       return false;
+    }
+  }
+
+  static Future<String?> uploadItemImage(String filePath) async {
+    try {
+      final url = Uri.parse('${ApiService.baseUrl}/api/v1/pantry/image');
+      final token = await AuthService().getToken();
+
+      if (token == null || token.isEmpty) {
+        return null;
+      }
+
+      final request = http.MultipartRequest('POST', url);
+      request.headers['Authorization'] = 'Bearer $token';
+
+      if (kIsWeb) {
+        final bytes = await http.ByteStream(
+          Stream.value(await http.readBytes(Uri.parse(filePath))),
+        ).toBytes();
+        request.files.add(
+          http.MultipartFile.fromBytes(
+            'image',
+            bytes,
+            filename: 'pantry_item.jpg',
+          ),
+        );
+      } else {
+        request.files.add(await http.MultipartFile.fromPath('image', filePath));
+      }
+
+      final streamedResponse = await request.send();
+      final response = await http.Response.fromStream(streamedResponse);
+
+      if (response.statusCode != 200 && response.statusCode != 201) {
+        debugPrint(
+          'PantryService.uploadItemImage failed: ${response.statusCode} ${response.body}',
+        );
+        return null;
+      }
+
+      if (response.body.isEmpty) {
+        return null;
+      }
+
+      final json = jsonDecode(utf8.decode(response.bodyBytes));
+      if (json is! Map<String, dynamic>) {
+        return null;
+      }
+
+      final imageUrl = json['image_url']?.toString();
+      if (imageUrl == null || imageUrl.trim().isEmpty) {
+        return null;
+      }
+
+      return ApiService.absoluteUrl(imageUrl);
+    } catch (e) {
+      debugPrint('PantryService.uploadItemImage error: $e');
+      return null;
     }
   }
 

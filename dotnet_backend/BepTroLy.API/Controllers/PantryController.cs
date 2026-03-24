@@ -14,11 +14,13 @@ public class PantryController : ControllerBase
 {
     private readonly AppDbContext _db;
     private readonly ILogger<PantryController> _logger;
+    private readonly IWebHostEnvironment _env;
 
-    public PantryController(AppDbContext db, ILogger<PantryController> logger)
+    public PantryController(AppDbContext db, ILogger<PantryController> logger, IWebHostEnvironment env)
     {
         _db = db;
         _logger = logger;
+        _env = env;
     }
 
     private int GetUserId()
@@ -277,9 +279,10 @@ public class PantryController : ControllerBase
             Location = request.Location ?? "fridge",
             PurchaseDate = request.PurchaseDate,
             ExpiryDate = request.ExpiryDate,
+            Barcode = string.IsNullOrWhiteSpace(request.Barcode) ? null : request.Barcode.Trim(),
             ImageUrl = request.ImageUrl,
             Notes = request.Notes,
-            AddMethod = request.AddMethod ?? "manual",
+            AddMethod = string.IsNullOrWhiteSpace(request.AddMethod) ? "manual" : request.AddMethod.Trim(),
             Status = "active",
             CreatedAt = DateTime.UtcNow,
             UpdatedAt = DateTime.UtcNow,
@@ -296,6 +299,50 @@ public class PantryController : ControllerBase
             message = "Thêm sản phẩm thành công",
             id = item.ItemId,
         });
+    }
+
+    // POST /api/pantry/image - Upload ảnh sản phẩm
+    [HttpPost("image")]
+    public async Task<IActionResult> UploadPantryImage(IFormFile image)
+    {
+        if (image == null || image.Length == 0)
+            return BadRequest(new { error = "Vui lòng chọn ảnh sản phẩm" });
+
+        var userId = GetUserId();
+        if (userId == 0) return Unauthorized();
+
+        try
+        {
+            var webRoot = _env.WebRootPath ?? Path.Combine(_env.ContentRootPath, "wwwroot");
+            var uploadsDir = Path.Combine(webRoot, "uploads", "pantry");
+            if (!Directory.Exists(uploadsDir)) Directory.CreateDirectory(uploadsDir);
+
+            var safeExtension = Path.GetExtension(image.FileName);
+            if (string.IsNullOrWhiteSpace(safeExtension))
+            {
+                safeExtension = ".jpg";
+            }
+
+            var fileName = $"{userId}_{DateTime.UtcNow.Ticks}{safeExtension}";
+            var filePath = Path.Combine(uploadsDir, fileName);
+
+            await using (var stream = new FileStream(filePath, FileMode.Create))
+            {
+                await image.CopyToAsync(stream);
+            }
+
+            var imageUrl = $"/uploads/pantry/{fileName}";
+            return Ok(new
+            {
+                message = "Tải ảnh sản phẩm thành công",
+                image_url = imageUrl,
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error uploading pantry image for user {UserId}", userId);
+            return StatusCode(500, new { error = "Lỗi hệ thống khi tải ảnh sản phẩm" });
+        }
     }
 
     // PUT /api/pantry/{id} - Cập nhật sản phẩm
@@ -440,6 +487,7 @@ public class PantryItemRequest
     public string? Location { get; set; }
     public DateOnly? PurchaseDate { get; set; }
     public DateOnly? ExpiryDate { get; set; }
+    public string? Barcode { get; set; }
     public string? ImageUrl { get; set; }
     public string? Notes { get; set; }
     public string? AddMethod { get; set; }

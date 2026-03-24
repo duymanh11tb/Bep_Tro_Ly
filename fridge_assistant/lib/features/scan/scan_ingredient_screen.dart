@@ -4,7 +4,6 @@ import 'package:fridge_assistant/core/localization/app_material.dart';
 import 'package:camera/camera.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:google_mlkit_barcode_scanning/google_mlkit_barcode_scanning.dart';
-import 'package:google_mlkit_text_recognition/google_mlkit_text_recognition.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/bottom_nav_bar.dart';
 import '../../widgets/fridge_selector.dart';
@@ -24,9 +23,6 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
   bool _flashOn = false;
   CameraController? _cameraController;
   final BarcodeScanner _barcodeScanner = BarcodeScanner();
-  final TextRecognizer _textRecognizer = TextRecognizer(
-    script: TextRecognitionScript.latin,
-  );
   List<CameraDescription> _cameras = [];
   int _currentCameraIndex = 0;
   bool _isInitializingCamera = true;
@@ -46,7 +42,6 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
   void dispose() {
     _cameraController?.dispose();
     _barcodeScanner.close();
-    _textRecognizer.close();
     super.dispose();
   }
 
@@ -56,6 +51,8 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     String unit = 'cái',
     DateTime? expiryDate,
     String? notes,
+    String addMethod = 'manual',
+    String? barcode,
   }) async {
     if (_selectedFridge?.status == 'paused') {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -75,6 +72,8 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
       expiryDate: expiryDate,
       notes: notes,
       fridgeId: _selectedFridgeId,
+      addMethod: addMethod,
+      barcode: barcode,
     );
   }
 
@@ -204,16 +203,10 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     try {
       final inputImage = InputImage.fromFilePath(image.path);
 
-      // Ưu tiên barcode trước để xử lý nhanh sản phẩm đóng gói.
+      // Chỉ ưu tiên quét barcode sản phẩm, tránh OCR nhầm chữ trên nền.
       final barcodes = await _barcodeScanner.processImage(inputImage);
-      final barcodeIngredients = _extractIngredientsFromBarcodes(barcodes);
 
       if (!mounted) {
-        return;
-      }
-
-      if (barcodeIngredients.isNotEmpty) {
-        await _showDetectedIngredientsSheet(barcodeIngredients);
         return;
       }
 
@@ -222,13 +215,6 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
         final suggestedName = await BarcodeLookupService.lookupProductName(
           firstBarcodeValue,
         );
-        if (suggestedName != null && suggestedName.trim().isNotEmpty) {
-          await _saveBarcodeProductDirectly(
-            barcodeValue: firstBarcodeValue,
-            productName: suggestedName,
-          );
-          return;
-        }
         await _showBarcodeDetectedDialog(
           firstBarcodeValue,
           suggestedName: suggestedName,
@@ -236,59 +222,25 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
         return;
       }
 
-      final result = await _textRecognizer.processImage(inputImage);
-      final candidates = _extractIngredientCandidates(result.text);
-
-      if (!mounted) {
-        return;
-      }
-
-      if (candidates.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Không nhận diện được nguyên liệu rõ ràng từ ảnh.'),
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Không tìm thấy mã vạch sản phẩm. Hãy đưa mã vạch vào giữa khung rồi thử lại.',
           ),
-        );
-        return;
-      }
-
-      await _showDetectedIngredientsSheet(candidates);
+        ),
+      );
     } catch (_) {
       if (!mounted) {
         return;
       }
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Quét chữ thất bại, vui lòng thử lại.')),
+        const SnackBar(content: Text('Quét mã vạch thất bại, vui lòng thử lại.')),
       );
     } finally {
       if (mounted) {
         setState(() => _isScanningText = false);
       }
     }
-  }
-
-  List<String> _extractIngredientsFromBarcodes(List<Barcode> barcodes) {
-    final results = <String>[];
-    final seen = <String>{};
-
-    for (final barcode in barcodes) {
-      final value = (barcode.displayValue ?? barcode.rawValue ?? '').trim();
-      if (value.isEmpty) {
-        continue;
-      }
-
-      final candidates = _extractIngredientCandidates(
-        value.replaceAll('|', '\n'),
-      );
-      for (final item in candidates) {
-        final key = _normalize(item);
-        if (key.isNotEmpty && seen.add(key)) {
-          results.add(item);
-        }
-      }
-    }
-
-    return results;
   }
 
   String? _pickFirstBarcodeValue(List<Barcode> barcodes) {
@@ -310,8 +262,9 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
         : 'Sản phẩm mã $barcodeValue';
     final nameController = TextEditingController(text: defaultName);
     final quantityController = TextEditingController(text: '1');
-    String selectedUnit = 'Gam';
-    
+    String selectedUnit = 'Gói';
+    DateTime? selectedExpiryDate = _suggestExpiryDateForName(defaultName);
+
     final units = ['Gam', 'Kg', 'Lít', 'Ml', 'Cái', 'Quả', 'Bó', 'Hộp', 'Gói', 'Chai', 'Lon', 'Bịch'];
 
     final result = await showDialog<Map<String, dynamic>>(
@@ -357,7 +310,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                           flex: 1,
                           child: TextField(
                             controller: quantityController,
-                            keyboardType: TextInputType.number,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             decoration: InputDecoration(
                               labelText: context.tr('Số lượng'),
                             ),
@@ -381,6 +334,47 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 12),
+                    InkWell(
+                      borderRadius: BorderRadius.circular(12),
+                      onTap: () async {
+                        final picked = await _pickExpiryDate(
+                          initialDate: selectedExpiryDate,
+                        );
+                        if (picked != null) {
+                          setDialogState(() => selectedExpiryDate = picked);
+                        }
+                      },
+                      child: InputDecorator(
+                        decoration: InputDecoration(
+                          labelText: context.tr('Hạn sử dụng'),
+                          border: const OutlineInputBorder(),
+                        ),
+                        child: Row(
+                          children: [
+                            const Icon(
+                              Icons.calendar_today_outlined,
+                              size: 18,
+                              color: AppColors.textSecondary,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                selectedExpiryDate == null
+                                    ? 'Chọn ngày hết hạn'
+                                    : _formatDate(selectedExpiryDate!),
+                                style: TextStyle(
+                                  color: selectedExpiryDate == null
+                                      ? AppColors.textSecondary
+                                      : AppColors.textPrimary,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
                   ],
                 ),
               ),
@@ -403,10 +397,15 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                       ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Số lượng phải lớn hơn 0')));
                       return;
                     }
+                    if (selectedExpiryDate == null) {
+                      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Vui lòng chọn hạn sử dụng')));
+                      return;
+                    }
                     Navigator.of(context).pop({
                       'name': name,
                       'quantity': qty,
                       'unit': selectedUnit,
+                      'expiryDate': selectedExpiryDate,
                     });
                   },
                   child: const Text('Lưu vào tủ lạnh'),
@@ -426,14 +425,15 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     final productName = result['name'] as String;
     final quantity = result['quantity'] as double;
     final unit = (result['unit'] as String).toLowerCase();
-
-    final expiryDate = _suggestExpiryDateForName(productName);
+    final expiryDate = result['expiryDate'] as DateTime?;
     final ok = await _handleAddItem(
       nameVi: productName,
       quantity: quantity,
       unit: unit,
       expiryDate: expiryDate,
       notes: 'Thêm từ mã vạch: $barcodeValue',
+      addMethod: 'barcode',
+      barcode: barcodeValue,
     );
 
     if (!mounted) {
@@ -446,34 +446,6 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
           ok
               ? 'Đã thêm "$productName" ($quantity $unit) vào tủ lạnh.'
               : 'Lưu sản phẩm từ mã vạch thất bại.',
-        ),
-      ),
-    );
-  }
-
-  Future<void> _saveBarcodeProductDirectly({
-    required String barcodeValue,
-    required String productName,
-  }) async {
-    final expiryDate = _suggestExpiryDateForName(productName);
-    final ok = await _handleAddItem(
-      nameVi: productName,
-      quantity: 1,
-      unit: 'cái',
-      expiryDate: expiryDate,
-      notes: 'Thêm tự động từ mã vạch: $barcodeValue',
-    );
-
-    if (!mounted) {
-      return;
-    }
-
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          ok
-              ? 'Đã tự thêm "$productName" vào tủ lạnh.'
-              : 'Tự lưu sản phẩm từ mã vạch thất bại.',
         ),
       ),
     );
@@ -787,7 +759,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
         quantity: 1,
         unit: 'cái',
         expiryDate: expiryDate,
-        notes: 'Thêm từ quét camera',
+        notes: 'Thêm thủ công nhanh từ màn quét',
       );
       if (ok) {
         successCount++;
@@ -844,7 +816,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                           flex: 1,
                           child: TextField(
                             controller: quantityController,
-                            keyboardType: TextInputType.number,
+                            keyboardType: const TextInputType.numberWithOptions(decimal: true),
                             decoration: InputDecoration(
                               labelText: context.tr('Số lượng'),
                             ),
@@ -981,6 +953,36 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
     }
 
     return now.add(const Duration(days: 14));
+  }
+
+  Future<DateTime?> _pickExpiryDate({DateTime? initialDate}) async {
+    final now = DateTime.now();
+    final safeInitialDate = initialDate == null || initialDate.isBefore(now)
+        ? now.add(const Duration(days: 7))
+        : initialDate;
+
+    return showDatePicker(
+      context: context,
+      initialDate: safeInitialDate,
+      firstDate: DateTime(now.year, now.month, now.day),
+      lastDate: DateTime(2035),
+      builder: (context, child) => Theme(
+        data: Theme.of(context).copyWith(
+          colorScheme: const ColorScheme.light(
+            primary: AppColors.primary,
+            onPrimary: Colors.white,
+            surface: Colors.white,
+          ),
+        ),
+        child: child!,
+      ),
+    );
+  }
+
+  String _formatDate(DateTime date) {
+    final day = date.day.toString().padLeft(2, '0');
+    final month = date.month.toString().padLeft(2, '0');
+    return '$day/$month/${date.year}';
   }
 
   Future<void> _switchCamera() async {
@@ -1169,7 +1171,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                       CircularProgressIndicator(color: Color(0xFF00E86A)),
                       SizedBox(height: 10),
                       Text(
-                        'Đang nhận diện nguyên liệu...',
+                        'Đang quét mã vạch sản phẩm...',
                         style: TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w600,
@@ -1201,7 +1203,7 @@ class _ScanIngredientScreenState extends State<ScanIngredientScreen> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Text(
-                      'Căn chỉnh mã vạch hoặc hóa đơn vào khung',
+                      'Căn chỉnh mã vạch sản phẩm vào khung',
                       style: TextStyle(
                         color: Colors.white,
                         fontSize: 12,

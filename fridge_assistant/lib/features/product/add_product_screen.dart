@@ -1,3 +1,6 @@
+import 'dart:typed_data';
+
+import 'package:image_picker/image_picker.dart';
 import 'package:fridge_assistant/core/localization/app_material.dart';
 import '../../core/theme/app_colors.dart';
 import '../../services/pantry_service.dart';
@@ -15,10 +18,13 @@ class _AddProductScreenState extends State<AddProductScreen> {
   final _nameController = TextEditingController();
   final _quantityController = TextEditingController(text: '1');
   final _searchController = TextEditingController();
+  final ImagePicker _imagePicker = ImagePicker();
 
   String _selectedUnit = 'Gam';
   DateTime? _purchaseDate;
   DateTime? _expiryDate;
+  XFile? _selectedImage;
+  Uint8List? _selectedImageBytes;
   bool _isLoading = false;
   int? _selectedFridgeId;
   FridgeModel? _selectedFridge;
@@ -158,12 +164,31 @@ class _AddProductScreenState extends State<AddProductScreen> {
     }
 
     try {
+      String? uploadedImageUrl;
+      if (_selectedImage != null) {
+        uploadedImageUrl = await PantryService.uploadItemImage(
+          _selectedImage!.path,
+        );
+
+        if (_selectedImage != null && uploadedImageUrl == null) {
+          if (!mounted) return;
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Tải ảnh sản phẩm thất bại. Vui lòng thử lại.'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+          return;
+        }
+      }
+
       final success = await PantryService.addItem(
         nameVi: name,
         quantity: double.parse(quantityText),
         unit: _selectedUnit.toLowerCase(),
         expiryDate: _expiryDate,
         fridgeId: _selectedFridgeId,
+        imageUrl: uploadedImageUrl,
       );
 
       if (!mounted) return;
@@ -199,6 +224,57 @@ class _AddProductScreenState extends State<AddProductScreen> {
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
+  }
+
+  Future<void> _pickProductImage(ImageSource source) async {
+    final picked = await _imagePicker.pickImage(
+      source: source,
+      imageQuality: 85,
+      maxWidth: 1800,
+    );
+    if (picked == null || !mounted) return;
+
+    setState(() {
+      _selectedImage = picked;
+      _selectedImageBytes = null;
+    });
+
+    final bytes = await picked.readAsBytes();
+    if (!mounted) return;
+    setState(() {
+      _selectedImageBytes = bytes;
+    });
+  }
+
+  Future<void> _showImageSourceSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      builder: (context) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.camera_alt_outlined),
+                title: const Text('Chụp ảnh sản phẩm'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await _pickProductImage(ImageSource.camera);
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.photo_library_outlined),
+                title: const Text('Chọn từ thư viện'),
+                onTap: () async {
+                  Navigator.of(context).pop();
+                  await _pickProductImage(ImageSource.gallery);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
   }
 
   @override
@@ -264,6 +340,10 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
                     // ──── Camera Button ────
                     _buildCameraButton(),
+                    if (_selectedImage != null) ...[
+                      const SizedBox(height: 12),
+                      _buildSelectedImagePreview(),
+                    ],
                     const SizedBox(height: 24),
 
                     // ──── Divider "HOẶC NHẬP THỦ CÔNG" ────
@@ -361,17 +441,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
 
   Widget _buildCameraButton() {
     return InkWell(
-      onTap: () {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: const Text('Tính năng chụp ảnh đang phát triển'),
-            backgroundColor: AppColors.primary,
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-            margin: const EdgeInsets.all(16),
-          ),
-        );
-      },
+      onTap: _showImageSourceSheet,
       borderRadius: BorderRadius.circular(14),
       child: Container(
         width: double.infinity,
@@ -387,7 +457,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
             Icon(Icons.camera_alt_outlined, color: AppColors.primary, size: 22),
             SizedBox(width: 10),
             Text(
-              'Chụp ảnh nguyên liệu',
+              'Chụp hoặc chọn ảnh sản phẩm',
               style: TextStyle(
                 color: AppColors.primary,
                 fontSize: 15,
@@ -396,6 +466,95 @@ class _AddProductScreenState extends State<AddProductScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildSelectedImagePreview() {
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.inputBorder),
+      ),
+      child: Row(
+        children: [
+          ClipRRect(
+            borderRadius: BorderRadius.circular(12),
+            child: SizedBox(
+              width: 84,
+              height: 84,
+              child: _buildSelectedImageWidget(),
+            ),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  'Ảnh sản phẩm đã chọn',
+                  style: TextStyle(
+                    color: AppColors.textPrimary,
+                    fontSize: 14,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                const Text(
+                  'Ảnh này sẽ được lưu cùng nguyên liệu trong tủ lạnh.',
+                  style: TextStyle(
+                    color: AppColors.textSecondary,
+                    fontSize: 12,
+                  ),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    TextButton.icon(
+                      onPressed: _showImageSourceSheet,
+                      icon: const Icon(Icons.refresh, size: 18),
+                      label: const Text('Đổi ảnh'),
+                    ),
+                    TextButton.icon(
+                      onPressed: () => setState(() {
+                        _selectedImage = null;
+                        _selectedImageBytes = null;
+                      }),
+                      icon: const Icon(
+                        Icons.delete_outline,
+                        size: 18,
+                        color: AppColors.error,
+                      ),
+                      label: const Text(
+                        'Xóa',
+                        style: TextStyle(color: AppColors.error),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSelectedImageWidget() {
+    final bytes = _selectedImageBytes;
+    if (bytes == null || bytes.isEmpty) {
+      return Container(color: AppColors.inputBackground);
+    }
+
+    return Image.memory(
+      bytes,
+      fit: BoxFit.cover,
+      errorBuilder: (_, __, ___) => Container(
+        color: AppColors.inputBackground,
+        alignment: Alignment.center,
+        child: const Icon(Icons.image_not_supported_outlined),
       ),
     );
   }
@@ -461,7 +620,7 @@ class _AddProductScreenState extends State<AddProductScreen> {
   Widget _buildQuantityField() {
     return TextField(
       controller: _quantityController,
-      keyboardType: TextInputType.number,
+      keyboardType: const TextInputType.numberWithOptions(decimal: true),
       textAlign: TextAlign.left,
       decoration: InputDecoration(
         filled: true,
